@@ -29,9 +29,8 @@ dependencies = [
     "openpyxl>=3.1",
     "filetype>=1.2",              # content sniffing from bytes, pure Python, no libmagic
 
-    # Grounding and query safety
+    # Grounding
     "rapidfuzz>=3.10",            # fuzzy quote location, see implementation.md 6.3
-    "sqlglot>=26.0",              # SQL allow-list parsing, see decision D10
 
     # Large Language Model access. See decisions D13 and D20.
     # Instructor was removed on purpose: it would convert response schemas with its own
@@ -104,7 +103,15 @@ warn_unreachable = true
 plugins = ["pydantic.mypy"]
 # Third-party libraries without type stubs. Narrow, deliberate exceptions.
 [[tool.mypy.overrides]]
-module = ["pdfplumber.*", "pypdfium2.*", "pytesseract.*", "filetype.*", "docx.*"]
+module = [
+    "pdfplumber.*",
+    "pypdfium2.*",
+    "pytesseract.*",
+    "filetype.*",
+    "docx.*",
+    "jsonschema.*",
+    "referencing.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

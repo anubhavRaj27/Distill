@@ -27,28 +27,41 @@ class SourceFormat(StrEnum):
 
 
 class DocumentStatus(StrEnum):
-    """Where a document is in the pipeline. Rendered directly as the progress list.
+    """Where a document is in the pipeline. Rendered directly as the processing strip.
 
     The observability requirement and the user experience are the same feature here: the
-    progress list in the interface IS this state machine, so every state has to be a state
-    a person would want to see, and every transition publishes an event.
+    strip in the interface IS this state machine, so every state has to be one a person
+    would want to see, and every transition publishes an event.
 
     Transitions::
 
-        uploaded -> parsed -> extracting -> awaiting_schema -> done
-             |         |          |               |
-             +---------+----------+---------------+--> failed
+        uploaded -> parsing -> extracting -> indexing -> done
+             |          |           |            |
+             +----------+-----------+------------+--> failed
 
-    ``awaiting_schema`` is the state review finding 8.5 introduced. A document in the very
-    first batch finishes open extraction before the workspace has a schema, so it cannot
-    produce records yet. Without this state the interface would have to show it as either
-    still working (a lie) or done (also a lie, since no row appeared).
+    ``indexing`` is where a document is chunked and embedded. It matters that it is a
+    visible stage rather than a silent tail of extraction: a document is not askable until
+    it is indexed, so ``done`` means "in the table AND in the chat", which is the promise
+    section 6.3 of the implementation document makes.
+
+    AWAITING_SCHEMA IS INTERNAL AND IS NOT PART OF THE WIRE VOCABULARY
+    ------------------------------------------------------------------
+    A document in the very first batch finishes open extraction before the workspace has a
+    schema, so it cannot produce records yet. The worker needs to tell that apart from a
+    document still mid-model-call, so the distinction is a real database status.
+
+    It is deliberately **not** one of the six statuses in the interface contract
+    (implementation.md section 5.1). On the wire it is reported as ``extracting`` with a
+    ``stage_detail`` of "waiting for the rest of the batch", which is honest (the document
+    is still inside the extraction phase) and keeps the client's state machine to the six
+    states the contract names. ``for_wire`` is that mapping, in one place.
     """
 
     UPLOADED = "uploaded"
-    PARSED = "parsed"
+    PARSING = "parsing"
     EXTRACTING = "extracting"
     AWAITING_SCHEMA = "awaiting_schema"
+    INDEXING = "indexing"
     DONE = "done"
     FAILED = "failed"
 
@@ -56,6 +69,13 @@ class DocumentStatus(StrEnum):
     def is_terminal(self) -> bool:
         """Whether no further work will happen without a new instruction."""
         return self in (DocumentStatus.DONE, DocumentStatus.FAILED)
+
+    @property
+    def for_wire(self) -> str:
+        """The status as the interface contract names it. See the class docstring."""
+        if self is DocumentStatus.AWAITING_SCHEMA:
+            return DocumentStatus.EXTRACTING.value
+        return self.value
 
 
 class Word(BaseModel):

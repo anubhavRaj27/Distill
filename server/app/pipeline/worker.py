@@ -188,14 +188,16 @@ def _is_retryable(failure_reason: str | None) -> bool:
 async def resume_interrupted(worker: Worker) -> int:
     """Re-queue documents left mid-pipeline by a restart. Decision D9's accepted risk.
 
-    A document stuck in ``uploaded``, ``parsed``, or ``extracting`` had a process die under
-    it. ``awaiting_schema`` is deliberately excluded: that is a legitimate resting state, not
-    an interruption, and re-queueing it would re-run extraction that already succeeded.
+    A document stuck in ``uploaded``, ``parsing``, ``extracting``, or ``indexing`` had a
+    process die under it. ``awaiting_schema`` is deliberately excluded: that is a legitimate
+    resting state, not an interruption, and re-queueing it would re-run an extraction that
+    already succeeded.
     """
     interrupted = (
         DocumentStatus.UPLOADED,
-        DocumentStatus.PARSED,
+        DocumentStatus.PARSING,
         DocumentStatus.EXTRACTING,
+        DocumentStatus.INDEXING,
     )
     async with session_scope() as session:
         rows = list(

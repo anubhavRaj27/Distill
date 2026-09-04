@@ -1,22 +1,15 @@
-"""Engines and sessions. There are deliberately two engines, with different powers.
+"""The database engine and session factory.
 
-The application engine connects as ``distill``, owns the schema, and can write.
+v1 had a second, deliberately weaker engine here: generated SQL ran as a ``SELECT``-only
+role against a per-workspace view, with a statement timeout, as the innermost layer of
+decision D10's defence. v2 removed the natural-language-to-SQL feature entirely (decision
+D35), so there is no longer any model-authored SQL to sandbox, and the second engine went
+with the feature rather than being kept "just in case".
 
-The **read-only** engine connects as ``distill_readonly`` and exists for exactly one purpose:
-executing SQL that a Large Language Model wrote. It carries three restrictions applied at
-connection time rather than per query, so no code path can forget them:
-
-* ``default_transaction_read_only=on`` makes every transaction on it read-only at the server
-* ``statement_timeout`` caps runtime, so a generated cartesian product cannot hold a
-  connection open indefinitely
-* the role itself holds ``SELECT`` and nothing else, and cannot reach the tables beneath the
-  per-workspace views (verified in ``scripts/bootstrap_db.sql``)
-
-Together with the ``sqlglot`` allow-list and the injected row limit, that is the layered
-defence decision D10 describes. Note that the role CAN read ``pg_catalog``, which is
-standard Postgres and not restrictable without more machinery than it is worth. The
-allow-list is the layer that handles it, by rejecting any relation other than this
-workspace's view.
+What replaced it is not a weaker guarantee but a stronger one: query specifications are
+evaluated in Python over the workspace's own records (``app/insights/evaluate.py``). The
+model emits a structured ``DataQuery``, never a string that reaches a database. There is no
+SQL surface to attack, so there is nothing to sandbox.
 """
 
 from __future__ import annotations
@@ -37,12 +30,10 @@ from app.logging import get_logger
 logger = get_logger(__name__)
 
 _engine: AsyncEngine | None = None
-_readonly_engine: AsyncEngine | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
 def create_app_engine(settings: Settings) -> AsyncEngine:
-    """The read and write engine, connecting as the schema owner."""
     return create_async_engine(
         str(settings.database_url),
         echo=settings.db_echo,
@@ -52,45 +43,20 @@ def create_app_engine(settings: Settings) -> AsyncEngine:
     )
 
 
-def create_readonly_engine(settings: Settings) -> AsyncEngine:
-    """The engine generated SQL runs on. See the module docstring for why it is separate."""
-    return create_async_engine(
-        str(settings.database_url_readonly),
-        echo=settings.db_echo,
-        pool_size=2,
-        max_overflow=0,
-        pool_pre_ping=True,
-        connect_args={
-            "server_settings": {
-                "statement_timeout": str(settings.query_timeout_ms),
-                "default_transaction_read_only": "on",
-                "application_name": "distill-generated-sql",
-            }
-        },
-    )
-
-
 def init_engines(settings: Settings | None = None) -> None:
-    """Create the engines and the session factory. Called from the application lifespan."""
-    global _engine, _readonly_engine, _sessionmaker
+    """Create the engine and the session factory. Called from the application lifespan."""
+    global _engine, _sessionmaker
     settings = settings or get_settings()
     _engine = create_app_engine(settings)
-    _readonly_engine = create_readonly_engine(settings)
-    _sessionmaker = async_sessionmaker(
-        _engine,
-        expire_on_commit=False,
-        autoflush=False,
-    )
-    logger.info("db.engines_ready", pool_size=settings.db_pool_size)
+    _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False, autoflush=False)
+    logger.info("db.engine_ready", pool_size=settings.db_pool_size)
 
 
 async def dispose_engines() -> None:
-    """Close both pools. Called on shutdown."""
-    global _engine, _readonly_engine, _sessionmaker
-    for engine in (_engine, _readonly_engine):
-        if engine is not None:
-            await engine.dispose()
-    _engine = _readonly_engine = None
+    global _engine, _sessionmaker
+    if _engine is not None:
+        await _engine.dispose()
+    _engine = None
     _sessionmaker = None
 
 
@@ -98,12 +64,6 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         raise RuntimeError("init_engines() has not been called")
     return _engine
-
-
-def get_readonly_engine() -> AsyncEngine:
-    if _readonly_engine is None:
-        raise RuntimeError("init_engines() has not been called")
-    return _readonly_engine
 
 
 def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
@@ -117,7 +77,8 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
     """A transactional session, committed on success and rolled back on any exception.
 
     Used by background work, which has no request to hang a dependency off. Route handlers
-    use the ``Session`` dependency in ``app.deps`` instead, which shares this behaviour.
+    use the ``Session`` dependency in ``app.deps`` instead, which adds the event-bus and
+    worker-submission flushing that decision D29 requires.
     """
     async with get_sessionmaker()() as session:
         try:

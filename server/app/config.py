@@ -46,14 +46,6 @@ class Settings(BaseSettings):
         default=PostgresDsn("postgresql+asyncpg://distill:distill@localhost:5432/distill"),
         description="Connection for the application role, which owns the schema.",
     )
-    database_url_readonly: PostgresDsn = Field(
-        default=PostgresDsn(
-            "postgresql+asyncpg://distill_readonly:distill_readonly@localhost:5432/distill"
-        ),
-        description="Connection for generated SQL only. This role holds SELECT and nothing "
-        "else, and can reach per-workspace views but not the tables beneath them. "
-        "See decision D10 and scripts/bootstrap_db.sql.",
-    )
     db_echo: bool = False
     db_pool_size: int = Field(default=10, ge=1)
 
@@ -83,10 +75,13 @@ class Settings(BaseSettings):
         "stronger tier. Model identifiers are configuration, not code, because the "
         "provider is not finalised. Unverified until a key exists.",
     )
-    llm_query_model: str = Field(
+    llm_fast_model: str = Field(
         default="gemini-2.5-flash",
-        description="Natural language to SQL. Short and tightly constrained, so the faster "
-        "tier, because query latency is felt directly by the user.",
+        description="The fast tier, used for chat planning, chat answering, dashboard "
+        "planning, and suggestions. Renamed from llm_query_model in v2: there is no "
+        "natural-language-to-SQL step any more (decision D35), and a name describing a "
+        "removed feature is worse than no name. Latency here is felt directly, "
+        "because the user is watching an answer stream.",
     )
     llm_embed_model: str = Field(
         default="gemini-embedding-001",
@@ -139,112 +134,52 @@ class Settings(BaseSettings):
         description="RapidFuzz partial ratio below which a quote is not considered found. "
         "From implementation.md section 6.3.",
     )
-    schema_proposal_debounce_seconds: float = Field(
-        default=0.5,
+    # -- Retrieval and chat. Decisions D35, D36, D44, D45. ------------------
+    chunk_target_words: int = Field(
+        default=110,
+        ge=20,
+        description="Aim for passages of about this many words. Chunk size IS highlight "
+        "size, because a citation highlights the whole chunk's word span (decision D45), "
+        "so this is a readability decision as much as a retrieval one: a 500 word chunk "
+        "would light up half a page and tell the user nothing.",
+    )
+    chunk_max_words: int = Field(default=160, ge=40)
+    chunk_overlap_lines: int = Field(
+        default=1,
         ge=0,
-        description="How long the worker waits after the last document finishes before "
-        "proposing an initial schema, so a staggered upload is treated as one batch. "
-        "See review finding 8.5.",
+        description="Lines repeated between neighbouring chunks, so a fact stated across a "
+        "chunk boundary is still wholly present in one of them.",
     )
-
-    # -- Schema drift matching. See decisions D23 and D24. -------------------
-    # These four decide when the system changes a schema without asking. They are a first
-    # pass, deliberately not tuned against real data yet, and they are configuration rather
-    # than constants precisely because the sample corpus is expected to move them.
-    drift_string_automap_min: float = Field(
-        default=0.90,
+    chat_top_k: int = Field(
+        default=8,
+        ge=1,
+        le=40,
+        description="Passages given to the model per question.",
+    )
+    chat_min_similarity: float = Field(
+        default=0.25,
         ge=0.0,
         le=1.0,
-        description="String similarity at or above which a field auto-maps to an existing "
-        "one with no prompt. Catches formatting and typo variants such as 'Vendor Name' "
-        "against 'vendor_name'.",
+        description="Cosine floor for a retrieved passage. Low on purpose: the cost of one "
+        "irrelevant passage in the prompt is small, and the cost of missing the passage "
+        "that held the answer is a wrong 'not in these documents'.",
     )
-    drift_embedding_automap_min: float = Field(
-        default=0.95,
-        ge=0.0,
-        le=1.0,
-        description="Embedding cosine at or above which a field auto-maps with no prompt. "
-        "Catches semantic renames such as 'Supplier' against 'vendor_name', which string "
-        "similarity scores near zero.",
+    chat_history_turns: int = Field(
+        default=4, ge=0, description="Recent turns sent as context, so follow-ups work."
     )
-    drift_candidate_margin_min: float = Field(
-        default=0.05,
-        ge=0.0,
-        le=1.0,
-        description="How far the best candidate must beat the runner-up before an "
-        "auto-map is allowed. A high score is not evidence of an unambiguous match when a "
-        "second field scores nearly as high; that case belongs to a human.",
+    chat_token_coalesce_ms: int = Field(
+        default=40,
+        ge=0,
+        description="Prose deltas are batched to at most one event per this interval, so a "
+        "fast model does not produce thousands of tiny frames the browser must render.",
     )
-    drift_novel_max: float = Field(
-        default=0.30,
-        ge=0.0,
-        le=1.0,
-        description="A field whose best score on BOTH signals is below this against every "
-        "existing field is treated as clearly novel and added with no prompt. Both signals "
-        "must agree, because this is a claim about the absence of a match.",
+    answer_buffer_grace_seconds: float = Field(
+        default=60.0,
+        ge=0,
+        description="How long a finished answer's buffer is kept so a late reconnect can "
+        "still replay it rather than being told to refetch.",
     )
-    llm_embed_model: str = Field(
-        default="gemini-embedding-001",
-        description="Model used for drift matching embeddings. Configuration, not code, "
-        "for the same reason the extraction models are.",
-    )
-
-    # -- Schema drift matching. See decisions D23 and D24. -------------------
-    # These four numbers ARE the policy for when the user is interrupted. They are a first
-    # pass, not tuned against real data: D24 says that if the sample corpus shows them
-    # producing wrong auto-applies, the numbers move, not the mechanism. That is why they
-    # are configuration and not constants.
-    drift_string_auto_map: float = Field(
-        default=0.90,
-        ge=0.0,
-        le=1.0,
-        description="String similarity at or above which a match is unambiguous enough to "
-        "auto-map without asking.",
-    )
-    drift_embedding_auto_map: float = Field(
-        default=0.95,
-        ge=0.0,
-        le=1.0,
-        description="Embedding cosine at or above which a semantic match is unambiguous "
-        "enough to auto-map. Higher than the string bar because a cosine is dense: "
-        "unrelated business terms routinely score 0.7 against each other.",
-    )
-    drift_auto_map_margin: float = Field(
-        default=0.05,
-        ge=0.0,
-        le=1.0,
-        description="How far the best candidate must beat the runner-up to count as "
-        "unambiguous. Without this, `Supplier` scoring 0.96 against vendor_name and 0.94 "
-        "against supplier_id would auto-map on a coin flip instead of asking.",
-    )
-    # A field is "clearly novel" only if it scores below the ceiling against EVERY existing
-    # field on BOTH signals. Declaring a field new is a claim about the absence of a match,
-    # so both signals must agree. There are two ceilings rather than D24's single shared
-    # one because a character ratio and a cosine are not comparable numbers. See D27.
-    drift_novelty_ceiling_string: float = Field(
-        default=0.65,
-        ge=0.0,
-        le=1.0,
-        description="Measured, not guessed: across the fixture corpus the highest string "
-        "similarity between two genuinely DIFFERENT field labels is 0.59 "
-        "('Currency' versus 'Reference'), so anything at or below 0.65 carries no evidence "
-        "of a real match. Re-measure when the real sample corpus lands.",
-    )
-    drift_novelty_ceiling_embedding: float = Field(
-        default=0.30,
-        ge=0.0,
-        le=1.0,
-        description="THE ONE NUMBER STILL UNMEASURED, because it needs a live embedding "
-        "model. High-dimensional text embeddings routinely score unrelated business terms "
-        "at 0.4 to 0.7, so this is probably too strict and auto-add may rarely fire once "
-        "vectors are live. Measure the cosine distribution over unrelated field pairs as "
-        "soon as a key exists, and set this above its upper range. Erring strict only "
-        "produces extra proposal cards, never a wrong merge.",
-    )
-
-    # -- Query safety. See decision D10. ------------------------------------
-    query_row_limit: int = Field(default=500, ge=1)
-    query_timeout_ms: int = Field(default=5000, ge=100)
+    dashboard_max_panels: int = Field(default=6, ge=1, le=12)
 
     # -- Samples ------------------------------------------------------------
     samples_dir: Path = Field(
@@ -279,10 +214,13 @@ class Settings(BaseSettings):
         """Whether real model calls are possible. Reported by /healthz, never the key."""
         return self.llm_provider != "fake" and bool(self.gemini_api_key)
 
-    def sync_database_url(self, readonly: bool = False) -> str:
+    def sync_database_url(self) -> str:
         """The same connection as a synchronous URL, which Alembic requires."""
-        url = str(self.database_url_readonly if readonly else self.database_url)
-        return url.replace("+asyncpg", "+psycopg2").replace("postgresql+psycopg2", "postgresql")
+        return (
+            str(self.database_url)
+            .replace("+asyncpg", "+psycopg2")
+            .replace("postgresql+psycopg2", "postgresql")
+        )
 
 
 @lru_cache(maxsize=1)

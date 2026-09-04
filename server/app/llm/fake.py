@@ -20,10 +20,11 @@ look like a document with nothing in it.
 
 from __future__ import annotations
 
+import asyncio
 import difflib
 import json
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
@@ -58,6 +59,8 @@ class FakeClient:
         self._synthesisers: dict[CallKind, Synthesiser] = {
             CallKind.OPEN_EXTRACT: _synthesise_open_extraction,
             CallKind.GUIDED_EXTRACT: _synthesise_guided_extraction,
+            CallKind.CHAT_PLAN: _synthesise_chat_plan,
+            CallKind.SUGGEST_QUESTIONS: _synthesise_suggestions,
         }
 
     @property
@@ -152,6 +155,39 @@ class FakeClient:
             else:
                 self._embeddings = {}
         return self._embeddings
+
+    # -- streamed text (decision D44) -----------------------------------
+
+    STREAM_FIXTURE_DIR = "chat_answer"
+    WORDS_PER_PIECE = 3
+    PIECE_DELAY_SECONDS = 0.015
+
+    async def stream_text(self, request: LLMRequest) -> AsyncIterator[str]:
+        """Yield a recorded or synthesised answer in word-sized pieces.
+
+        Chunked and slightly delayed on purpose. A fake that returned the whole answer in
+        one piece would let a client's streaming path pass tests it has never actually
+        exercised: no partial markers spanning deltas, no placeholder split across a
+        boundary, no incremental rendering. Those are precisely the cases
+        ``app.chat.stream`` exists to handle, so the fake has to produce them.
+        """
+        recorded = self._replay_text(request)
+        answer = recorded if recorded is not None else _synthesise_answer(request)
+
+        words = answer.split(" ")
+        for start in range(0, len(words), self.WORDS_PER_PIECE):
+            piece = " ".join(words[start : start + self.WORDS_PER_PIECE])
+            # A trailing space keeps the reassembled text identical to the original.
+            yield piece if start + self.WORDS_PER_PIECE >= len(words) else piece + " "
+            if self.PIECE_DELAY_SECONDS:
+                await asyncio.sleep(self.PIECE_DELAY_SECONDS)
+
+    def _replay_text(self, request: LLMRequest) -> str | None:
+        path = self._fixture_dir / self.STREAM_FIXTURE_DIR / f"{request.fixture_key}.txt"
+        if not path.is_file():
+            return None
+        logger.info("llm.replayed_stream_fixture", fixture=path.name)
+        return path.read_text(encoding="utf-8")
 
     def _replay(self, request: LLMRequest) -> BaseModel | None:
         path = self.fixture_path(request.kind, request.fixture_key)
@@ -296,6 +332,234 @@ def _synthesise_guided_extraction(request: LLMRequest) -> GuidedExtraction:
         candidate for index, candidate in enumerate(found) if index not in consumed
     ]
     return GuidedExtraction(values=values, extra_fields=extra)
+
+
+def _synthesise_answer(request: LLMRequest) -> str:
+    """Compose a plausible offline answer from the retrieved passages. Decision D13.
+
+    Not a stub string. It deliberately produces the two constructs the real answer format
+    uses, because they are the ones the pipeline has to get right:
+
+    * ``[^chunk:<id>]`` citation markers, so ``app.chat.stream``'s marker resolution runs,
+      citation numbering happens, and the client receives real ``citation`` events pointing
+      at real word spans
+    * ``{{result.<path>}}`` placeholders when a visual was evaluated, so the substitution
+      path runs and the number the user sees is the server's, not this function's
+      (decision D46)
+
+    The prose itself is quoted from the passages rather than invented, which keeps the
+    offline mode honest: every claim it makes is genuinely in the documents, and every
+    figure comes from the evaluated result.
+    """
+    question = str(request.context.get("question") or "").strip()
+    passages = request.context.get("passages") or []
+    result = request.context.get("result")
+
+    if not isinstance(passages, list) or not passages:
+        searched = request.context.get("document_count")
+        scope = f" across {searched} documents" if searched else ""
+        return (
+            f"I could not find anything{scope} that answers that. "
+            f"Nothing in the indexed passages mentions it."
+        )
+
+    sentences: list[str] = []
+    for passage in passages[:2]:
+        if not isinstance(passage, dict):
+            continue
+        chunk_id = passage.get("chunk_id")
+        text = " ".join(str(passage.get("text", "")).split())
+        if not chunk_id or not text:
+            continue
+        excerpt = text[:180].rstrip(" ,;:.")
+        sentences.append(f"{excerpt} [^chunk:{chunk_id}].")
+
+    if not sentences:
+        return "The retrieved passages do not contain enough detail to answer that."
+
+    opening = f"Looking at the documents for {question!r}: " if question else ""
+    body = " ".join(sentences)
+
+    figure = ""
+    if isinstance(result, dict):
+        rows = result.get("rows") or []
+        if isinstance(rows, list) and rows:
+            # Reference the computed value by PATH, never by retyping it. This is the whole
+            # point of decision D46, and the offline provider has to honour it too or the
+            # substitution path would never run outside a live call.
+            figure = " The chart above puts the leading figure at {{result.rows.0.value}}."
+        elif result.get("total") is not None:
+            figure = " The chart above shows a total of {{result.total}}."
+
+    return f"{opening}{body}{figure}"
+
+
+# Words that signal a question wants a number rather than a sentence. Used only by the
+# offline planner; a real model reads the question properly.
+_QUANTITATIVE_HINTS = (
+    "total", "sum", "how much", "how many", "count", "average", "avg", "most",
+    "largest", "highest", "lowest", "per ", " by ", "breakdown", "spend",
+)
+_MISSING_HINTS = ("missing", "without", "no ", "lack", "absent")
+
+
+def _synthesise_chat_plan(request: LLMRequest) -> BaseModel:
+    """Decide answerability and a visual with no model call. Decision D13.
+
+    Crude by design, and it does the one thing that matters: it emits a **query
+    specification** rather than numbers, so the whole decision D37 path (evaluate, build a
+    surface, bind by path, substitute placeholders in prose) runs offline exactly as it does
+    with a key. A stub that returned no visual would leave that path untested and
+    undemonstrable.
+    """
+    from app.chat.answer import ChatPlan
+    from app.domain.chat import VisualKind
+    from app.domain.fields import FieldSpec, FieldType, fold_label_for_similarity
+    from app.insights.queryspec import DataQuery, Filter, Visual
+
+    question = str(request.context.get("question") or "")
+    lowered = question.lower()
+    passages = request.context.get("passages") or []
+    raw_schema = request.context.get("schema") or []
+    fields = [
+        entry if isinstance(entry, FieldSpec) else FieldSpec.model_validate(entry)
+        for entry in raw_schema
+        if isinstance(entry, (dict, FieldSpec))
+    ]
+
+    if not passages:
+        return ChatPlan(
+            answerable=False,
+            not_answerable_reason=(
+                "Nothing in the indexed passages relates to that question."
+            ),
+            visual=None,
+        )
+
+    if not fields or not any(hint in lowered for hint in _QUANTITATIVE_HINTS):
+        return ChatPlan(answerable=True, visual=None)
+
+    question_words = set(fold_label_for_similarity(question).split())
+
+    def mentioned(field: FieldSpec) -> bool:
+        label_words = set(fold_label_for_similarity(field.label).split())
+        return bool(label_words & question_words)
+
+    numeric = [f for f in fields if f.type in (FieldType.CURRENCY, FieldType.NUMBER)]
+    # A field the question actually names beats one it does not, and money beats a count.
+    measure = next(
+        (f for f in numeric if mentioned(f) and f.type is FieldType.CURRENCY),
+        next((f for f in numeric if mentioned(f)), None),
+    ) or next((f for f in numeric if f.type is FieldType.CURRENCY), None)
+
+    groupable = [
+        f for f in fields if f.type in (FieldType.STRING, FieldType.ENUM, FieldType.DATE)
+    ]
+    group = next((f for f in groupable if mentioned(f)), None)
+
+    # "how many X are missing Y" is a count with a presence filter, not a sum.
+    if any(hint in lowered for hint in _MISSING_HINTS):
+        target = next((f for f in fields if mentioned(f)), None)
+        if target is not None:
+            return ChatPlan(
+                answerable=True,
+                visual=Visual(
+                    kind=VisualKind.METRIC,
+                    title=f"Documents with no {target.label}",
+                    query=DataQuery(
+                        aggregate="count",
+                        filters=[Filter(field=target.key, op="missing")],
+                    ),
+                ),
+            )
+
+    if measure is None:
+        return ChatPlan(
+            answerable=True,
+            visual=Visual(
+                kind=VisualKind.BAR if group else VisualKind.METRIC,
+                title=f"Documents by {group.label}" if group else "Documents",
+                query=DataQuery(aggregate="count", group_by=group.key if group else None),
+            ),
+        )
+
+    return ChatPlan(
+        answerable=True,
+        visual=Visual(
+            kind=VisualKind.BAR if group else VisualKind.METRIC,
+            title=(
+                f"{measure.label} by {group.label}"
+                if group
+                # "Total Total Due" reads as a bug. A label that already starts with the
+                # word does not need it prefixed.
+                else (
+                    measure.label
+                    if measure.label.lower().startswith("total")
+                    else f"Total {measure.label}"
+                )
+            ),
+            query=DataQuery(
+                aggregate="sum",
+                measure_field=measure.key,
+                group_by=group.key if group else None,
+            ),
+            unit_hint=measure.currency_default,
+        ),
+    )
+
+
+def _synthesise_suggestions(request: LLMRequest) -> BaseModel:
+    """Three suggested questions built from the schema, with no model call."""
+    from app.chat.suggestions import SuggestedQuestions
+    from app.domain.fields import FieldSpec, FieldType
+
+    raw_schema = request.context.get("schema") or []
+    fields = [
+        entry if isinstance(entry, FieldSpec) else FieldSpec.model_validate(entry)
+        for entry in raw_schema
+        if isinstance(entry, (dict, FieldSpec))
+    ]
+    money = next((f for f in fields if f.type is FieldType.CURRENCY), None)
+    party = next(
+        (
+            f
+            for f in fields
+            if f.type is FieldType.STRING
+            and any(word in f.key for word in ("vendor", "supplier", "party", "name"))
+        ),
+        next((f for f in fields if f.type is FieldType.STRING), None),
+    )
+    other = next((f for f in fields if f.type is FieldType.STRING and f is not party), None)
+
+    def _measure_phrase(field: FieldSpec) -> str:
+        """"total total due" reads as a bug, so a label already saying "total" keeps it."""
+        label = field.label.lower()
+        return label if label.startswith("total") else f"total {label}"
+
+    def _article(word: str) -> str:
+        return "an" if word[:1] in "aeiou" else "a"
+
+    questions: list[str] = []
+    if money and party:
+        questions.append(
+            f"What is the {_measure_phrase(money)} by {party.label.lower()}?"
+        )
+    elif money:
+        questions.append(f"What is the {_measure_phrase(money)}?")
+    if other:
+        label = other.label.lower()
+        questions.append(f"Which documents are missing {_article(label)} {label}?")
+    if party:
+        questions.append(f"Which {party.label.lower()} appears most often?")
+
+    fallback = [
+        "What do these documents have in common?",
+        "Which document has the largest amount?",
+        "What dates do these documents cover?",
+    ]
+    while len(questions) < 3:
+        questions.append(fallback[len(questions) % len(fallback)])
+    return SuggestedQuestions(questions=questions[:3])
 
 
 def _serialise_for_fixture(value: BaseModel) -> str:

@@ -33,7 +33,7 @@ document IS correctly forces a fixture update.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol, TypeVar
@@ -44,23 +44,43 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 class CallKind(StrEnum):
-    """What a model call is for. Selects the model tier, the prompt, and the fixture folder."""
+    """What a model call is for. Selects the model tier, the prompt, and the fixture folder.
+
+    v2 removed ``NL2SQL`` with the feature it served (decision D35) and added the three
+    calls the chat and dashboard need. There are now exactly two streamed-text callers and
+    the rest are structured.
+    """
 
     OPEN_EXTRACT = "open_extract"
     GUIDED_EXTRACT = "guided_extract"
     PROPOSE_SCHEMA = "propose_schema"
     MAP_DRIFT = "map_drift"
-    NL2SQL = "nl2sql"
+
+    CHAT_PLAN = "chat_plan"
+    """Structured. Decides whether the question is answerable and whether a visual helps,
+    and if so emits a `Visual` holding a query specification. It never emits numbers
+    (decision D37)."""
+
+    CHAT_ANSWER = "chat_answer"
+    """Streamed text. Writes the prose, citing passages with markers and referring to
+    computed figures by placeholder (decisions D45, D46)."""
+
+    PLAN_DASHBOARD = "plan_dashboard"
+    """Structured. Proposes dashboard panels from field statistics (decision D40)."""
+
     SUGGEST_QUESTIONS = "suggest_questions"
 
     @property
     def needs_strong_model(self) -> bool:
         """Whether this call gets the Pro tier rather than Flash. See decision D13.
 
-        Extraction and schema inference are where the hard sub-problem lives and where an
-        error is expensive to detect, so they get the stronger model. Query translation is
-        short, tightly constrained, and immediately verifiable by whether the SQL runs, so
-        it gets the faster one and the user feels the difference.
+        True only for extraction and schema inference. Those are the accuracy-critical
+        calls, they run once per document rather than once per interaction, and an error in
+        them is expensive to detect later because it is baked into the table.
+
+        Everything the user waits on synchronously runs on Flash. Chat is the clearest
+        case: requirement FR-26 asks for a first prose token within three seconds, and that
+        target is a product decision about how the answer feels, not a cost saving.
         """
         return self in (
             CallKind.OPEN_EXTRACT,
@@ -68,6 +88,11 @@ class CallKind(StrEnum):
             CallKind.PROPOSE_SCHEMA,
             CallKind.MAP_DRIFT,
         )
+
+    @property
+    def is_streamed(self) -> bool:
+        """Whether this call is served by ``stream_text`` rather than ``structured``."""
+        return self is CallKind.CHAT_ANSWER
 
 
 @dataclass
@@ -128,6 +153,24 @@ class LLMClient(Protocol):
         then raise ``LLMInvalidOutput``. They raise ``LLMUnavailable`` for transport and
         rate-limit failures, so the worker can distinguish "retry later" from "this
         document cannot be processed".
+        """
+        ...
+
+    def stream_text(self, request: LLMRequest) -> AsyncIterator[str]:
+        """Stream a text answer as deltas. Decision D44.
+
+        Returns an async iterator rather than being an async generator itself, so that a
+        caller can hold the iterator without having started the request, and so that
+        ``FakeClient`` can return a pre-recorded sequence without pretending to be a
+        coroutine.
+
+        Deltas are raw model output: markers and placeholders are still in the text.
+        Resolving them is ``app.chat.stream``'s job, deliberately kept out of the provider
+        so that both providers stay dumb about the answer format.
+
+        Raises ``LLMUnavailable`` for transport failures, like every other call. A failure
+        part way through a stream is still a failure: the caller persists the partial answer
+        with ``status = failed`` rather than presenting a truncated answer as complete.
         """
         ...
 

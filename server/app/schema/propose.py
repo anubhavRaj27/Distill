@@ -1,27 +1,26 @@
-"""Inferring the first schema from a batch of documents. Decision D25.
+"""Inferring the first schema from a batch of documents. Decisions D25 and D38.
 
 The first batch does not conflict with an existing schema, but it conflicts with **itself**.
 Eight documents can yield ``vendor_name`` from five, ``Supplier`` from two, and ``Vendor``
-from one, and deciding those are one field is exactly the judgment call decision D23 says a
-human should make when the model is unsure.
+from one, and deciding those are one field is a judgment call.
 
-So this module does three things, in the order decision D25 sets out:
+v2 resolves that call without asking (decision D38):
 
-1. **The initial schema always applies immediately and never blocks.** The 60-second
-   first-run in the acceptance criteria depends on it, and a user with no schema at all is
-   better served by the model's best guess than by a modal.
+1. **The initial schema applies immediately and never blocks.** The 60-second first run in
+   the acceptance criteria depends on it.
 2. **Unification within the batch is gated by decision D24's rule.** Source keys that unify
-   confidently merge into one canonical field. Source keys the rule finds uncertain are
-   **left as separate fields**.
-3. **The uncertain ones queue a non-blocking proposal** asking whether to merge them.
+   confidently merge into one canonical field, which is the common case and the demo path.
+3. **Source keys the rule finds uncertain stay as separate fields**, and the reason is
+   recorded in the schema change summary. In v1 this queued a proposal card; v2 removed the
+   card and kept the split.
 
-WHY UNCERTAINTY LEAVES FIELDS SPLIT RATHER THAN MERGED
--------------------------------------------------------
+WHY UNCERTAINTY SPLITS RATHER THAN MERGES
+------------------------------------------
 Asymmetry of harm, and it is the whole argument. A wrong merge commingles two genuinely
 different fields' values under one column, and unpicking it means knowing which source key
-produced each value. A wrong split leaves two clean columns, and merging them later is a
-cheap, lossless move of values from one to the other. When unsure, prefer the error that is
-cheaper to undo.
+produced each value. A wrong split leaves two clean columns, and the user can merge them
+from the column menu, which moves values and provenance intact. When unsure, prefer the
+error that is cheaper to undo.
 """
 
 from __future__ import annotations
@@ -95,11 +94,18 @@ class Observation:
 
 
 @dataclass
-class MergeQuestion:
-    """Two fields the rule could not confidently unify. Becomes a proposal card."""
+class KeptSeparate:
+    """Two fields the rule could not confidently unify, so both were kept.
+
+    Not a question (decision D38). Both fields are already in the schema; this records the
+    near-miss so the change summary can explain it and the interface can hint at a merge.
+    """
 
     left_key: str
+    left_label: str
     right_key: str
+    right_label: str
+    score: float
     reason: str
 
 
@@ -108,16 +114,28 @@ class InitialProposal:
     """The inferred schema, plus any unification the user should decide."""
 
     fields: list[FieldSpec]
-    questions: list[MergeQuestion] = dataclass_field(default_factory=list)
+    kept_separate: list[KeptSeparate] = dataclass_field(default_factory=list)
     coverage: dict[str, int] = dataclass_field(default_factory=dict)
     """Field key to how many documents in the batch contained it. Requirement FR-10."""
 
     @property
     def summary(self) -> str:
-        """One line for the schema history entry."""
+        """The change summary, and the only account the user gets of how the schema formed.
+
+        Names the near-misses explicitly rather than counting them, because "we kept
+        'Invoice No' and 'Invoice Number' apart" is actionable (the user can merge them) and
+        "2 fields were kept separate" is not.
+        """
         detail = f"Inferred {len(self.fields)} fields from the first batch"
-        if self.questions:
-            detail += f", with {len(self.questions)} left separate pending your decision"
+        if self.kept_separate:
+            pairs = "; ".join(
+                f"kept {entry.left_label!r} and {entry.right_label!r} apart "
+                f"({entry.score:.0%} match, too close to call)"
+                for entry in self.kept_separate[:3]
+            )
+            detail += f". {pairs[:1].upper()}{pairs[1:]}"
+            if len(self.kept_separate) > 3:
+                detail += f"; and {len(self.kept_separate) - 3} more"
         return detail + "."
 
 
@@ -203,7 +221,7 @@ async def propose_initial(
 
     canonical: list[FieldSpec] = []
     merged_into: dict[str, str] = {}
-    questions: list[MergeQuestion] = []
+    kept_separate: list[KeptSeparate] = []
     coverage: dict[str, int] = {}
 
     for observation in observations:
@@ -247,30 +265,32 @@ async def propose_initial(
         canonical.append(spec)
         coverage[spec.key] = observation.coverage
 
-        # A merge question is only worth a user's attention when something ACTUALLY
-        # resembles this field. An ``UNCONFIRMED_NOVELTY`` ask means the opposite: nothing
-        # resembled it and we simply had no vector to prove that. During initial
-        # unification that carries no risk, because every observation becomes a field
-        # regardless, so it is a separate field and not a question. Treating the two alike
-        # produced a merge question for all but one field in the batch, pairing unrelated
-        # things like ``vendor`` with ``invoice_no``.
-        asks_about_a_real_candidate = verdict.ask_reason in (
+        # Only record a near-miss when something ACTUALLY resembles this field. An
+        # ``UNCONFIRMED_NOVELTY`` ask means the opposite: nothing resembled it and there was
+        # simply no vector to prove that. Reporting those as near-misses described 13 of 14
+        # fields in the fixture batch as judgment calls, pairing unrelated things like
+        # ``vendor`` with ``invoice_no``, which is noise in the summary rather than an
+        # explanation.
+        resembles_something = verdict.ask_reason in (
             AskReason.COMPETING_CANDIDATES,
             AskReason.BORDERLINE,
             AskReason.TYPE_MISMATCH,
         )
-        if verdict.outcome is Outcome.ASK and asks_about_a_real_candidate and verdict.best:
-            questions.append(
-                MergeQuestion(
+        if verdict.outcome is Outcome.ASK and resembles_something and verdict.best:
+            kept_separate.append(
+                KeptSeparate(
                     left_key=spec.key,
+                    left_label=spec.label,
                     right_key=verdict.best.field_key,
+                    right_label=verdict.best.field_label,
+                    score=verdict.best.headline,
                     reason=verdict.reason,
                 )
             )
             logger.info(
-                "propose.left_split",
+                "propose.kept_separate",
                 field=spec.key,
-                competing_with=verdict.best.field_key,
+                near=verdict.best.field_key,
                 why=verdict.ask_reason.value if verdict.ask_reason else None,
             )
 
@@ -282,13 +302,15 @@ async def propose_initial(
         logger.info("propose.truncated", kept=len(kept), dropped=len(dropped))
         keep_keys = {field.key for field in kept}
         canonical = [field for field in canonical if field.key in keep_keys]
-        questions = [
-            question
-            for question in questions
-            if question.left_key in keep_keys and question.right_key in keep_keys
+        kept_separate = [
+            entry
+            for entry in kept_separate
+            if entry.left_key in keep_keys and entry.right_key in keep_keys
         ]
 
-    return InitialProposal(fields=canonical, questions=questions, coverage=coverage)
+    return InitialProposal(
+        fields=canonical, kept_separate=kept_separate, coverage=coverage
+    )
 
 
 def _absorb(target: FieldSpec, observation: Observation) -> None:

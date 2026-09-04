@@ -1,27 +1,37 @@
 """Deciding what to do when a document has something the schema cannot record.
 
-Decisions D23 and D24. Schema-guided extraction returns ``extra_fields``: salient values
-that match no current field. That list is the system noticing a document has something to
-say the schema cannot hold, which is the alternative to silently dropping it (requirement
-FR-13).
+Decisions D23, D24, and **D38**. Schema-guided extraction returns ``extra_fields``: salient
+values that match no current field. That list is the system noticing a document has
+something to say the schema cannot hold, which is the alternative to silently dropping it
+(requirement FR-11).
 
-Each extra field lands in one of decision D23's three zones:
+WHAT V2 CHANGED, AND WHY IT IS NOT A LOWERING OF STANDARDS
+-----------------------------------------------------------
+v1 sorted extra fields into three zones and put the uncertain ones in front of the user as a
+proposal card. v2 keeps the classifier exactly as it was and changes only what happens to
+the uncertain zone: it **auto-adds as a separate field**, and records why in the schema
+change summary.
 
-* **auto-mapped** onto an existing field, no prompt, when the match is unambiguous
-* **auto-added** as a new field, no prompt, when it clearly resembles nothing
-* **asked about**, as a proposal card, for everything in between
+The reasoning is decision D34's, that schema administration is not the job a finance
+operations person came to do, plus decision D25's asymmetry argument, which still holds and
+now does all the work: **a wrong split is a cheap merge later, a wrong merge is expensive to
+unpick.** Splitting on uncertainty leaves two clean columns and the user can merge them from
+the column menu in one action, with values and provenance moving intact. Merging on
+uncertainty commingles two fields' values and unpicking it needs per-value provenance.
 
-An auto-applied change writes a ``schema_versions`` row and a ``schema.version`` event but
-**not** a ``proposals`` row: ``schema_versions`` is the complete log of what happened to the
-schema, and ``proposals`` stays strictly "questions that needed a human", so that "how many
-decisions are outstanding" is a row count rather than a filtered one.
+So the classifier's three outcomes now map to two actions:
 
-An auto-added field also enqueues backfill without offering. Requirement FR-14 says adding a
-field "offers" backfill, and that stays true for a field the **user** added: they are
-present, mid-decision, and the offer has somewhere to attach. An auto-added field has no
-such moment by construction, since the entire point is that nothing interrupted the user.
-Backfill only ever adds values and never touches human-verified rows, and its progress is
-visible, so running it is the behaviour the user would have chosen anyway.
+===================== =========================================================
+Classification        Action
+===================== =========================================================
+Unambiguous match     auto-map onto the existing field
+Clearly novel         auto-add as a new field
+Uncertain (any of     auto-add as a **separate** field, with the reason recorded
+D28's ask reasons)    in ``change_summary``
+===================== =========================================================
+
+Nothing is dropped and nothing interrupts. The audit trail is the change summary, which is
+the only explanation the user will get, so its wording matters.
 """
 
 from __future__ import annotations
@@ -37,7 +47,7 @@ from app.llm.heuristics import slugify_key
 from app.logging import get_logger
 from app.pipeline.score import default_weight
 from app.schema import embeddings
-from app.schema.similarity import Outcome, Thresholds, Verdict, classify
+from app.schema.similarity import AskReason, Outcome, Thresholds, classify
 
 logger = get_logger(__name__)
 
@@ -52,16 +62,57 @@ document belongs in this workspace at all.
 
 
 @dataclass
-class DriftQuestion:
-    """One extra field the user needs to decide about. Becomes a proposal card."""
+class DriftSeparation:
+    """An extra field kept as its own column because the match was too close to call.
 
-    incoming_key: str
-    incoming_label: str
-    incoming_type: FieldType
-    sample_value: str | None
+    Not a pending question (decision D38). The field is already in the schema by the time
+    this is reported; this records the near-miss so the change summary can explain it and
+    so the interface can hint that a merge is available.
+    """
+
+    field_key: str
+    field_label: str
+    nearest_key: str | None
+    nearest_label: str | None
+    score: float
     reason: str
-    candidates: list[tuple[str, str, float]] = dataclass_field(default_factory=list)
-    """``(field_key, field_label, score)``, best first, for the card's mapping choices."""
+    why: AskReason | None = None
+    """Which kind of uncertainty this was, so the summary can describe it accurately."""
+
+    @property
+    def explanation(self) -> str:
+        """One clause for the change summary, phrased for the actual reason.
+
+        Worth the branch. An earlier version described every separation as "too close to
+        call", which was plainly wrong for an unconfirmed-novelty case scoring 38%: nothing
+        resembled the field, we simply had no vector to prove it. Since this text is the
+        only account the user ever gets of an unprompted schema change, a description that
+        misstates the cause is worse than a vague one.
+        """
+        near = self.nearest_label
+        match self.why:
+            case AskReason.COMPETING_CANDIDATES:
+                return (
+                    f"kept {self.field_label!r} separate: it matched {near!r} at "
+                    f"{self.score:.0%} but another field scored almost the same"
+                )
+            case AskReason.BORDERLINE:
+                return (
+                    f"kept {self.field_label!r} separate from {near!r}: at "
+                    f"{self.score:.0%} the match was too close to call"
+                )
+            case AskReason.TYPE_MISMATCH:
+                return (
+                    f"kept {self.field_label!r} separate from {near!r}: the names line up "
+                    f"but the types do not"
+                )
+            case AskReason.UNCONFIRMED_NOVELTY:
+                return (
+                    f"added {self.field_label!r} as a new field: nothing in the schema "
+                    f"resembled it, though we could not check it for a meaning-based match"
+                )
+            case _:
+                return f"kept {self.field_label!r} as a separate field"
 
 
 @dataclass
@@ -72,32 +123,66 @@ class DriftOutcome:
     """Incoming key to the existing field key it auto-maps onto."""
 
     additions: list[FieldSpec] = dataclass_field(default_factory=list)
-    questions: list[DriftQuestion] = dataclass_field(default_factory=list)
+    separations: list[DriftSeparation] = dataclass_field(default_factory=list)
+    """Fields kept separate on an uncertain match. A subset of ``additions``."""
+
+    dropped: list[str] = dataclass_field(default_factory=list)
+    """Extra fields refused because this document hit the per-document widening cap."""
+
     notes: list[str] = dataclass_field(default_factory=list)
     """User-facing one-liners explaining each automatic decision."""
 
     @property
+    def real_mappings(self) -> dict[str, str]:
+        """Mappings that actually move a value to a DIFFERENT field.
+
+        ``assess`` records a self-map when an extra field carries the same key as an
+        existing schema field, which happens whenever the model reports a schema field in
+        ``extra_fields`` by mistake. That routes the value correctly but changes nothing, so
+        it must not count as a schema change or appear in the summary as
+        "mapped total_due to total_due".
+        """
+        return {
+            source: target for source, target in self.mappings.items() if source != target
+        }
+
+    @property
     def changes_the_schema(self) -> bool:
-        return bool(self.mappings or self.additions)
+        return bool(self.real_mappings or self.additions)
 
     @property
     def summary(self) -> str:
-        """One line for the schema history entry, and for the auto-apply note."""
+        """The change summary. This is the ENTIRE audit trail for an unprompted change.
+
+        Decision D38 removed the proposal card, so nothing else will ever tell the user why
+        their schema grew a column that looks like one they already had. The near-miss is
+        named explicitly for that reason.
+        """
         parts: list[str] = []
-        if self.mappings:
-            pairs = ", ".join(
-                f"{source} to {target}" for source, target in sorted(self.mappings.items())
-            )
+        real = self.real_mappings
+        if real:
+            pairs = ", ".join(f"{source} to {target}" for source, target in sorted(real.items()))
             parts.append(f"mapped {pairs}")
-        if self.additions:
+
+        separated = {separation.field_key for separation in self.separations}
+        plain = sorted(
+            field.key for field in self.additions if field.key not in separated
+        )
+        if plain:
+            parts.append("added " + ", ".join(plain))
+
+        parts.extend(separation.explanation for separation in self.separations)
+
+        if self.dropped:
             parts.append(
-                "added " + ", ".join(sorted(field.key for field in self.additions))
+                f"left out {', '.join(sorted(self.dropped))} because this document "
+                f"would have added more than {MAX_AUTO_ADDED_PER_DOCUMENT} new fields"
             )
+
         if not parts:
             return "No schema change."
-        return (parts[0][:1].upper() + parts[0][1:] + (
-            "; " + "; ".join(parts[1:]) if len(parts) > 1 else ""
-        ) + ".")
+        joined = "; ".join(parts)
+        return joined[:1].upper() + joined[1:] + "."
 
 
 def _key_for(extra: ExtractedField) -> str | None:
@@ -178,9 +263,14 @@ async def assess(
             logger.info("drift.auto_mapped", source=key, target=verdict.target_key)
             continue
 
-        if verdict.outcome is Outcome.AUTO_ADD:
+        # AUTO_ADD and ASK now take the SAME action (decision D38). They differ only in
+        # what gets recorded: an uncertain match is noted as a separation so the change
+        # summary can explain the near-miss and the interface can offer a merge.
+        if verdict.outcome in (Outcome.AUTO_ADD, Outcome.ASK):
             if len(outcome.additions) >= MAX_AUTO_ADDED_PER_DOCUMENT:
-                outcome.questions.append(_question(key, extra, verdict, capped=True))
+                # With no proposal card to fall back on, the honest move is to refuse and
+                # say so, rather than widening every other document's table.
+                outcome.dropped.append(key)
                 logger.info("drift.addition_capped", source=key)
                 continue
             spec = FieldSpec(
@@ -202,39 +292,31 @@ async def assess(
             working_schema.append(spec)
             schema_vectors[spec.key] = resolved.get(incoming_texts[key])
             outcome.notes.append(verdict.reason)
-            logger.info("drift.auto_added", field=key)
+
+            if verdict.outcome is Outcome.ASK:
+                nearest = verdict.best
+                outcome.separations.append(
+                    DriftSeparation(
+                        field_key=spec.key,
+                        field_label=spec.label,
+                        nearest_key=nearest.field_key if nearest else None,
+                        nearest_label=nearest.field_label if nearest else None,
+                        score=nearest.headline if nearest else 0.0,
+                        reason=verdict.reason,
+                        why=verdict.ask_reason,
+                    )
+                )
+                logger.info(
+                    "drift.kept_separate",
+                    field=key,
+                    nearest=nearest.field_key if nearest else None,
+                    why=verdict.ask_reason.value if verdict.ask_reason else None,
+                )
+            else:
+                logger.info("drift.auto_added", field=key)
             continue
 
-        outcome.questions.append(_question(key, extra, verdict))
-        logger.info(
-            "drift.asked",
-            source=key,
-            why=verdict.ask_reason.value if verdict.ask_reason else None,
-        )
-
     return outcome
-
-
-def _question(
-    key: str, extra: ExtractedField, verdict: Verdict, *, capped: bool = False
-) -> DriftQuestion:
-    reason = verdict.reason
-    if capped:
-        reason = (
-            f"This document wanted to add more than {MAX_AUTO_ADDED_PER_DOCUMENT} new "
-            f"fields, so the rest are here for you to decide on."
-        )
-    return DriftQuestion(
-        incoming_key=key,
-        incoming_label=extra.label or key,
-        incoming_type=extra.value_type,
-        sample_value=extra.value_text,
-        reason=reason,
-        candidates=[
-            (signals.field_key, signals.field_label, round(signals.headline, 3))
-            for signals in verdict.ranked[:3]
-        ],
-    )
 
 
 def merged_schema(schema: list[FieldSpec], outcome: DriftOutcome) -> list[FieldSpec]:

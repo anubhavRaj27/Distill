@@ -1605,3 +1605,186 @@ three consecutive minor versions.
 
 **Cut.** Piecemeal A2UI streaming, model-placed visuals, and more than one visual per
 answer.
+
+---
+
+## D48. Retrieval falls back to hashed bag-of-words vectors when no embedding is available
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** `app/retrieval/embedding.py` embeds a text with the configured provider and,
+for any text the provider returns no vector for, substitutes a deterministic hashed
+bag-of-words vector (512 dimensions, sub-linear term weighting, L2 normalised). Each chunk
+records which model produced its vector, and a question is embedded in whatever space the
+workspace's chunks already occupy.
+
+**Alternatives considered.**
+
+1. *Return `None` and retrieve nothing.* Honest, and useless: with no key the chat retrieves
+   zero passages and every question answers "not in these documents", so the entire v2
+   product is undemonstrable without a key. Decision D13 exists precisely to prevent that.
+2. *Put the fallback in `FakeClient.embed`.* Less code, and a real bug. Decision D24 relies
+   on `embed` returning `None` for an unrecorded label, because an invented vector would
+   score a confident cosine against every schema field and make drift auto-apply on noise.
+   The provider must stay honest about having no vector; the decision to substitute one
+   belongs to the layer that knows it is safe.
+3. *Random hashed vectors.* Deterministic but meaningless, so retrieval would rank
+   arbitrarily. A chat that retrieves confidently and wrongly is worse than one that
+   retrieves nothing, because the failure is invisible.
+
+**Reasoning.** A bag-of-words vector makes cosine similarity approximate token overlap,
+which is a real if shallow signal. Measured on the fixture corpus it separates cleanly: a
+question about "total due for Northwind Traders" scores 0.57 against the passage naming
+them and 0.00 against an unrelated one. So an offline clone genuinely retrieves the right
+passage, and the chat, the citations, and the highlight path can all be built and
+demonstrated before a key exists.
+
+It also answered open question 1 in the requirements as a Should, almost for free: a small
+capped lexical bonus is added to every score, because embeddings handle identifiers like
+`INV-2026-0042` poorly (they are not words) while an exact token hit on one is strong
+evidence. `PO-99814` retrieves its passage at 0.51 as a result.
+
+**The failure this is designed around.** Mixing spaces. A chunk embedded by Gemini and a
+question embedded lexically produce cosines that are pure noise, and the symptom is
+confident wrong retrieval rather than an error. So `chunks.embedding_model` records the
+space per chunk, `vector_space_for` reads back the workspace's majority space, and the
+question is embedded to match. A workspace indexed offline and later given a key stays
+coherent because new chunks join the space already in use.
+
+**Accepted cost.** An offline workspace retrieves by word overlap, not meaning, so a
+question phrased entirely in synonyms retrieves poorly. That is visible in the answer rather
+than hidden, and the records digest (implementation section 6.3) mitigates it by restating
+every document's values in the schema's own vocabulary.
+
+---
+
+## D49. `awaiting_schema` is an internal status, reported on the wire as `extracting`
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** The document state machine keeps seven states; the interface contract names
+six. `awaiting_schema` exists in the database and in the worker's logic, and
+`DocumentStatus.for_wire` maps it to `extracting` with a `stage_detail` of "waiting for the
+rest of the batch".
+
+**Alternatives considered.** Adding a seventh state to the contract, which puts a state on
+the client that only ever means "wait" and that the client can do nothing differently
+about. Removing the state and inferring "waiting" from the presence of a parked open
+extraction, which the worker's own "is anything still busy" check cannot distinguish from
+"mid-model-call" and would deadlock the schema inference.
+
+**Reasoning.** The worker genuinely needs the distinction: a document that has finished open
+extraction and is waiting for its batch must not count as busy, or the schema is never
+inferred. The client genuinely does not: the document is inside the extraction phase and
+still working, which is exactly what `extracting` means to a person reading a progress
+strip, and the `stage_detail` carries the nuance for anyone who wants it.
+
+So the split is between what the system needs to reason about and what the interface needs
+to render, and the mapping lives in one property rather than being repeated at each
+publish site.
+
+**Cut.** Nothing. The information is preserved in `stage_detail`.
+
+---
+
+## D50. Chat message timestamps are set in Python, not by the database
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** `chat_messages.created_at` is populated by a client-side default
+(`datetime.now(UTC)`) rather than by `server_default=func.now()`, and every query that
+orders messages breaks ties on `id`.
+
+**Reasoning.** Postgres `now()` returns the **transaction** start time, not the statement
+time, so every row written inside one transaction shares a timestamp to the microsecond.
+`chat.service.ask` creates the user's question and the pending assistant answer in a single
+transaction, so with a server default those two rows tie exactly and their relative order is
+whatever the scan happens to produce.
+
+The symptom is not subtle once it appears: a conversation can render an answer above the
+question that prompted it. It surfaced as a failing test on a three-message history whose
+order came back reversed, and it would have been intermittent and baffling in the interface,
+because the ordering depended on physical row order rather than anything a reader could see.
+
+The tiebreak on `id` is belt to that braces. Two messages created in the same microsecond
+would still order deterministically, arbitrarily but stably, which is what stops a test from
+flaking and a list from reshuffling between refreshes.
+
+**Alternatives considered.**
+
+1. *`clock_timestamp()` as the server default.* Correct, and it puts the fix in the schema
+   where it is easy to lose in a future autogenerated migration.
+2. *An explicit per-workspace ordinal, like `workspace_events.seq`.* Strictly correct and
+   gap-free, and more machinery than a conversation needs: unlike the event log, nothing
+   resumes from a message ordinal.
+3. *Ordering by `id`.* Identifiers are random version-4 UUIDs, so this orders nothing.
+
+**Cut.** Nothing. No migration was needed either: the column keeps its existing server
+default, which is now simply never reached because Python always supplies a value.
+
+**Noted, and not fixed here.** The same latent tie exists on other tables written in
+batches, `records` and `field_values` among them. It does not matter there, because nothing
+renders those in creation order: records are ordered by `(created_at, id)` for cursor
+pagination, where an arbitrary but stable order is exactly what is wanted. Recorded so that
+the next person to depend on creation order knows to check.
+
+---
+
+## D51. The three-screen switch is application chrome, present before a workspace exists
+
+**Date:** September 5, 2026 · **Status:** Active
+
+**Decision.** One `AppHeader` serves all three screens: identity on the left, an optional
+workspace chip (label and document count), and a segmented Upload / Chat / Data control on
+the right, with "Add documents" beside it inside a workspace. On the first-run screen the
+header still renders, showing all three segments with Chat and Data inert.
+
+Which screen is current is passed in as a prop rather than derived from route matching.
+
+**Alternatives considered.** Showing no chrome on the first-run screen, which is what the
+screen had before and what a marketing landing page would do. Hiding the Chat and Data
+segments until they work. Letting `NavLink` decide the active segment from the URL.
+
+**Reasoning.** D34 cut the product to three screens; the header is where that decision
+becomes visible. A first-time visitor who can see the whole product in one glance
+understands the shape of it before uploading anything, and the two inert segments are a
+better explanation of what happens next than a sentence would be. Hiding them would make the
+header change shape on first upload, which reads as the interface rearranging itself.
+
+The inert segments are `span`s, not disabled buttons, so the keyboard skips them rather than
+landing on focusable dead ends.
+
+Route matching was rejected because Chat lives at **both** `/w/{id}` and `/w/{id}/chat`
+(requirements section 3.2). A `NavLink` pointing at the second does not match the first, so a
+shared link landed on the workspace with no segment lit at all — observed in the browser, not
+reasoned about. Redirecting `/w/{id}` to `/w/{id}/chat` would have fixed the highlight and
+broken something worse: the access token arrives in the URL fragment (D31) and is consumed on
+mount, so a redirect before that runs discards the credential. Passing the active screen down
+avoids both, and styling keys off `aria-current` so the visual state and the announced state
+are one fact rather than two that can drift.
+
+**Cut.** Automatic active-state detection. The caller now has to say which screen it is,
+which is one line at each of three call sites.
+
+---
+
+## D52. lucide-react for iconography
+
+**Date:** September 5, 2026 · **Status:** Active
+
+**Decision.** Take `lucide-react` as the icon set, as the design itself does.
+
+**Alternatives considered.** Hand-rolled inline SVG for each icon, which is what the first
+version of the upload screen did for its single cloud glyph. Heroicons or Radix Icons.
+
+**Reasoning.** The count only goes up from here: file-type marks, the five confidence tiers,
+table controls, viewer controls, citation markers, composer actions. Hand-rolling that many
+glyphs and keeping them optically consistent is real work that buys nothing, and the design
+was drawn against Lucide's specific shapes, so hand-rolling would also drift from it. The
+package is tree-shaken per icon; the six icons used here cost about 2 kB, and the production
+bundle moved from 322 kB to 326 kB raw.
+
+The wordmark stays hand-drawn, because it is a mark rather than an icon.
+
+**Cut.** Nothing. `lucide-react` installed with `--legacy-peer-deps` as a one-off, for the
+npm reason recorded in D33.

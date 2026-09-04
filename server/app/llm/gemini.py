@@ -34,7 +34,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
@@ -88,7 +88,7 @@ class GeminiClient:
         return (
             self._settings.llm_extract_model
             if kind.needs_strong_model
-            else self._settings.llm_query_model
+            else self._settings.llm_fast_model
         )
 
     async def structured(self, request: LLMRequest) -> LLMResponse[BaseModel]:
@@ -281,6 +281,56 @@ class GeminiClient:
             "The model could not be reached."
         )
 
+    async def stream_text(self, request: LLMRequest) -> AsyncIterator[str]:
+        """Stream a text answer. Decision D44.
+
+        No retry loop, unlike ``structured``. Once the first delta has reached the user's
+        screen, silently restarting the call would rewrite text they have already read. A
+        mid-stream failure is surfaced instead, and the partial answer is persisted as
+        failed, which is honest about what happened.
+        """
+        from google.genai import types
+
+        model = self.model_for(request.kind)
+        config = types.GenerateContentConfig(
+            temperature=request.temperature,
+            system_instruction=request.system,
+        )
+        started = time.perf_counter()
+        first_token_ms: float | None = None
+        pieces = 0
+
+        try:
+            stream = await self._client.aio.models.generate_content_stream(
+                model=model, contents=request.prompt, config=config
+            )
+            async for chunk in stream:
+                text = getattr(chunk, "text", None)
+                if not text:
+                    continue
+                if first_token_ms is None:
+                    first_token_ms = (time.perf_counter() - started) * 1000
+                pieces += 1
+                yield text
+        except Exception as exc:
+            logger.warning(
+                "llm.stream_failed", kind=request.kind.value, error=type(exc).__name__
+            )
+            raise LLMUnavailable(
+                _readable_transport_error(exc), error_type=type(exc).__name__
+            ) from exc
+
+        logger.info(
+            "llm.stream_completed",
+            kind=request.kind.value,
+            model=model,
+            pieces=pieces,
+            # Logged because requirement FR-26 sets a three second target for it, and a
+            # target nobody measures is a wish.
+            first_token_ms=round(first_token_ms, 1) if first_token_ms else None,
+            total_ms=round((time.perf_counter() - started) * 1000, 1),
+        )
+
     async def _backoff(self, attempt: int) -> None:
         """Exponential backoff. Deterministic, so a test can reason about the timing."""
         await asyncio.sleep(min(8.0, 0.5 * (2 ** (attempt - 1))))
@@ -302,7 +352,7 @@ def _readable_transport_error(exc: Exception) -> str:
     if "not found" in text or "404" in text:
         return (
             "The configured model does not exist. Check LLM_EXTRACT_MODEL and "
-            "LLM_QUERY_MODEL against the provider's current model list."
+            "LLM_FAST_MODEL against the provider's current model list."
         )
     if "429" in text or "resource_exhausted" in text or "rate limit" in text:
         return "We are being rate limited by the model provider. Please try again shortly."

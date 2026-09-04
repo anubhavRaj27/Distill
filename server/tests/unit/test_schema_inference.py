@@ -19,6 +19,7 @@ from app.schema.drift import (
     merged_schema,
 )
 from app.schema.propose import collect_observations, propose_initial
+from app.schema.similarity import AskReason
 
 
 @pytest.fixture(autouse=True)
@@ -112,7 +113,7 @@ async def test_identical_keys_unify_into_one_field(
     )
     assert [f.key for f in proposal.fields] == ["vendor_name"]
     assert proposal.coverage["vendor_name"] == 2
-    assert proposal.questions == []
+    assert proposal.kept_separate == []
 
 
 async def test_a_case_and_separator_variant_unifies_without_asking(
@@ -127,7 +128,7 @@ async def test_a_case_and_separator_variant_unifies_without_asking(
         settings=settings,
     )
     assert len(proposal.fields) == 1
-    assert proposal.questions == []
+    assert proposal.kept_separate == []
 
 
 async def test_a_semantic_rename_unifies_when_vectors_are_recorded(
@@ -159,12 +160,13 @@ async def test_a_semantic_rename_unifies_when_vectors_are_recorded(
     )
 
 
-async def test_an_uncertain_pair_stays_split_and_asks(
+async def test_an_uncertain_pair_stays_split_and_is_recorded(
     client: FakeClient, settings: Settings
 ) -> None:
-    """Decision D25's core rule. A wrong merge commingles two fields' values and unpicking
-    it needs per-value provenance; a wrong split is a lossless move. Prefer the cheaper
-    undo."""
+    """Decisions D25 and D38. A wrong merge commingles two fields' values and unpicking it
+    needs per-value provenance; a wrong split is a lossless move, so prefer the cheaper
+    undo. v2 no longer ASKS about it: both fields exist and the near-miss is recorded so
+    the change summary can explain it."""
     proposal = await propose_initial(
         {
             "a.pdf": [field("invoice_number", "Invoice Number", "INV-1", FieldType.STRING)],
@@ -174,17 +176,21 @@ async def test_an_uncertain_pair_stays_split_and_asks(
         settings=settings,
     )
     assert len(proposal.fields) == 2, "uncertain unification must NOT merge"
-    assert len(proposal.questions) == 1
-    question = proposal.questions[0]
-    assert {question.left_key, question.right_key} == {"invoice_number", "invoice_no"}
+    assert len(proposal.kept_separate) == 1
+    entry = proposal.kept_separate[0]
+    assert {entry.left_key, entry.right_key} == {"invoice_number", "invoice_no"}
+    # The summary is the only account the user gets of how the schema formed, so it has to
+    # name the pair rather than merely counting it.
+    assert "Invoice No" in proposal.summary and "Invoice Number" in proposal.summary
 
 
-async def test_unrelated_fields_do_not_generate_merge_questions(
+async def test_unrelated_fields_are_not_recorded_as_near_misses(
     client: FakeClient, settings: Settings
 ) -> None:
-    """The regression test for a real defect: treating 'nothing resembles this, and we had
-    no vector to confirm it' as a judgment call produced a merge question for nearly every
-    field in the batch, pairing unrelated things like ``vendor`` with ``invoice_no``."""
+    """Regression. Treating 'nothing resembles this, and we had no vector to confirm it' as
+    a judgment call described nearly every field in the batch as a near-miss, pairing
+    unrelated things like ``vendor`` with ``invoice_no``. In v2 that noise would land in the
+    change summary, which is the user's only explanation, so it matters more not less."""
     proposal = await propose_initial(
         {
             "a.pdf": [
@@ -198,8 +204,8 @@ async def test_unrelated_fields_do_not_generate_merge_questions(
         settings=settings,
     )
     assert len(proposal.fields) == 4
-    asked = [(question.left_key, question.right_key) for question in proposal.questions]
-    assert proposal.questions == [], f"unrelated fields must not ask; got {asked}"
+    noted = [(entry.left_key, entry.right_key) for entry in proposal.kept_separate]
+    assert proposal.kept_separate == [], f"unrelated fields must not be paired; got {noted}"
 
 
 async def test_currency_and_date_fields_get_a_higher_review_weight(
@@ -276,7 +282,7 @@ async def test_an_already_approved_alias_auto_maps_and_never_asks_again(
         settings=settings,
     )
     assert outcome.mappings == {"supplier": "vendor_name"}
-    assert outcome.questions == []
+    assert outcome.separations == []
 
 
 async def test_an_exact_name_match_auto_maps(client: FakeClient, settings: Settings) -> None:
@@ -309,45 +315,54 @@ async def test_a_clearly_novel_field_auto_adds_and_enters_the_schema(
         settings=settings,
     )
     assert [f.key for f in outcome.additions] == ["shipping_weight"]
-    assert outcome.questions == []
+    assert outcome.separations == [], "a clearly novel field is not a near-miss"
 
     widened = merged_schema(SCHEMA, outcome)
     assert "shipping_weight" in {f.key for f in widened}
     assert len(widened) == len(SCHEMA) + 1
 
 
-async def test_an_unconfirmable_field_asks_rather_than_adding_a_duplicate_column(
+async def test_an_unconfirmable_field_is_added_separately_and_the_reason_recorded(
     client: FakeClient, settings: Settings
 ) -> None:
-    """With no vector we cannot rule out a semantic rename, and a wrong auto-add creates a
-    duplicate column holding half the values. Asking is the safe direction."""
+    """Decision D38. With no vector we cannot rule out a semantic rename, so the field is
+    added on its own rather than merged into a candidate.
+
+    v1 asked the user about this. v2 does not ask anyone anything, so the honest outcome is
+    the safe action plus an accurate note: the change summary must say we could not check
+    for a meaning-based match, not that the match was "too close to call", because those
+    are different situations and only one of them is true here.
+    """
     outcome = await assess(
         [field("shipping_weight", "Shipping Weight", "42", FieldType.NUMBER)],
         SCHEMA,
         client=client,
         settings=settings,
     )
-    assert outcome.additions == []
-    assert [q.incoming_key for q in outcome.questions] == ["shipping_weight"]
+    assert [f.key for f in outcome.additions] == ["shipping_weight"]
+    assert [s.field_key for s in outcome.separations] == ["shipping_weight"]
+    assert outcome.separations[0].why is AskReason.UNCONFIRMED_NOVELTY
+    assert "meaning-based" in outcome.summary
+    assert "too close to call" not in outcome.summary
 
 
-async def test_a_question_carries_ranked_candidates_for_the_card(
+async def test_a_separation_records_the_field_it_was_nearly_merged_with(
     client: FakeClient, settings: Settings
 ) -> None:
-    """The proposal card offers 'map to existing', so it needs the options and their
-    scores, not just the fact that a decision is needed."""
+    """The interface offers a merge for exactly these pairs (requirement FR-15), so the
+    nearest candidate has to be recorded rather than only the fact of a near-miss."""
     outcome = await assess(
-        [field("shipping_weight", "Shipping Weight", "42", FieldType.NUMBER)],
+        [field("supplier_co", "Supplier Co", "Acme", FieldType.STRING)],
         SCHEMA,
         client=client,
         settings=settings,
     )
-    question = outcome.questions[0]
-    assert question.candidates
-    assert len(question.candidates[0]) == 3
-    scores = [score for _key, _label, score in question.candidates]
-    assert scores == sorted(scores, reverse=True), "best candidate first"
-    assert question.sample_value == "42", "the card shows the user the value in question"
+    assert outcome.separations
+    separation = outcome.separations[0]
+    assert separation.field_key == "supplier_co"
+    assert separation.nearest_key in {field_spec.key for field_spec in SCHEMA}
+    assert 0.0 < separation.score <= 1.0
+    assert separation.explanation
 
 
 async def test_a_document_cannot_widen_the_schema_without_limit(
@@ -382,8 +397,10 @@ async def test_a_document_cannot_widen_the_schema_without_limit(
 
     outcome = await assess(extras, SCHEMA, client=client, settings=settings)
     assert len(outcome.additions) == MAX_AUTO_ADDED_PER_DOCUMENT
-    assert len(outcome.questions) == MAX_AUTO_ADDED_PER_DOCUMENT
-    assert "more than" in outcome.questions[0].reason
+    # With no proposal card to park them in, the overflow is refused and SAID so, rather
+    # than silently widening every other document's table.
+    assert len(outcome.dropped) == MAX_AUTO_ADDED_PER_DOCUMENT
+    assert "left out" in outcome.summary
 
 
 async def test_the_same_new_field_mentioned_twice_is_added_once(

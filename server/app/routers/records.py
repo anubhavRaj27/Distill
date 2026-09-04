@@ -12,15 +12,14 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Document, FieldValueRow, Record
+from app.db.models import FieldValueRow, Record
 from app.deps import CurrentWorkspace, Session
-from app.domain.fields import FieldValue, Tier, ValueStatus
+from app.domain.fields import FieldValue
 from app.domain.records import Record as RecordPayload
 from app.domain.records import RecordPage
 from app.errors import FieldNotInSchema, RecordNotFound
 from app.logging import get_logger
 from app.pipeline.persist import apply_human_correction
-from app.pipeline.score import impact
 from app.schema import versioning
 from app.types import RecordId
 
@@ -189,73 +188,9 @@ async def correct_field(
         not_present=body.not_present,
     )
 
-
-class ReviewItem(BaseModel):
-    """One cell that wants a human's attention."""
-
-    record_id: UUID
-    document_id: UUID
-    document_name: str
-    field_key: str
-    field_label: str
-    value: FieldValue
-    impact: float = Field(
-        description="Ordering score: field weight times uncertainty, with a conflict "
-        "outranking a suspicion at the same weight. See app.pipeline.score.impact."
-    )
-
-
-class ReviewQueue(BaseModel):
-    items: list[ReviewItem]
-    total: int
-
-
-@router.get("/review", response_model=ReviewQueue, summary="The review queue")
-async def review_queue(
-    workspace: CurrentWorkspace,
-    session: Session,
-    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = 50,
-) -> ReviewQueue:
-    """Cells needing attention, highest impact first. Requirement FR-32.
-
-    Ordered by impact rather than by tier alone, because "which of these low-confidence
-    cells matters" is the question a user actually has: a shaky total on an invoice is worth
-    more attention than a shaky note.
-    """
-    fields = {field.key: field for field in await versioning.current_fields(session, workspace.id)}
-
-    rows = list(
-        (
-            await session.execute(
-                select(FieldValueRow, Record, Document)
-                .join(Record, Record.id == FieldValueRow.record_id)
-                .join(Document, Document.id == Record.document_id)
-                .where(
-                    Record.workspace_id == workspace.id,
-                    FieldValueRow.tier.in_([Tier.LOW, Tier.CONFLICT, Tier.MEDIUM]),
-                    FieldValueRow.status == ValueStatus.MODEL,
-                )
-            )
-        ).all()
-    )
-
-    items: list[ReviewItem] = []
-    for value_row, record, document in rows:
-        spec = fields.get(value_row.field_key)
-        if spec is None:
-            continue  # a field removed from the schema is not a review item
-        payload = _to_value(value_row)
-        items.append(
-            ReviewItem(
-                record_id=record.id,
-                document_id=document.id,
-                document_name=document.filename,
-                field_key=value_row.field_key,
-                field_label=spec.label,
-                value=payload,
-                impact=round(impact(spec, payload), 4),
-            )
-        )
-
-    items.sort(key=lambda item: item.impact, reverse=True)
-    return ReviewQueue(items=items[:limit], total=len(items))
+# The review queue and its keyboard flow were removed in v2 (decision D42). A second screen
+# dedicated to checking cells competes with the chat for the user's attention, and the
+# confidence tier is already visible on every cell in the table (requirement FR-14), which
+# is where a person is actually looking. The scoring function it used, `score.impact`,
+# stays: it still orders nothing, but it is the tested expression of "which of these
+# uncertain values would matter most", and the table can sort by it.

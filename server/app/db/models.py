@@ -17,7 +17,7 @@ constraint: the same validation at the database boundary, without the migration 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from sqlalchemy import (
@@ -37,6 +37,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from app.domain.chat import ChatRole, ChatStatus, DashboardStatus
 from app.domain.document import DocumentStatus, SourceFormat
 from app.domain.fields import FieldType, SchemaChangeAuthor, Tier, ValueStatus
 
@@ -377,62 +378,8 @@ class FieldValueRow(Base):
 
 
 # ---------------------------------------------------------------------------
-# Proposals, queries, events
+# Events
 # ---------------------------------------------------------------------------
-
-
-class Proposal(Base):
-    """A pending question for the user about the schema. FR-10 and FR-13.
-
-    The payload holds the Agent-to-User Interface surface, so re-opening the interface after
-    a refresh shows the same card rather than losing the question.
-    """
-
-    __tablename__ = "proposals"
-    __table_args__ = (
-        Index("ix_proposals_workspace_status", "workspace_id", "status"),
-        CheckConstraint("kind IN ('initial_schema', 'drift')", name="ck_proposal_kind"),
-        CheckConstraint(
-            "status IN ('pending', 'applied', 'dismissed')", name="ck_proposal_status"
-        ),
-    )
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
-    )
-    document_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("documents.id", ondelete="CASCADE"), nullable=True
-    )
-    kind: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = _created_at()
-    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class QueryLog(Base):
-    """Every question asked, with the SQL it produced. Powers query history (FR-44).
-
-    Failures are recorded too, with ``error``. A log of only the successes would hide the
-    thing most worth knowing: which questions this schema cannot answer.
-    """
-
-    __tablename__ = "queries"
-    __table_args__ = (Index("ix_queries_workspace_created", "workspace_id", "created_at"),)
-
-    id: Mapped[uuid.UUID] = _uuid_pk()
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
-    )
-    question: Mapped[str] = mapped_column(Text, nullable=False)
-    sql: Mapped[str | None] = mapped_column(Text, nullable=True)
-    explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
-    presentation: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
-    error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = _created_at()
 
 
 class WorkspaceEventRow(Base):
@@ -457,3 +404,152 @@ class WorkspaceEventRow(Base):
     type: Mapped[str] = mapped_column(String(48), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = _created_at()
+
+
+# ---------------------------------------------------------------------------
+# Retrieval, chat, and the dashboard (v2)
+# ---------------------------------------------------------------------------
+
+
+class Chunk(Base):
+    """One retrievable passage of a document. Decisions D35 and D45.
+
+    ``word_start`` and ``word_end`` index into the page's ``text_layer`` word list, which is
+    what lets a chat citation resolve to highlight boxes **without re-parsing the original
+    file**. The word geometry was already stored for grounding, so a citation costs a slice
+    rather than a parse.
+
+    Chunk size IS highlight size, because a citation highlights the whole chunk's word span
+    (decision D45). That is why passages are kept to roughly 80 to 160 words: a 500 word
+    chunk would light up half a page and tell the user nothing.
+
+    ``page_index`` is null for the per-document **records digest**, a synthetic chunk whose
+    text is the extracted record rendered as ``label: value`` lines. It exists so a question
+    phrased in the schema's vocabulary retrieves the record even when the page text uses
+    different words. It has no boxes; a citation to one resolves through the underlying
+    field value's provenance instead.
+    """
+
+    __tablename__ = "chunks"
+    __table_args__ = (
+        UniqueConstraint("document_id", "ordinal", name="uq_chunks_document_ordinal"),
+        Index("ix_chunks_document", "document_id"),
+        Index("ix_chunks_workspace", "workspace_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    # Denormalised from documents on purpose: retrieval scans every chunk in a workspace on
+    # every question, and doing that through a join to documents is a needless cost on the
+    # hottest read in the product.
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_index: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, doc="Null for the records digest, which has no page."
+    )
+    word_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    word_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    token_estimate: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    is_digest: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+
+    # JSONB rather than a vector column. Decision D36: a workspace of 25 documents is about
+    # a thousand vectors, which an in-process cosine scans in single-digit milliseconds, and
+    # this avoids making pgvector part of the one-command setup.
+    embedding: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    created_at: Mapped[datetime] = _created_at()
+
+
+class ChatMessage(Base):
+    """One turn of the conversation. Decision D44.
+
+    ``content`` is written once, at the end of generation or on stop. While an answer is
+    streaming its text lives in the in-memory answer buffer, not here: persisting every
+    token would turn one question into hundreds of writes, and the buffer is what a
+    reconnecting client resumes from anyway.
+    """
+
+    __tablename__ = "chat_messages"
+    __table_args__ = (Index("ix_chat_messages_workspace_created", "workspace_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+
+    role: Mapped[ChatRole] = mapped_column(_enum(ChatRole, "chat_role"), nullable=False)
+    status: Mapped[ChatStatus] = mapped_column(
+        _enum(ChatStatus, "chat_status"), nullable=False, default=ChatStatus.DONE
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+
+    # The passages retrieved for this answer: [{chunk_id, document_id, filename, page_index}]
+    sources: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    # [{n, chunk_id, document_id, filename, page_index, boxes, excerpt}]
+    citations: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+
+    # The `Visual` the model chose: a query specification, never numbers (decision D37).
+    visual: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # The A2UI message array built from evaluating that specification.
+    surface: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+
+    model_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Timestamped in PYTHON, not by the server, and that is a correctness fix rather than a
+    # preference. Postgres `now()` returns the TRANSACTION start time, so every row written
+    # in one transaction shares it. `ask` creates the question and its pending answer in a
+    # single transaction, so with a server default the two tie and the conversation has no
+    # defined order: history could render the answer above the question.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        index=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class DashboardRow(Base):
+    """The agent-generated dashboard. One row per workspace. FR-30 to FR-34.
+
+    Table name ``dashboards``; the class is ``DashboardRow`` so it does not collide with the
+    domain model that describes a dashboard on the wire.
+    """
+
+    __tablename__ = "dashboards"
+    __table_args__ = (UniqueConstraint("workspace_id", name="uq_dashboards_workspace"),)
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[DashboardStatus] = mapped_column(
+        _enum(DashboardStatus, "dashboard_status"),
+        nullable=False,
+        default=DashboardStatus.PENDING,
+    )
+    # Marked rather than regenerated automatically: regeneration is a model call, and doing
+    # one per uploaded document would spend tokens the user did not ask to spend.
+    stale: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+
+    # [{title, kind, rationale, query, surface}]
+    panels: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+
+    generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    model_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = _created_at()
+    updated_at: Mapped[datetime] = _updated_at()

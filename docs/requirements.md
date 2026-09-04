@@ -146,6 +146,12 @@ Route `/`. Already built.
 2. Dropping files or clicking the sample button creates a workspace, uploads, and navigates
    to the Chat screen. Processing runs in the background and streams status.
 3. Unsupported types and files over 20 MB are refused inline before upload.
+4. The screen carries the same application header as the other two, showing all three
+   screens with Chat and Data inert until a workspace exists, so the shape of the product is
+   legible before anything is uploaded (decision D51).
+5. Beneath the drop zone, an illustration of six mismatched documents falling through a
+   funnel into one ruled table. It is the argument of the product made before the person has
+   done anything, and it is decorative: its caption carries the same meaning in words.
 
 Documents can also be added later from inside the workspace (a small "Add documents" control
 in the workspace header, on both the Chat and Data screens). Added documents run through the

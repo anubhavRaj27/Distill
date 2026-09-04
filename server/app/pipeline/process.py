@@ -1,24 +1,29 @@
 """The per-document pipeline, end to end.
 
-    uploaded -> parsed -> extracting -> (awaiting_schema) -> done
-                                                          -> failed
+    uploaded -> parsing -> extracting -> indexing -> done
+                                                  -> failed
 
-Every transition publishes an event, so the progress list in the interface is a direct
-rendering of this state machine rather than a separate thing that has to be kept in step.
+Every transition publishes an event, so the processing strip in the interface is a direct
+rendering of this state machine rather than a separate thing kept in step by hand.
 
-REVIEW FINDING 8.5: WHEN DOES THE FIRST SCHEMA GET PROPOSED
+``record.upsert`` FIRES AFTER INDEXING, NOT AFTER PERSISTING
 ------------------------------------------------------------
-"Propose from the first batch" is not implementable as written, because a batch is not
-defined: uploading three files and then five more leaves it ambiguous, and the worker would
-race to propose a schema from whichever document finished first.
+A document reaches ``done``, and its row appears in the table, only once its passages are
+chunked and embedded. That ordering is deliberate (implementation section 6.3 step 4): a
+user who watches a row appear and then asks a question about it must not be told "not in
+these documents". "In the table" and "askable in chat" are the same moment on purpose.
 
-The rule implemented here: a document that finishes open extraction with no schema in the
-workspace parks its raw output and moves to ``awaiting_schema``. The proposal fires when no
-document in the workspace is still working, debounced to absorb staggered uploads, under a
-per-workspace lock so two documents finishing together cannot both propose. Once the schema
-exists, every parked document is mapped onto it **without another model call**, because the
-open extraction already read those documents and paying twice for the same reading would be
-both slow and wasteful.
+WHEN THE FIRST SCHEMA IS INFERRED
+----------------------------------
+A document that finishes open extraction with no schema in the workspace parks its raw
+output and waits. The schema is inferred once no document in the workspace is still
+working, under a per-workspace lock so two documents finishing together cannot both infer
+one. Once it exists, every parked document is mapped onto it **without another model call**,
+because the open extraction already read those documents.
+
+v2 removed the confirmation step (decision D38). Uncertain unification resolves to separate
+fields and the reason goes into the schema change summary, so there is no proposal row, no
+card, and no debounce window to hold a batch open for a decision that will never be asked.
 """
 
 from __future__ import annotations
@@ -32,10 +37,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.db.models import Document, DocumentExtraction, Page, Proposal, Record
+from app.db.models import Document, DocumentExtraction, Page, Record
 from app.db.session import session_scope
 from app.domain.document import DocumentStatus, ParsedDocument
-from app.domain.events import DocumentStatusEvent, SchemaProposalEvent
+from app.domain.events import DocumentStatusEvent
 from app.domain.fields import FieldSpec, SchemaChangeAuthor
 from app.errors import DistillError, LLMUnavailable, ParseFailed
 from app.events.bus import bus
@@ -44,6 +49,7 @@ from app.llm.contracts import ExtractedField, OpenExtraction
 from app.logging import get_logger, logging_context
 from app.pipeline import extract as extract_module
 from app.pipeline import persist as persist_module
+from app.pipeline.index import index_document
 from app.pipeline.parse.router import parse as parse_document
 from app.schema import drift as drift_module
 from app.schema import propose as propose_module
@@ -53,8 +59,8 @@ from app.storage.local import LocalStorage, page_image_key
 
 logger = get_logger(__name__)
 
-_proposal_locks: dict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
-"""One lock per workspace, so two documents finishing at once cannot both propose a schema.
+_schema_locks: dict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
+"""One lock per workspace, so two documents finishing at once cannot both infer a schema.
 
 In-process, which is consistent with the single-process constraint decision D9 already
 imposes and which ``/healthz`` reports so a misconfiguration is visible.
@@ -83,7 +89,7 @@ async def set_status(
             seq=0,
             document_id=document.id,
             filename=document.filename,
-            status=status,
+            status=status.for_wire,
             stage_detail=detail,
             failure_reason=document.failure_reason,
             attempt=attempt,
@@ -217,6 +223,7 @@ async def _parked_open_extraction(
 async def _parse_stage(
     session: AsyncSession, document: Document, storage: Storage, settings: Settings
 ) -> ParsedDocument:
+    await set_status(session, document, DocumentStatus.PARSING, detail="reading the file")
     data = storage.get_bytes(document.storage_key)
 
     stages: list[str] = []
@@ -229,7 +236,7 @@ async def _parse_stage(
     await set_status(
         session,
         document,
-        DocumentStatus.PARSED,
+        DocumentStatus.PARSING,
         detail=stages[-1] if stages else f"read {parsed.page_count} pages",
     )
     return parsed
@@ -310,31 +317,10 @@ async def _extract_and_store(
             widened,
             author=SchemaChangeAuthor.MODEL_AUTO,
             summary=outcome.summary,
-            settings=settings,
         )
         fields = widened
         version_row = await versioning.current_version(session, document.workspace_id)
         assert version_row is not None
-
-    for question in outcome.questions:
-        session.add(
-            Proposal(
-                workspace_id=document.workspace_id,
-                document_id=document.id,
-                kind="drift",
-                payload={
-                    "incoming_key": question.incoming_key,
-                    "incoming_label": question.incoming_label,
-                    "incoming_type": question.incoming_type.value,
-                    "sample_value": question.sample_value,
-                    "reason": question.reason,
-                    "candidates": [
-                        {"key": key, "label": label, "score": score}
-                        for key, label, score in question.candidates
-                    ],
-                },
-            )
-        )
     await session.flush()
 
     # Values for the schema fields, plus any extra that auto-mapped onto one.
@@ -370,10 +356,20 @@ async def _extract_and_store(
         settings=settings,
         publish_events=False,
     )
+    await set_status(session, document, DocumentStatus.INDEXING, detail="making it askable")
+    chunk_count = await index_document(
+        session, document, fields=fields, client=client, settings=settings
+    )
+    # Announced only now: see the note about record.upsert in the module docstring.
     await persist_module.publish_record(
         session, document.workspace_id, record, document, version_row.version
     )
-    await set_status(session, document, DocumentStatus.DONE, detail=None)
+    await set_status(
+        session,
+        document,
+        DocumentStatus.DONE,
+        detail=f"{chunk_count} passages indexed" if chunk_count else None,
+    )
 
 
 async def process_document(
@@ -420,7 +416,7 @@ async def process_document(
 
         logger.info("process.completed", filename=filename)
 
-    await maybe_propose_initial_schema(workspace_id, client=client, settings=settings)
+    await maybe_infer_initial_schema(workspace_id, client=client, settings=settings)
 
 
 async def _mark_failed(document_id: UUID, reason: str) -> None:
@@ -441,12 +437,13 @@ async def _mark_failed(document_id: UUID, reason: str) -> None:
 
 _BUSY_STATUSES = (
     DocumentStatus.UPLOADED,
-    DocumentStatus.PARSED,
+    DocumentStatus.PARSING,
     DocumentStatus.EXTRACTING,
+    DocumentStatus.INDEXING,
 )
 
 
-async def maybe_propose_initial_schema(
+async def maybe_infer_initial_schema(
     workspace_id: UUID, *, client: LLMClient, settings: Settings
 ) -> None:
     """Propose and apply the first schema, if the batch has settled.
@@ -454,9 +451,7 @@ async def maybe_propose_initial_schema(
     Held under a per-workspace lock, so two documents finishing at the same instant produce
     one schema rather than two competing ones.
     """
-    async with _proposal_locks[workspace_id]:
-        await asyncio.sleep(settings.schema_proposal_debounce_seconds)
-
+    async with _schema_locks[workspace_id]:
         async with session_scope() as session:
             if await versioning.current_version(session, workspace_id) is not None:
                 return  # another document already established the schema
@@ -517,35 +512,7 @@ async def maybe_propose_initial_schema(
                 proposal.fields,
                 author=SchemaChangeAuthor.MODEL_AUTO,
                 summary=proposal.summary,
-                settings=settings,
             )
-
-            # Decision D25: uncertain unification stays split, and asks. Non-blocking, so
-            # the table is already usable while the question waits in the review surface.
-            if proposal.questions:
-                row = Proposal(
-                    workspace_id=workspace_id,
-                    kind="initial_schema",
-                    payload={
-                        "questions": [
-                            {
-                                "left_key": question.left_key,
-                                "right_key": question.right_key,
-                                "reason": question.reason,
-                            }
-                            for question in proposal.questions
-                        ]
-                    },
-                )
-                session.add(row)
-                await session.flush()
-                await bus.publish(
-                    session,
-                    workspace_id,
-                    SchemaProposalEvent(
-                        seq=0, proposal_id=row.id, kind="initial_schema", surface=[]
-                    ),
-                )
 
             # Map every parked extraction onto the new schema, with no second model call.
             for document in waiting:
@@ -582,15 +549,30 @@ async def maybe_propose_initial_schema(
                     settings=settings,
                     publish_events=False,
                 )
+                await set_status(
+                    session, document, DocumentStatus.INDEXING, detail="making it askable"
+                )
+                chunk_count = await index_document(
+                    session,
+                    document,
+                    fields=proposal.fields,
+                    client=client,
+                    settings=settings,
+                )
                 await persist_module.publish_record(
                     session, workspace_id, record, document, version_row.version
                 )
-                await set_status(session, document, DocumentStatus.DONE)
+                await set_status(
+                    session,
+                    document,
+                    DocumentStatus.DONE,
+                    detail=f"{chunk_count} passages indexed" if chunk_count else None,
+                )
 
             logger.info(
                 "process.initial_schema_applied",
                 workspace_id=str(workspace_id),
                 fields=len(proposal.fields),
                 documents=len(waiting),
-                questions=len(proposal.questions),
+                kept_separate=len(proposal.kept_separate),
             )

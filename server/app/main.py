@@ -37,7 +37,7 @@ from app.logging import (
 )
 from app.middleware import SelectiveGZipMiddleware
 from app.pipeline.worker import init_worker, reset_worker, resume_interrupted
-from app.routers import documents, events, health, records, schema, workspaces
+from app.routers import chat, documents, events, health, records, schema, workspaces
 from app.storage.local import LocalStorage
 
 logger = get_logger(__name__)
@@ -121,7 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(health.router)
-    for module in (workspaces, documents, records, schema, events):
+    for module in (workspaces, documents, records, schema, events, chat):
         app.include_router(module.router, prefix=settings.api_prefix)
 
     return app
