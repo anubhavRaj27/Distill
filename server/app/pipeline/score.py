@@ -288,7 +288,10 @@ def _values_differ(left: Any, right: Any) -> bool:
         return abs(float(left) - float(right)) > 1e-9
     if isinstance(left, str) and isinstance(right, str):
         return left.strip().casefold() != right.strip().casefold()
-    return left != right
+    # `bool(...)` rather than returning the comparison directly: both operands are `Any`
+    # here, so `!=` can return a non-bool from a type that overloads it, and this function
+    # decides whether the user is shown a conflict.
+    return bool(left != right)
 
 
 # ---------------------------------------------------------------------------

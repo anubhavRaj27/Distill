@@ -1,4 +1,4 @@
-# Sift
+# Distill
 
 Zamp take-home, Problem 1: turn unstructured or semi-structured documents into clean,
 structured data that can be searched and queried. Build window 4 to 5 days from

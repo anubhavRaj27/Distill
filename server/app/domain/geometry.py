@@ -2,7 +2,7 @@
 
 THE CONVENTION
 --------------
-Every bounding box in Sift, in the database, over the wire, and in the browser, is
+Every bounding box in Distill, in the database, over the wire, and in the browser, is
 expressed in **PDF points with a top-left origin and y increasing downward**:
 
     (x0, top, x1, bottom)      0 <= x0 < x1 <= page.width_pt

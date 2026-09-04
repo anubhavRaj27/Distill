@@ -43,12 +43,12 @@ class Settings(BaseSettings):
 
     # -- Database -----------------------------------------------------------
     database_url: PostgresDsn = Field(
-        default=PostgresDsn("postgresql+asyncpg://sift:sift@localhost:5432/sift"),
+        default=PostgresDsn("postgresql+asyncpg://distill:distill@localhost:5432/distill"),
         description="Connection for the application role, which owns the schema.",
     )
     database_url_readonly: PostgresDsn = Field(
         default=PostgresDsn(
-            "postgresql+asyncpg://sift_readonly:sift_readonly@localhost:5432/sift"
+            "postgresql+asyncpg://distill_readonly:distill_readonly@localhost:5432/distill"
         ),
         description="Connection for generated SQL only. This role holds SELECT and nothing "
         "else, and can reach per-workspace views but not the tables beneath them. "
@@ -87,6 +87,12 @@ class Settings(BaseSettings):
         default="gemini-2.5-flash",
         description="Natural language to SQL. Short and tightly constrained, so the faster "
         "tier, because query latency is felt directly by the user.",
+    )
+    llm_embed_model: str = Field(
+        default="gemini-embedding-001",
+        description="Embedding model for schema drift matching (decision D24). "
+        "Configuration rather than code, like the other model identifiers, and unverified "
+        "until a key exists.",
     )
     llm_timeout_seconds: float = Field(default=90.0, gt=0)
     llm_max_attempts: int = Field(
@@ -139,6 +145,101 @@ class Settings(BaseSettings):
         description="How long the worker waits after the last document finishes before "
         "proposing an initial schema, so a staggered upload is treated as one batch. "
         "See review finding 8.5.",
+    )
+
+    # -- Schema drift matching. See decisions D23 and D24. -------------------
+    # These four decide when the system changes a schema without asking. They are a first
+    # pass, deliberately not tuned against real data yet, and they are configuration rather
+    # than constants precisely because the sample corpus is expected to move them.
+    drift_string_automap_min: float = Field(
+        default=0.90,
+        ge=0.0,
+        le=1.0,
+        description="String similarity at or above which a field auto-maps to an existing "
+        "one with no prompt. Catches formatting and typo variants such as 'Vendor Name' "
+        "against 'vendor_name'.",
+    )
+    drift_embedding_automap_min: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Embedding cosine at or above which a field auto-maps with no prompt. "
+        "Catches semantic renames such as 'Supplier' against 'vendor_name', which string "
+        "similarity scores near zero.",
+    )
+    drift_candidate_margin_min: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        description="How far the best candidate must beat the runner-up before an "
+        "auto-map is allowed. A high score is not evidence of an unambiguous match when a "
+        "second field scores nearly as high; that case belongs to a human.",
+    )
+    drift_novel_max: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=1.0,
+        description="A field whose best score on BOTH signals is below this against every "
+        "existing field is treated as clearly novel and added with no prompt. Both signals "
+        "must agree, because this is a claim about the absence of a match.",
+    )
+    llm_embed_model: str = Field(
+        default="gemini-embedding-001",
+        description="Model used for drift matching embeddings. Configuration, not code, "
+        "for the same reason the extraction models are.",
+    )
+
+    # -- Schema drift matching. See decisions D23 and D24. -------------------
+    # These four numbers ARE the policy for when the user is interrupted. They are a first
+    # pass, not tuned against real data: D24 says that if the sample corpus shows them
+    # producing wrong auto-applies, the numbers move, not the mechanism. That is why they
+    # are configuration and not constants.
+    drift_string_auto_map: float = Field(
+        default=0.90,
+        ge=0.0,
+        le=1.0,
+        description="String similarity at or above which a match is unambiguous enough to "
+        "auto-map without asking.",
+    )
+    drift_embedding_auto_map: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Embedding cosine at or above which a semantic match is unambiguous "
+        "enough to auto-map. Higher than the string bar because a cosine is dense: "
+        "unrelated business terms routinely score 0.7 against each other.",
+    )
+    drift_auto_map_margin: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        description="How far the best candidate must beat the runner-up to count as "
+        "unambiguous. Without this, `Supplier` scoring 0.96 against vendor_name and 0.94 "
+        "against supplier_id would auto-map on a coin flip instead of asking.",
+    )
+    # A field is "clearly novel" only if it scores below the ceiling against EVERY existing
+    # field on BOTH signals. Declaring a field new is a claim about the absence of a match,
+    # so both signals must agree. There are two ceilings rather than D24's single shared
+    # one because a character ratio and a cosine are not comparable numbers. See D27.
+    drift_novelty_ceiling_string: float = Field(
+        default=0.65,
+        ge=0.0,
+        le=1.0,
+        description="Measured, not guessed: across the fixture corpus the highest string "
+        "similarity between two genuinely DIFFERENT field labels is 0.59 "
+        "('Currency' versus 'Reference'), so anything at or below 0.65 carries no evidence "
+        "of a real match. Re-measure when the real sample corpus lands.",
+    )
+    drift_novelty_ceiling_embedding: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=1.0,
+        description="THE ONE NUMBER STILL UNMEASURED, because it needs a live embedding "
+        "model. High-dimensional text embeddings routinely score unrelated business terms "
+        "at 0.4 to 0.7, so this is probably too strict and auto-add may rarely fire once "
+        "vectors are live. Measure the cosine distribution over unrelated field pairs as "
+        "soon as a key exists, and set this above its upper range. Erring strict only "
+        "produces extra proposal cards, never a wrong merge.",
     )
 
     # -- Query safety. See decision D10. ------------------------------------

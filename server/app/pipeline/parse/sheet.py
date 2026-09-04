@@ -108,7 +108,7 @@ def parse_xlsx(
     except Exception as exc:
         raise ParseFailed(
             "We could not read this spreadsheet. It may be corrupt, or saved in the older "
-            ".xls format, which Sift does not support.",
+            ".xls format, which Distill does not support.",
             library_error=type(exc).__name__,
         ) from exc
 

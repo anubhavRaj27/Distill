@@ -208,7 +208,7 @@ def sniff(head: bytes, filename: str) -> Sniffed:
         if text is None:
             raise UnsupportedFileType(
                 f"We cannot read {filename!r}. It does not look like any of the file types "
-                f"Sift supports.",
+                f"Distill supports.",
                 detected_type=mime or "unrecognised",
                 supported=list(SUPPORTED_EXTENSIONS),
             )

@@ -5,7 +5,7 @@ live in code, next to the assertions that use them. A committed binary would lea
 reader trusting a magic number in a test.
 
 reportlab draws in the PDF format's native space: origin bottom-left, y increasing UPWARD.
-Sift's convention is top-left origin, y increasing downward (see ``app.domain.geometry``).
+Distill's convention is top-left origin, y increasing downward (see ``app.domain.geometry``).
 The conversion is therefore ``top = page_height - y_from_bottom``, and these helpers expose
 both numbers so a test can assert the conversion rather than restate it.
 """

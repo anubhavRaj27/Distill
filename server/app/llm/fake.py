@@ -23,16 +23,16 @@ from __future__ import annotations
 import difflib
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
 from app.domain.document import ParsedDocument
-from app.domain.fields import FieldSpec
+from app.domain.fields import FieldSpec, fold_label_for_similarity
 from app.errors import LLMInvalidOutput, LLMUnavailable
-from app.llm.base import CallKind, LLMRequest, LLMResponse, Usage
+from app.llm.base import CallKind, LLMRequest, LLMResponse, Usage, Vector
 from app.llm.contracts import ExtractedField, GuidedExtraction, OpenExtraction
 from app.llm.heuristics import extract_offline
 from app.logging import get_logger
@@ -54,6 +54,7 @@ class FakeClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._fixture_dir = settings.llm_fixture_dir
+        self._embeddings: dict[str, Vector] | None = None
         self._synthesisers: dict[CallKind, Synthesiser] = {
             CallKind.OPEN_EXTRACT: _synthesise_open_extraction,
             CallKind.GUIDED_EXTRACT: _synthesise_guided_extraction,
@@ -110,6 +111,48 @@ class FakeClient:
             ),
         )
 
+    async def embed(self, texts: Sequence[str]) -> list[Vector | None]:
+        """Replay recorded vectors. Decision D24.
+
+        Every recorded label lives in one JSON object at ``{fixture_dir}/embed/labels.json``
+        (``{label: [floats]}``) rather than a file per label, because these are keyed by a
+        short field label rather than a document hash, and there are a few dozen of them for
+        the whole sample corpus.
+
+        A label with no recorded vector returns ``None`` rather than a synthesised one. A
+        made-up vector would score a confident-looking cosine against every other field,
+        which is worse than no signal: the caller would auto-apply on noise. ``None`` sends
+        the caller back to string similarity alone, which produces more proposal cards and
+        fewer auto-applies — the safe direction.
+        """
+        if not texts:
+            return []
+        recorded = self._recorded_embeddings()
+        vectors = [recorded.get(_normalise_label(text)) for text in texts]
+        missing = sum(1 for vector in vectors if vector is None)
+        if missing:
+            logger.info(
+                "llm.embed_unrecorded_labels",
+                missing=missing,
+                total=len(texts),
+                detail="scored on string similarity alone; record vectors to change this",
+            )
+        return vectors
+
+    def _recorded_embeddings(self) -> dict[str, Vector]:
+        """Load and cache the recorded vectors. Missing file is normal, not an error."""
+        if self._embeddings is None:
+            path = self._fixture_dir / "embed" / "labels.json"
+            if path.is_file():
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                self._embeddings = {
+                    _normalise_label(label): [float(component) for component in vector]
+                    for label, vector in payload.items()
+                }
+            else:
+                self._embeddings = {}
+        return self._embeddings
+
     def _replay(self, request: LLMRequest) -> BaseModel | None:
         path = self.fixture_path(request.kind, request.fixture_key)
         if not path.is_file():
@@ -160,22 +203,11 @@ def _synthesise_open_extraction(request: LLMRequest) -> OpenExtraction:
     return extract_offline(_document_from(request))
 
 
-def _normalise_label(text: str) -> str:
-    """Fold a label for comparison: lowercase, no punctuation, no filler words.
-
-    Dropping "no", "number", "total", and "amount" is what lets ``Invoice No`` match
-    ``invoice_number`` and ``Amount`` match ``total_due``, which is the whole point: those
-    are the same field written differently, and recognising that is the unification problem.
-    """
-    lowered = "".join(character if character.isalnum() else " " for character in text.lower())
-    # "date" is NOT filler, deliberately. It carries meaning, unlike "no" and "number":
-    # stripping it collapsed "Issue Date" to "issue" and "Date" to nothing, so a
-    # spreadsheet column called "Date" scored badly against an "Issue Date" field for the
-    # wrong reason. It now scores below the threshold on its own merits and becomes a
-    # drift proposal the user decides, which is what product principle 3 asks for.
-    filler = {"no", "num", "number", "id", "ref", "reference", "the", "of"}
-    words = [word for word in lowered.split() if word not in filler]
-    return " ".join(words) or lowered.strip()
+# The fuzzy label fold now lives in the domain layer, so that this provider and
+# ``app.schema.similarity`` score labels identically rather than drifting apart. Kept as a
+# module-level alias because this file refers to it in several places and the short name
+# reads better at the call sites.
+_normalise_label = fold_label_for_similarity
 
 
 def _best_match(field: FieldSpec, candidates: list[ExtractedField]) -> ExtractedField | None:

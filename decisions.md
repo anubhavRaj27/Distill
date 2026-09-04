@@ -1,4 +1,4 @@
-# Sift: Decision Log
+# Distill: Decision Log
 
 Every technology chosen and every design decision made on this project is recorded here, in
 the format the brief asks for: **decision**, **alternatives considered**, **reasoning**, and
@@ -417,7 +417,7 @@ The word boxes are verified against the pixels rather than asserted: the rendere
 crop the rendered image to each reported box and assert there is ink inside it, and none in
 a region no word claims.
 
-**Accepted tradeoff.** Non-paginated formats are shown in a layout Sift chose rather than
+**Accepted tradeoff.** Non-paginated formats are shown in a layout Distill chose rather than
 one the user recognises, so a DOCX does not look like it does in Word. For a review surface
 whose job is to show where a value came from, that is an acceptable loss, and it is
 strictly better than having nothing to highlight.
@@ -549,3 +549,383 @@ build commands, start commands, and environment variables.
 
 **Cut.** Separate repositories, and any tooling that exists only to keep multiple repos in
 sync (git submodules, a published internal package for shared types).
+
+## D23. Confidence-gated auto-apply for schema changes, not review-every-field
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** A schema change only blocks on a user decision when the model is genuinely
+uncertain. Concretely, when a document's fields are compared against the current schema:
+
+- an **unambiguous match** to exactly one existing field, type-compatible → auto-mapped, no
+  prompt.
+- **clearly novel** against every existing field → auto-added as a new field, no prompt.
+- **everything in between** — a plausible-but-uncertain match, several close candidates, or
+  a type mismatch — produces the `SchemaProposal` card (map to existing / add as new /
+  ignore) exactly as originally specced.
+
+How "unambiguous" and "clearly novel" are computed is **decision D24**. This entry owns the
+policy (when the user is asked); D24 owns the signal (how similarity is measured). The
+thresholds originally written here assumed embedding cosine similarity alone and were
+replaced by D24's hybrid rule the same day, before any of it was implemented.
+
+The very first schema is always applied without blocking. It is not, however, free of
+ambiguity — see decision D25, which corrects an error in the first version of this entry.
+
+Every path, automatic or user-decided, writes a `schema_versions` row and a `schema.version`
+event, so schema history and one-click revert (FR-15) cover 100% of changes regardless of
+which path produced them.
+
+**Two consequences, resolved September 4, 2026 during implementation review.**
+
+*An auto-applied change does not write a `proposals` row.* `schema_versions` is the complete
+log of what happened to the schema; `proposals` stays strictly "questions that needed a
+human." Collapsing both into one table would make "how many decisions are outstanding" a
+filtered count rather than a row count, and the history view already reads from
+`schema_versions`, which carries `created_by` and `change_summary` for exactly this purpose.
+
+*An auto-added field enqueues backfill automatically, without offering.* FR-14 says adding a
+field "offers" backfill, and that stays true for a field the **user** added — they are
+present, mid-decision, and the offer has somewhere to attach. An auto-added field has no such
+moment by construction: the entire point is that nothing interrupted the user. Since backfill
+only ever adds values and never touches `human_verified` rows, and its progress is visible
+and cancelable through `backfill.progress`, running it is the behavior that matches what the
+user would have said anyway.
+
+**Alternatives considered.**
+
+1. *Review every field, every time* (the original spec). Maximizes safety, costs a click per
+   field on every document, including cases with only one sane interpretation.
+2. *Full auto-trust: apply every schema change silently, no proposal card at all, ever.*
+   Fastest, but removes the review step even for genuinely ambiguous cases — a coin-flip
+   match between two candidate fields would get resolved by the model with no human in the
+   loop, which is exactly the silent-wrong-merge failure mode section 1.3 of
+   `requirements.md` exists to prevent. Also guts a demo step the evaluation criteria
+   name explicitly (section 9, "proposal cards instead of silent schema changes").
+
+**Reasoning.** The original always-review design conflated two different situations under
+one UI: "there is one obvious answer" and "there is a real judgment call." Those deserve
+different amounts of friction. Gating on confidence keeps the review loop exactly where it
+earns its keep — the cases where a wrong auto-decision would actually cost the user
+something (a real ambiguous rename, a type mismatch) — while removing it from the cases
+where it was pure tax (a 98%-confidence field match, or the very first schema with nothing
+to disagree with yet).
+
+This does not weaken CLAUDE.md's non-negotiable #3 ("a review loop the user can trust"). It
+changes what "reviewable" means: instead of every change requiring a click *before* it
+applies, every change (automatic or not) is inspectable and reversible *after* it applies,
+via schema history. Reversibility, not a confirmation click, is the trust mechanism for the
+auto-apply zones. The originally-specced review-every-field behavior is fully preserved for
+the zone that actually needs it.
+
+**Cut.** A blanket "no review step, ever" design (alternative 2). The thresholds in D24 are
+a first pass, not tuned against real data; if the sample corpus shows them producing wrong
+auto-applies, they should move, not the mechanism.
+
+## D24. Field similarity is string similarity OR embedding similarity, with a margin rule
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** Drift matching scores a candidate field against each existing field with two
+independent signals, and gates D23's auto-apply zones on them as follows.
+
+*Auto-map* requires **all three** of:
+
+1. any one of — normalized-exact or known-alias match (case, separators, and
+   `FieldSpec.source_keys` folded); **or** string similarity ≥ 0.90; **or** embedding
+   cosine ≥ 0.95;
+2. the best candidate beats the runner-up by ≥ 0.05 on whichever signal fired;
+3. type compatibility.
+
+*Auto-add as new* requires `max(string, embedding) < 0.30` against **every** existing field.
+
+Everything else produces the proposal card. The cheap string pass runs first, so a label
+that is identical after normalization never spends an embedding call.
+
+**Alternatives considered.**
+
+1. *Embeddings only* (as implementation.md section 6.5 originally read). Handles synonyms,
+   but needs a network call for even `vendor_name` versus `Vendor Name`, and leaves the
+   fake provider — which must work with no API key, per D13 — with nothing to score with.
+2. *String similarity only.* Free, deterministic, offline, and already half-built in
+   `app/llm/fake.py` (`LABEL_MATCH_THRESHOLD`, `difflib.SequenceMatcher`). But it scores
+   `Supplier` against `vendor_name` at roughly 0.2, so it fails on precisely the renames
+   drift detection exists to catch. Every synonym would become a proposal card, which is
+   the tedium D23 set out to remove.
+3. *A single weighted blend*, `w1 * string + w2 * embedding`. Rejected because averaging
+   destroys the signal: a true synonym scores near-zero on string and high on embedding, and
+   the blend lands it in the ambiguous band where it needs a card. The two signals are
+   evidence of different things and should not be averaged.
+4. *A strict AND of both signals.* Safest against false positives, but it cannot ever
+   auto-map a synonym, since a synonym fails the string test by definition. That is
+   alternative 2 with extra steps.
+
+**Reasoning.** The two signals fail on disjoint cases, which is what makes OR the right
+combinator rather than AND or a blend: string similarity catches formatting and typo
+variants that embeddings waste a call on, embeddings catch semantic renames that string
+matching cannot see at all. Requiring either to fire, rather than both, is what lets both
+classes of obvious match skip the card.
+
+The margin rule is what keeps OR from being reckless. A high absolute score is not evidence
+of an unambiguous match when a second field scores nearly as high — `Supplier` at 0.96 to
+`vendor_name` and 0.94 to `supplier_id` is a genuine judgment call, and the margin test is
+what routes it to a human instead of a coin flip. This is the same instinct as D5: the
+useful question is rarely "how confident is the score," it is "is there a competing answer."
+
+Novelty inverts the combinator deliberately. Declaring a field *new* is a claim about the
+absence of a match, so both signals have to agree nothing resembles it; if either sees a
+resemblance, it is not clearly novel and the user decides.
+
+**Test and no-key behavior.** `LLMClient` gains `embed()`. `GeminiClient` calls the real
+embeddings endpoint — the assumption for actual usage is a working API key, per D13, and
+this decision is not designed around the model being unavailable in production. `FakeClient`
+replays recorded vectors keyed the same content-derived way its other fixtures are, which is
+what keeps the test suite and a no-key reviewer clone deterministic and network-free; that
+is D13's concern, not a production fallback. If a live call genuinely fails (network error,
+rate limit), that is handled by the existing `LLMUnavailable`/retry path in `app/llm/base.py`
+like any other model call — it is a failure to surface and retry, not a silent
+degrade-to-string-only mode.
+
+**Cut.** A locally-hosted embedding model, on exactly the grounds D3 rejected Docling: a
+multi-gigabyte dependency defeats the one-command setup. Also cut: tuning either threshold
+before the sample corpus exists to tune against.
+
+**Accepted cost.** Roughly half a day — the protocol method, the Gemini implementation,
+recorded fixtures for the sample corpus, a label-keyed cache so a schema's labels are not
+re-embedded once per document, and the two thresholds in configuration.
+
+## D25. The first batch can be ambiguous with itself; uncertain unification stays split
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** D23 originally justified auto-applying the initial schema on the grounds that
+"there is nothing to conflict with." That is wrong, and this entry corrects it. The first
+batch conflicts with *itself*: eight documents can yield `vendor_name` from five of them,
+`Supplier` from two, and `Vendor` from one, and deciding those are one field is exactly the
+judgment call D23 says a human should make when the model is unsure.
+
+So:
+
+1. **The initial schema always applies immediately and never blocks.** The 60-second
+   first-run in the acceptance criteria depends on this, and a user with no schema at all is
+   better served by the model's best guess than by a modal.
+2. **Unification within the batch is gated by D24's rule.** Source keys that unify
+   confidently are merged into one canonical field, which is the demo path and the common
+   case. Source keys the rule finds *uncertain* are **left as separate fields**, and a
+   `initial_schema` proposal is queued asking whether to merge them.
+3. **The queued proposal is non-blocking.** The table is already populated and usable; the
+   card is a question waiting in the review surface, not a gate.
+
+`Proposal.kind = 'initial_schema'` therefore stays alive rather than being removed as dead,
+which was the other option considered during implementation review.
+
+**Alternatives considered.**
+
+1. *Remove `initial_schema` entirely* — the reading that produced D23's original wording.
+   Rejected because it does not eliminate intra-batch ambiguity, it just resolves it silently
+   in the model's favour, which is the failure mode D23 exists to prevent.
+2. *Merge on uncertainty, then offer to split.* Rejected on asymmetry of harm: a wrong merge
+   commingles two genuinely different fields' values under one column, and unpicking it means
+   knowing which source key produced each value. A wrong split leaves two clean columns and a
+   merge is a cheap, lossless move of values from one to the other. When unsure, prefer the
+   error that is cheaper to undo.
+3. *Block the first run on a schema confirmation.* Rejected outright: it breaks acceptance
+   criterion 1 and re-introduces exactly the friction D23 removed.
+
+**Reasoning.** The asymmetry in alternative 2 is the whole argument. Both directions are
+recoverable in principle, but merge-then-split requires reconstructing provenance for values
+that have already been pooled, while split-then-merge is a move. Defaulting to the cheaper
+undo is what lets the system be aggressive about auto-applying elsewhere.
+
+The demo is not at risk from this. `vendor_name` versus `Supplier` is a strong semantic match
+and clears D24's embedding bar comfortably, so it merges automatically and the unified-table
+moment still lands. Only genuinely marginal pairs stay split, and those come with a card
+explaining why.
+
+**Consequence for requirements.** FR-16 ("manually merge two fields into one") moves from
+**Could** to **Should**. It stops being a convenience and becomes the resolution path for
+every uncertain unification this decision produces.
+
+**Cut.** A field-splitting operation. Not needed, because this decision never auto-merges
+under uncertainty, so there is nothing to split back apart.
+
+## D26. A configured Gemini provider that cannot be built is a hard failure
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** `app/llm/registry.build_client` no longer catches a `GeminiClient`
+construction failure and return `FakeClient` in its place. With `LLM_PROVIDER=gemini`, a
+provider that cannot be constructed raises and the server does not start. The offline
+provider remains fully supported and is still the default; it is reached by asking for it
+with `LLM_PROVIDER=fake`.
+
+**Alternatives considered.** The original behaviour, recorded in that function's own
+docstring: fall back to the offline provider and log loudly, on the reasoning that a missing
+key should degrade a deployment rather than take the whole interface down.
+
+**Reasoning.** The original argument treats the fake provider as a degraded version of the
+real one. It is not — it is a *different* provider that synthesises values from
+label-and-value heuristics, and those values flow downstream wearing exactly the same
+confidence tiers and provenance links as real extraction. There is no point after that where
+the interface, or the user, can tell the difference. An operator who set a key and mistyped
+the model name would get a running system quietly presenting heuristic guesses as model
+output, in a product whose entire claim is that every value on screen can be trusted and
+traced back. A server that refuses to start is a five-minute problem with an obvious cause.
+A server serving heuristics as extraction is a credibility problem that surfaces during the
+demo, if at all.
+
+Noted while implementing this: the common case never reached that fallback anyway. `Settings`
+already rejects `LLM_PROVIDER=gemini` with no `GEMINI_API_KEY` at configuration time, so the
+missing-key path fails before a client is built. What the fallback actually covered was the
+rarer construction failure — a broken software development kit import, or a client
+constructor that throws — which is precisely the class of failure an operator is least likely
+to have anticipated, and so the worst one to swallow.
+
+This follows the standing direction not to design production behaviour around the model being
+unavailable. A real key is the assumption for real usage; a failure to reach the provider is
+an incident to surface, not a mode to accommodate.
+
+**Cut.** Nothing the offline provider could previously do. `LLM_PROVIDER=fake` still runs the
+entire pipeline with no key and no network, which is what D13 asked for.
+
+---
+
+## D27. The novelty ceiling is per signal, and the string value is measured not guessed
+
+**Date:** September 4, 2026 · **Status:** Active, refines decision D24
+
+**Decision.** Decision D24's single novelty test, `max(string, embedding) < 0.30` against
+every existing field, becomes two tests against two separately configured ceilings:
+
+```
+string_similarity  < 0.65   (measured)
+embedding_cosine   < 0.30   (unmeasured, needs a live model)
+```
+
+against **every** existing field. The "both signals must agree nothing resembles it"
+structure that D24 chose deliberately is unchanged; only the calibration is.
+
+Decision D24's string signal also moves from the filler-word fold to the
+case-and-separator fold (`fold_label`). That is a correctness fix, not a tuning change, and
+it is the more serious half of this entry.
+
+**Why the shared ceiling was wrong.** A character ratio and a cosine are not comparable
+numbers, so holding them to one threshold is a category error. Measured across the fixture
+corpus, the highest string similarity between two genuinely different field labels is
+**0.59** (`Currency` versus `Reference`), with `Invoice No` versus `Vendor` at 0.50 and a
+p90 of 0.38. Every candidate field therefore exceeded
+a 0.30 ceiling against something, no field was ever "clearly novel", and **the auto-add zone
+was unreachable** — a third of D23's design was silently not implemented.
+
+**Why the string fold was wrong, which matters more.** The filler-word fold drops "id",
+"number", and "reference", which scores `Supplier` against `Supplier ID` at **1.00**. At
+1.00 that clears D24's 0.90 auto-map bar, so a company name would have been silently merged
+into an identifier column, with no card and no user involvement. That pair is almost word
+for word D24's own example of a case that must go to a human. On the case-and-separator fold
+it scores 0.84, lands below the bar, and asks. The lossy fold remains in use only by the
+offline provider's loose value matching, where a wrong match surfaces as a visible,
+correctable value in a cell rather than as a schema change.
+
+**What the measurement also showed, and what it implies.** String similarity cannot separate
+same-field from different-field pairs in this corpus at all. `Supplier` versus `Vendor`
+scores 0.29 and `Amount` versus `Total Due` scores 0.27, both **below** the 0.59 that two
+unrelated labels reach. This is direct evidence for D24's core claim that the two signals
+are evidence of different things and must not be averaged: on renames, the string signal is
+not weak, it is actively misleading. Embeddings are doing all the semantic work, and the
+string signal's only honest job is catching formatting and typo variants, which is exactly
+the 0.90-and-above band it is now confined to.
+
+**Alternatives considered.**
+
+1. *Raise the single shared ceiling to 0.65.* Rejected: it would loosen the embedding half
+   at the same time, and 0.65 on a cosine is close to where genuinely related terms sit, so
+   it would start auto-adding fields that should have been mapped.
+2. *Replace the string metric with word-level overlap for the novelty test only.* Rejected
+   as a second metric to reason about and test, when a per-signal ceiling achieves the same
+   separation with a number.
+3. *Leave 0.30 and accept that auto-add never fires.* Rejected as shipping a dead code path
+   while D23 claims three zones. Better to have the zone work and the threshold be honest
+   about needing calibration.
+
+**Cut.** Nothing. Both mechanisms are unchanged; the numbers and one fold moved.
+
+**Outstanding, and it needs a key.** `drift_novelty_ceiling_embedding` is the only threshold
+in the system still set by assertion rather than measurement. Real text embeddings score
+unrelated business terms at roughly 0.4 to 0.7, so 0.30 is probably too strict and auto-add
+may stay rare until it is calibrated. Erring strict costs extra proposal cards and never a
+wrong merge, so the direction is safe, but this should be measured the day a key exists:
+embed every field label in the corpus, take the cosine distribution over pairs a human calls
+different, and set the ceiling above its upper range.
+
+---
+
+## D28. An "ask" carries a reason code, and callers act on it differently
+
+**Date:** September 4, 2026 · **Status:** Active, refines decision D23
+
+**Decision.** `classify` returns an `AskReason` alongside the `ASK` outcome:
+`COMPETING_CANDIDATES`, `BORDERLINE`, `TYPE_MISMATCH`, or `UNCONFIRMED_NOVELTY`. The
+initial-schema proposer raises a merge question only for the first three. Drift assessment
+treats all four as questions.
+
+**Why this is not cosmetic.** Decision D24 makes a missing embedding block auto-add, on the
+sound reasoning that novelty is a claim about absence and string similarity alone cannot
+support it. But "nothing resembles this and we could not confirm it" is a completely
+different situation from "two fields both plausibly match", and collapsing them into a bare
+`ASK` produced a real failure: unifying the fixture batch with no recorded vectors generated
+a merge question for **13 of 14 fields**, pairing unrelated things like `vendor` with
+`invoice_no`. Those are not judgment calls, they are the best of a bad lot, and asking about
+them is worse than useless. It would also have broken acceptance criterion 1, since a first
+run that opens with thirteen cards is not a populated table in sixty seconds.
+
+The asymmetry is that the two callers face different risks. For **drift**, against an
+established schema, a wrong auto-add creates a duplicate column holding half the values, so
+refusing to guess is right. For **initial unification**, every observation becomes a field
+regardless, so there is no duplicate-column risk and "resembles nothing" simply means "its
+own field". With the reason code, the same signal serves both correctly. After the fix the
+batch produces exactly one question, `Invoice No` versus `Invoice Number` at 75%, which is
+the one genuine judgment call in it.
+
+**Alternatives considered.** Lowering the novelty bar during initial unification, which
+would have fixed the symptom by making the gate less safe everywhere it is also used.
+Suppressing questions below a score threshold in the proposer, which is the same thing with
+a magic number instead of a name.
+
+**Cut.** Nothing.
+
+---
+
+## D29. Background work is queued after the transaction commits, never inside it
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** A request that creates a row and wants it processed calls
+`submit_after_commit(session, document_id)`, which stages the identifier on the session.
+`app/deps.py` flushes the staged submissions after the commit succeeds and discards them on
+rollback. Direct `worker.submit` is reserved for callers holding an already-committed row.
+
+**Alternatives considered.** Calling `worker.submit` from the route, which is the obvious
+code and is what shipped first. Committing the document row early in its own transaction,
+which splits one logical operation into two and leaves an orphan row if the rest fails.
+
+**Reasoning.** The obvious version is broken, and its symptom is genuinely hard to diagnose
+from the outside. The upload route creates a `documents` row and queues it; the row is not
+committed until the request finishes, while the consumer pool picks the identifier up within
+microseconds and opens its **own** session to load it. The row is not there, so the consumer
+logs "document missing" and drops the job.
+
+This is not theoretical. Uploading six files reproduced it on the first try: five were
+dropped and one survived by winning the race with the commit. From the interface it looks
+like documents stuck in `uploaded` forever, with nothing in the log but a warning.
+
+The event bus already had this exact problem and already solved it this way, staging on the
+session and flushing after commit, so this makes both halves of "the world changed" consistent:
+nothing is announced, and no work is started, until the change is actually true. Having two
+mechanisms for the same ordering problem would have been the real smell.
+
+**Cut.** Nothing. The direct `submit` remains for the boot-time resume path, where the rows
+are committed by definition.
+
+**Caught by:** an end-to-end run against a live server, not by the test suite. Worth noting,
+because every unit test passed while five of six uploads were being dropped. Regression tests
+now cover the staging, the discard, and the flush.

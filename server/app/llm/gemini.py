@@ -34,13 +34,14 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
 from app.errors import LLMInvalidOutput, LLMUnavailable, NotConfigured
-from app.llm.base import CallKind, LLMRequest, LLMResponse, Usage
+from app.llm.base import CallKind, LLMRequest, LLMResponse, Usage, Vector
 from app.llm.fake import write_fixture
 from app.llm.jsonschema import to_provider_schema
 from app.logging import get_logger
@@ -199,6 +200,85 @@ class GeminiClient:
 
         raise LLMUnavailable(  # pragma: no cover - the loop always returns or raises
             "The model could not be reached.", error_type=type(last_error).__name__
+        )
+
+    async def embed(self, texts: Sequence[str]) -> list[Vector | None]:
+        """Embed field labels for drift matching. Decision D24.
+
+        Never returns ``None`` entries: Gemini embeds whatever it is given. The optional
+        element type exists for ``FakeClient``, which has no vector for an unrecorded label.
+        A failure here is a real failure and is raised, not swallowed into a fallback.
+
+        Retries share ``structured``'s policy and its reasoning: transport and capacity
+        failures are worth another attempt, a rejected request is not.
+        """
+        if not texts:
+            return []
+
+        model = self._settings.llm_embed_model
+        started = time.perf_counter()
+
+        for attempt in range(1, self._settings.llm_max_attempts + 1):
+            try:
+                response = await asyncio.wait_for(
+                    # `contents` is invariant in the software development kit's signature,
+                    # so a plain list[str] is rejected even though every element is a
+                    # permitted type. Narrow ignore rather than a cast, which would switch
+                    # off checking for the whole call.
+                    self._client.aio.models.embed_content(
+                        model=model,
+                        contents=list(texts),  # type: ignore[arg-type]
+                    ),
+                    timeout=self._settings.llm_timeout_seconds,
+                )
+            except TimeoutError as exc:
+                logger.warning("llm.embed_timeout", attempt=attempt, model=model)
+                if attempt >= self._settings.llm_max_attempts:
+                    raise LLMUnavailable(
+                        "The model did not respond in time. This usually clears up on a "
+                        "retry.",
+                        attempts=attempt,
+                    ) from exc
+                await self._backoff(attempt)
+                continue
+            except Exception as exc:
+                if not _is_retryable(exc) or attempt >= self._settings.llm_max_attempts:
+                    raise LLMUnavailable(
+                        _readable_transport_error(exc),
+                        attempts=attempt,
+                        error_type=type(exc).__name__,
+                    ) from exc
+                logger.warning(
+                    "llm.embed_transport_error", attempt=attempt, error=type(exc).__name__
+                )
+                await self._backoff(attempt)
+                continue
+
+            vectors: list[Vector | None] = [
+                list(embedding.values) if embedding.values else None
+                for embedding in (response.embeddings or [])
+            ]
+            if len(vectors) != len(texts):
+                # A short response would silently misalign labels with vectors, and a
+                # misaligned vector is worse than no vector: it would produce confident
+                # similarity scores for the wrong pair of fields.
+                raise LLMInvalidOutput(
+                    f"The embedding provider returned {len(vectors)} vectors for "
+                    f"{len(texts)} inputs.",
+                    attempts=attempt,
+                )
+
+            logger.info(
+                "llm.embed_completed",
+                model=model,
+                count=len(vectors),
+                attempts=attempt,
+                latency_ms=round((time.perf_counter() - started) * 1000, 1),
+            )
+            return vectors
+
+        raise LLMUnavailable(  # pragma: no cover - the loop always returns or raises
+            "The model could not be reached."
         )
 
     async def _backoff(self, attempt: int) -> None:

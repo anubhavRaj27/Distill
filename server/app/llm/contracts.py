@@ -3,7 +3,7 @@
 DELIBERATE DEVIATION FROM implementation.md SECTION 6.2 (decision D19)
 -----------------------------------------------------------------------
 The implementation document proposed building the schema-guided response model at runtime
-with ``pydantic.create_model``, one typed attribute per schema field. Sift instead uses a
+with ``pydantic.create_model``, one typed attribute per schema field. Distill instead uses a
 **flat, fixed response shape** for every extraction call: a list of ``ExtractedField``, with
 the schema communicated in the PROMPT rather than in the response schema.
 

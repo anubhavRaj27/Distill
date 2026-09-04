@@ -33,6 +33,7 @@ document IS correctly forces a fixture update.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol, TypeVar
@@ -108,6 +109,10 @@ class LLMResponse[ModelT: BaseModel]:
     usage: Usage
 
 
+type Vector = list[float]
+"""One embedding. Compared with cosine similarity in ``app.schema.drift``."""
+
+
 class LLMClient(Protocol):
     """What the rest of the application is allowed to know about model access."""
 
@@ -123,5 +128,21 @@ class LLMClient(Protocol):
         then raise ``LLMInvalidOutput``. They raise ``LLMUnavailable`` for transport and
         rate-limit failures, so the worker can distinguish "retry later" from "this
         document cannot be processed".
+        """
+        ...
+
+    async def embed(self, texts: Sequence[str]) -> list[Vector | None]:
+        """Embed ``texts`` for schema drift matching. Decision D24.
+
+        Returns one entry per input, in order. An entry is ``None`` when this provider has
+        no vector for that text, which is **not** an error and not a production degradation
+        path: against Gemini every text gets a vector, and a genuine transport failure
+        raises ``LLMUnavailable`` like any other call. ``None`` exists for ``FakeClient``,
+        which replays recorded vectors and has none for a label it has never seen — the
+        no-key and test case D13 covers.
+
+        A caller that receives ``None`` scores that pair on string similarity alone, which
+        yields more proposal cards and fewer auto-applies. The direction of that degradation
+        is deliberate: toward asking the user, never toward a silent wrong merge.
         """
         ...

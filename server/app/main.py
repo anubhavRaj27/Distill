@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings, get_settings
 from app.db.session import dispose_engines, init_engines
 from app.errors import register_exception_handlers
+from app.llm.registry import init_client, reset_client
 from app.logging import (
     CorrelationIdMiddleware,
     access_log_middleware,
@@ -35,12 +36,14 @@ from app.logging import (
     get_logger,
 )
 from app.middleware import SelectiveGZipMiddleware
-from app.routers import health, workspaces
+from app.pipeline.worker import init_worker, reset_worker, resume_interrupted
+from app.routers import documents, events, health, records, schema, workspaces
+from app.storage.local import LocalStorage
 
 logger = get_logger(__name__)
 
 DESCRIPTION = """
-Sift turns unstructured and semi-structured documents into clean, structured data that can
+Distill turns unstructured and semi-structured documents into clean, structured data that can
 be searched and queried.
 
 The interesting problems are not extraction from a single document, which modern language
@@ -65,18 +68,34 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     init_engines(settings)
     settings.storage_dir.mkdir(parents=True, exist_ok=True)
+
+    client = init_client(settings)
+    storage = LocalStorage(settings.storage_dir)
+    worker = init_worker(settings=settings, client=client, storage=storage)
+    await worker.start()
+
+    # Decision D9 accepts that a restart interrupts in-flight extractions, on the grounds
+    # that the per-document status model makes them resumable. This is that resumption, and
+    # it runs on every boot rather than being a manual recovery step.
+    resumed = await resume_interrupted(worker)
+    if resumed:
+        logger.info("app.resumed_documents", count=resumed)
+
     try:
         yield
     finally:
         logger.info("app.stopping")
+        await worker.stop()
         await dispose_engines()
+        reset_worker()
+        reset_client()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
 
     app = FastAPI(
-        title="Sift",
+        title="Distill",
         version="0.1.0",
         description=DESCRIPTION,
         lifespan=lifespan,
@@ -102,7 +121,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(health.router)
-    app.include_router(workspaces.router, prefix=settings.api_prefix)
+    for module in (workspaces, documents, records, schema, events):
+        app.include_router(module.router, prefix=settings.api_prefix)
 
     return app
 

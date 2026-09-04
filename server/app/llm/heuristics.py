@@ -1,7 +1,7 @@
 """Deterministic extraction from document text, with no model involved.
 
 This is what the fake provider uses when it has no recorded response to replay, and it is
-the reason Sift is fully demonstrable with no API key (decision D13).
+the reason Distill is fully demonstrable with no API key (decision D13).
 
 It is a heuristic and it says so. Two properties make it worth having rather than a stub.
 

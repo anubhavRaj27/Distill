@@ -16,7 +16,7 @@ from app.domain.geometry import BBox
 
 
 class SourceFormat(StrEnum):
-    """Formats Sift can parse. Requirement FR-02."""
+    """Formats Distill can parse. Requirement FR-02."""
 
     PDF = "pdf"
     IMAGE = "image"

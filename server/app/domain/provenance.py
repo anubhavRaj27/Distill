@@ -7,7 +7,7 @@ for PDFs and images, a paragraph index for DOCX, a cell range for spreadsheets, 
 for plain text. That is four shapes, so it is four frontend rendering paths, four sets of
 coordinate mathematics, and four ways to be subtly wrong.
 
-Sift instead renders **every** format to a page image with a layout the backend controls, so
+Distill instead renders **every** format to a page image with a layout the backend controls, so
 the backend always knows exactly where each line of text sits. Provenance is therefore
 always a list of boxes over a page, in the single coordinate convention documented in
 ``app.domain.geometry``, for all seven supported formats.

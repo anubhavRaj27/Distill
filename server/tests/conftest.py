@@ -31,7 +31,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 SERVER_ROOT = Path(__file__).resolve().parent.parent
-TEST_DATABASE = "sift_test"
+TEST_DATABASE = "distill_test"
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -48,9 +48,9 @@ def settings() -> Iterator[Settings]:
     overrides = {
         "ENVIRONMENT": "test",
         "LOG_LEVEL": "WARNING",
-        "DATABASE_URL": f"postgresql+asyncpg://sift:sift@localhost:5432/{TEST_DATABASE}",
+        "DATABASE_URL": f"postgresql+asyncpg://distill:distill@localhost:5432/{TEST_DATABASE}",
         "DATABASE_URL_READONLY": (
-            f"postgresql+asyncpg://sift_readonly:sift_readonly@localhost:5432/{TEST_DATABASE}"
+            f"postgresql+asyncpg://distill_readonly:distill_readonly@localhost:5432/{TEST_DATABASE}"
         ),
         "STORAGE_DIR": str(SERVER_ROOT / "var" / "test-storage"),
         "LLM_PROVIDER": "fake",
@@ -70,9 +70,17 @@ def settings() -> Iterator[Settings]:
         reset_settings_cache()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def _migrate(settings: Settings) -> None:
-    """Bring the test database to head, once per session."""
+    """Bring the test database to head, once per session.
+
+    Deliberately NOT ``autouse``. It is pulled in by ``db`` below, so a test that never asks
+    for a session never starts Postgres talking. That keeps the pure-logic suite — value
+    coercion, page geometry, format sniffing, rendering — runnable with no database at all,
+    which is what makes `pytest tests/unit` a thing a contributor can run on a fresh clone
+    before setting anything up. Coupling those to a migration they have no use for was
+    costing the fast tests their independence for nothing.
+    """
     config = AlembicConfig(str(SERVER_ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(SERVER_ROOT / "app" / "db" / "migrations"))
     config.set_main_option("sqlalchemy.url", str(settings.database_url))
@@ -80,7 +88,7 @@ def _migrate(settings: Settings) -> None:
 
 
 @pytest.fixture
-async def db(settings: Settings) -> AsyncIterator[AsyncSession]:
+async def db(settings: Settings, _migrate: None) -> AsyncIterator[AsyncSession]:
     """A session inside a transaction that is rolled back when the test ends."""
     engine = create_async_engine(str(settings.database_url), poolclass=None)
     async with engine.connect() as connection:

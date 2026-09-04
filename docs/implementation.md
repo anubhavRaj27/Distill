@@ -1,4 +1,4 @@
-# Sift: Implementation Document (First Draft)
+# Distill: Implementation Document (First Draft)
 
 **Companion to:** `requirements.md`**Author:** Anubhav
 **Date:** September 2, 2026
@@ -110,7 +110,7 @@ shadcn/ui is a Tailwind-only library (its components are copied into the reposit
 ## 3. Repository layout
 
 ```
-sift/
+distill/
 ├── README.md               one-command setup, architecture summary, demo script
 ├── decisions.md            required by the brief; see section 12 for seed entries
 ├── docker-compose.yml      postgres + api + web; needs only LLM_API_KEY
@@ -169,6 +169,11 @@ pages             (id, document_id, index, width, height, image_key, text_layer 
                    -- text_layer: [{text, x0, y0, x1, y1}] per word, page coordinates
 schema_versions   (id, workspace_id, version, fields jsonb, created_at, created_by, parent_id)
                    -- fields: [{key, label, type, description, enum_values?, currency?}]
+                   -- created_by: 'model_auto' (confident match or clearly novel field,
+                   --   applied without a prompt) | 'user' (decided via a proposal card, or
+                   --   a direct schema edit). Never the workspace token itself: only its
+                   --   hash is ever stored (decision D8). Both are equally real entries in
+                   --   history; see decision D23.
 records           (id, workspace_id, document_id, schema_version_id, created_at)
 field_values      (id, record_id, field_key, value jsonb, value_type,
                    confidence numeric, tier text, status text,
@@ -285,11 +290,21 @@ The review queue orders by `impact = weight(field) × (1 - confidence)`, where c
 
 ### 6.5 Schema proposal and drift (`schema/`)
 
-**Initial proposal:** after the first batch completes open extraction, one LLM call receives all `(key, value_type, sample values, document_id)` tuples and returns canonical fields: `{key, label, type, description, source_keys: [...], coverage}`. The backend validates that every source key maps to exactly one canonical field, then emits an A2UI `SchemaProposal` surface.
+**Initial proposal:** after the first batch completes open extraction, one LLM call receives all `(key, value_type, sample values, document_id)` tuples and returns canonical fields: `{key, label, type, description, source_keys: [...], coverage}`. The backend validates that every source key maps to exactly one canonical field, then applies it directly — creates the `schema_versions` row with `created_by='model_auto'` and emits `schema.version`. This never blocks; the full field list renders in the schema panel and the table fills.
 
-**Drift detection:** when schema-guided extraction returns `extra_fields`, each is compared to existing fields by (a) embedding similarity of `label + description`, and (b) type compatibility. Candidates above 0.8 are offered as "map to existing"; the rest as "add as new." The proposal card is an A2UI surface with `FieldMapping` components whose actions round-trip through `/actions`.
+Each proposed unification of two or more source keys is then re-checked with the same D24 scoring used for drift. A merge the rule finds uncertain is **undone before the version is written**: the keys stay as separate fields, and a non-blocking `initial_schema` proposal is queued asking whether to merge them (decision D25). Confident merges — which is what `vendor_name` / `Supplier` / `Vendor` should be — are kept, so the unified-table demo is unaffected. The resolution action is a field merge (FR-16), not a split, because this path never merges on a guess.
 
-**Applying a decision** creates a new `schema_versions` row, regenerates the workspace view, and (if fields were added) enqueues backfill. Backfill runs schema-guided extraction restricted to the new fields and never touches `human_verified` rows.
+**Drift detection:** when schema-guided extraction returns `extra_fields`, each is scored against every existing field with two independent signals (decision D24): string similarity over the normalized `label`, and embedding cosine over `label + description`. The cheap string pass runs first, so a label that is identical after normalization never spends an embedding call. Three zones, not two:
+
+- **auto-map** — requires all of: (a) a normalized-exact/alias hit, *or* string ≥ `drift_string_automap_min` (0.90), *or* embedding ≥ `drift_embedding_automap_min` (0.95); (b) the best candidate beats the runner-up by ≥ `drift_candidate_margin_min` (0.05) on whichever signal fired; (c) type compatibility. Applied immediately as `created_by='model_auto'`; no card.
+- **auto-add as new** — `max(string, embedding) < drift_novel_max` (0.30) against *every* existing field. Also `created_by='model_auto'`; backfill across existing documents is enqueued automatically rather than offered, since adding the field was itself automatic.
+- **everything else** — a mid-band score, two candidates inside the margin, or a type mismatch. Emits an A2UI `SchemaProposal` surface with `FieldMapping` components — map to existing / add as new / ignore — whose actions round-trip through `/actions` and are applied as `created_by='user'` once the user decides.
+
+`LLMClient` gains `embed()` for this. `GeminiClient` calls the real embeddings endpoint — actual usage assumes a working API key, per D13. `FakeClient` replays recorded vectors for tests and a no-key reviewer clone, same as its other fixtures. A genuine call failure goes through the existing `LLMUnavailable`/retry path like any other model call, not a designed fallback (D24).
+
+Every path — auto-map, auto-add, or user decision — writes one `schema_versions` row and one `schema.version` event, so schema history (FR-15) is a complete, reversible log regardless of which path produced a change. This is what makes the auto-apply zones safe: nothing is silent in the sense of "untracked," only in the sense of "not blocking."
+
+**Applying a decision** (automatic or user-made) creates a new `schema_versions` row, regenerates the workspace view, and (if fields were added) enqueues backfill. Backfill runs schema-guided extraction restricted to the new fields and never touches `human_verified` rows.
 
 ### 6.6 Query (`query/`)
 
@@ -317,10 +332,10 @@ Pin exactly in `package.json` (no caret on the two `@a2ui` packages). The render
 ```tsx
 import { MessageProcessor } from '@a2ui/web_core/v0_9';
 import { basicCatalog } from '@a2ui/react/v0_9';
-import { siftCatalog } from './catalog';
+import { distillCatalog } from './catalog';
 
 export function createProcessor() {
-  return new MessageProcessor([basicCatalog, siftCatalog]);
+  return new MessageProcessor([basicCatalog, distillCatalog]);
 }
 
 // transport.ts: SSE lines → processor

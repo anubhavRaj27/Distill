@@ -185,32 +185,38 @@ def _coerce_currency(raw: Any, spec: FieldSpec) -> Coerced:
     amount, interpretation = parsed
 
     # Prefer an explicit three letter code, then a symbol, then the field default.
+    # Named distinctly from the `code` bound in the dict branch above: reusing that name
+    # made the type checker treat this as already non-null and mark the field-default path
+    # below as unreachable.
     remainder = _NUMBER.sub("", text).strip()
-    code: str | None = None
+    found_code: str | None = None
     note: str | None = None
     iso = _ISO_4217.search(remainder.upper())
     if iso:
-        code = iso.group(1)
+        found_code = iso.group(1)
         interpretation = Interpretation.NORMALISED
     else:
         for symbol, mapped in sorted(_CURRENCY_SYMBOLS.items(), key=lambda kv: -len(kv[0])):
             if symbol in remainder:
-                code = mapped
+                found_code = mapped
                 interpretation = Interpretation.NORMALISED
                 break
-    if code is None:
+
+    if found_code is None:
         if not spec.currency_default:
             return Coerced(
                 None,
                 Interpretation.FAILED,
                 error=f"no currency code or recognised symbol in {raw!r}, and no field default",
             )
-        code = spec.currency_default
+        found_code = spec.currency_default
         interpretation = Interpretation.INFERRED
-        note = f"no currency marker in {raw!r}, assumed {code} from the field default"
+        note = f"no currency marker in {raw!r}, assumed {found_code} from the field default"
 
     return Coerced(
-        CurrencyAmount(amount=amount, currency=code).model_dump(), interpretation, note=note
+        CurrencyAmount(amount=amount, currency=found_code).model_dump(),
+        interpretation,
+        note=note,
     )
 
 
@@ -308,18 +314,21 @@ def _coerce_date(raw: Any) -> Coerced:
 
     if textual := _TEXT_DATE.match(text):
         day_before, month_name, day_after, year_raw = textual.groups()
-        month = _MONTHS.get(month_name.lower())
-        if month is None:
+        # Distinct names from the numeric branch above, for the same reason as the currency
+        # codes: sharing them across branches confused the narrowing and hid real paths.
+        textual_month = _MONTHS.get(month_name.lower())
+        if textual_month is None:
             return Coerced(None, Interpretation.FAILED, error=f"unknown month {month_name!r}")
         day_str = day_before or day_after
         if day_str is None:
             return Coerced(None, Interpretation.FAILED, error=f"no day of month in {raw!r}")
-        year = int(year_raw)
-        if year < 100:
-            year = _two_digit_year(year)
+        textual_year = int(year_raw)
+        if textual_year < 100:
+            textual_year = _two_digit_year(textual_year)
         try:
             return Coerced(
-                date(year, month, int(day_str)).isoformat(), Interpretation.NORMALISED
+                date(textual_year, textual_month, int(day_str)).isoformat(),
+                Interpretation.NORMALISED,
             )
         except ValueError as exc:
             return Coerced(None, Interpretation.FAILED, error=f"{raw!r}: {exc}")

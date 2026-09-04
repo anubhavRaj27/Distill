@@ -1,7 +1,7 @@
 [project]
-name = "sift-server"
+name = "distill-server"
 version = "0.1.0"
-description = "Sift backend: turn messy documents into structured, queryable data"
+description = "Distill backend: turn messy documents into structured, queryable data"
 requires-python = ">=3.12,<3.13"
 
 dependencies = [

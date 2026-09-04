@@ -1,4 +1,4 @@
-# Sift: Requirements Document (Frontend Focus)
+# Distill: Requirements Document (Frontend Focus)
 
 **Project round task:** Problem 1, "Turn messy documents into structured, queryable data"
 **Author:** Anubhav
@@ -66,7 +66,7 @@ Their jobs to be done:
 
 1. **Show your work.** Every number on screen can be traced to a highlighted region of a source document in one click. No exceptions.
 2. **Uncertainty is a first-class UI state.** Low-confidence values look different from high-confidence ones before the user asks. The review queue is sorted by how much a correction would matter.
-3. **The schema is the user's, not the model's.** The model proposes; the user disposes. Schema changes are explicit, previewed, and reversible.
+3. **The schema is the user's, not the model's, but the model earns silence.** A schema change the model is confident about (a clean field match, or a clearly novel field with nothing to conflict with) applies automatically, so the user isn't asked to confirm the obvious. A schema change the model is *not* confident about is explicit and previewed before it applies. Every change, automatic or explicit, is visible in schema history and reversible with one click — reversibility is what makes the automatic path trustworthy, not the absence of a review step.
 4. **Never lose a human correction.** Re-extraction, schema changes, and re-uploads must preserve values a person has confirmed or edited.
 5. **The empty state teaches.** A first-time visitor should understand the product in 30 seconds without reading documentation, and should be able to try it with sample documents in one click.
 6. **Degrade, don't die.** A failed document, a timed-out model call, or an unparseable page produces a specific, actionable message and leaves the rest of the collection usable.
@@ -86,7 +86,7 @@ Their jobs to be done:
 1. User drops files (PDF, PNG, JPG, DOCX, XLSX, CSV, TXT). Unsupported types are rejected inline with the list of supported ones.
 2. Each file appears as a row in a progress list with stages: Uploaded, Parsed, Extracting, Done, or Failed (with a reason).
 3. Extraction results stream into the table row by row as they complete. The user can start reviewing document 1 while document 8 is still processing.
-4. If the workspace has no schema yet, the system proposes one from the first batch and shows it in the schema panel before filling the table.
+4. If the workspace has no schema yet, the system infers one from the first batch and applies it immediately — it appears filled-in in the schema panel as the table builds, with no confirmation click required. Where documents in that first batch disagree about a field name and the system cannot tell whether they mean the same thing, it keeps them as separate fields and queues a non-blocking "should these be one field?" question rather than guessing (decision D25).
 
 ### 3.3 Reviewing and correcting
 
@@ -98,9 +98,9 @@ Their jobs to be done:
 ### 3.4 Schema drift
 
 1. A new document arrives whose extracted fields do not fit the current schema (new field, incompatible type, or a field that looks like a rename of an existing one).
-2. Instead of silently adding a column or dropping data, the system shows a **schema proposal** card: "This document has `Supplier` which looks like your `vendor_name` (92% match). Map it, add as new field, or ignore?"
-3. The user decides. If they add a field, the system offers to backfill it across existing documents. If they map it, the value lands in the existing column.
-4. Every schema change is versioned and visible in a history view with a one-click revert.
+2. If the match is unambiguous, the system just applies it — a near-certain rename maps silently to the existing column, a field with nothing like it in the schema is added silently — and a small, non-blocking note in the schema panel says what happened. Nothing interrupts the user.
+3. If the match is genuinely uncertain (a plausible-but-not-certain rename, more than one field it could map to, or a type mismatch), the system instead shows a **schema proposal** card: "This document has `Supplier` which looks like your `vendor_name` (92% match). Map it, add as new field, or ignore?" The user decides. If they add a field, the system offers to backfill it across existing documents. If they map it, the value lands in the existing column.
+4. Every schema change — automatic or user-decided — is versioned and visible in a history view with a one-click revert. History, not a confirmation click, is what makes the automatic path safe.
 
 ### 3.5 Querying
 
@@ -141,13 +141,13 @@ Priority uses MoSCoW: **M**ust, **S**hould, **C**ould, **W**on't (this round).
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-10 | When a workspace has no schema, propose one from the first batch, showing field name, type, description, example values, and coverage (how many documents have it). | M |
-| FR-11 | User can accept, rename, retype, remove, or add fields before the proposal is applied. | M |
+| FR-10 | When a workspace has no schema, infer one from the first batch and apply it automatically, never blocking on a review step, showing field name, type, description, example values, and coverage (how many documents have it) in the schema panel. Where the batch is ambiguous with itself (several documents using different names for what may or may not be the same field), the uncertain keys stay as separate fields and a non-blocking proposal asks whether to merge them. See decision D25. | M |
+| FR-11 | User can rename, retype, remove, or add fields at any time after the fact, whether the schema was inferred, auto-applied, or set by a proposal decision. | M |
 | FR-12 | Supported field types: string, number, currency (amount plus ISO 4217 code), date, boolean, enum, and list of strings. | M |
-| FR-13 | Detect schema drift on new documents and present a proposal card with three actions per field: map to existing, add as new, ignore. | M |
+| FR-13 | Detect schema drift on new documents. A field is auto-applied without a prompt when it is either an unambiguous match to exactly one existing field, or clearly novel — measured by string similarity and embedding similarity together, with a margin rule so a near-tie between two candidate fields is never auto-applied (decisions D23 and D24). Everything else — a plausible-but-uncertain match, several close candidates, or a type mismatch — presents a proposal card with three actions: map to existing, add as new, ignore. Every auto-applied change is written to schema history exactly like a user decision, so it stays visible and reversible. | M |
 | FR-14 | Adding a field offers backfill across existing documents; backfill runs in the background and streams results. | S |
 | FR-15 | Schema history with version list and one-click revert. | S |
-| FR-16 | Manually merge two fields into one. | C |
+| FR-16 | Manually merge two fields into one. Promoted from Could to Should by decision D25: it is the resolution path for every uncertain unification, which the system deliberately leaves split rather than merging on a guess. | S |
 
 ### 4.3 Data table
 
@@ -249,7 +249,7 @@ The submission is acceptable when a judge can, without help:
 1. Open the URL, click "Try with sample documents," and see a populated table within 60 seconds.
 2. Click a low-confidence cell and see the exact region in the source PDF highlighted, with reasoning.
 3. Edit that cell, then re-run extraction on the document and confirm the edit survives.
-4. Upload a new document of a different type and see a schema proposal card rather than a broken table; map one field and add another; watch backfill fill the new column.
+4. Upload a new document of a different type (chosen so it has both an unambiguous field and a genuinely uncertain one) and see: the unambiguous field lands in the table on its own with a quiet note in schema history, while the uncertain one produces a schema proposal card rather than a broken table; map it, then add a third field manually; watch backfill fill the new column.
 5. Ask "total amount by vendor" and get a bar chart; ask "how many invoices are missing a PO number" and get a single metric; ask something unanswerable and get a helpful explanation.
 6. Toggle "Inspect surface" and see the A2UI JSON that produced the chart.
 7. Disconnect the network mid-upload and see a graceful, specific message; reconnect and see processing resume.

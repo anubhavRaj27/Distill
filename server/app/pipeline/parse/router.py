@@ -41,7 +41,7 @@ def parse(
     """Parse ``data`` as ``source_format``. Returns the document and one image per page."""
     parser = _PARSERS.get(source_format)
     if parser is None:  # pragma: no cover - unreachable while the mapping is complete
-        raise UnsupportedFileType(f"Sift has no parser for {source_format.value}.")
+        raise UnsupportedFileType(f"Distill has no parser for {source_format.value}.")
 
     try:
         return parser(data, settings, on_progress)

@@ -1,4 +1,4 @@
-# Sift: Backend Implementation Plan
+# Distill: Backend Implementation Plan
 
 **Companion to:** `requirements.md`, `implementation.md`
 **Author:** Anubhav, with Claude
@@ -157,7 +157,7 @@ The day-1 checklist in `implementation.md` section 13, restricted to backend ite
 phase exists because three things in the plan are currently assumptions.
 
 - [ ] Python 3.12, Postgres 16, Tesseract, and `uv` installed and on the path
-- [ ] Postgres cluster running, `sift` and `sift_test` databases created, `sift_readonly`
+- [ ] Postgres cluster running, `distill` and `distill_test` databases created, `distill_readonly`
       role created with `SELECT` only
 - [ ] **pdfplumber word coordinate origin asserted against a real PDF fixture.** This is
       the single highest-risk assumption in the whole provenance design. Section 8.3 of
@@ -378,7 +378,7 @@ Views are regenerated on every schema version change. A new view is owned by the
 role and the read-only role has no privilege on it, so the very first query after any schema
 change would fail with a permission error rather than returning rows.
 
-**Fix:** view regeneration and `GRANT SELECT ... TO sift_readonly` are one transaction, and
+**Fix:** view regeneration and `GRANT SELECT ... TO distill_readonly` are one transaction, and
 an integration test changes the schema and then immediately runs a query.
 
 ### 8.3 A race between replay and live subscription on reconnect (bug)

@@ -1,8 +1,8 @@
 """Engines and sessions. There are deliberately two engines, with different powers.
 
-The application engine connects as ``sift``, owns the schema, and can write.
+The application engine connects as ``distill``, owns the schema, and can write.
 
-The **read-only** engine connects as ``sift_readonly`` and exists for exactly one purpose:
+The **read-only** engine connects as ``distill_readonly`` and exists for exactly one purpose:
 executing SQL that a Large Language Model wrote. It carries three restrictions applied at
 connection time rather than per query, so no code path can forget them:
 
@@ -64,7 +64,7 @@ def create_readonly_engine(settings: Settings) -> AsyncEngine:
             "server_settings": {
                 "statement_timeout": str(settings.query_timeout_ms),
                 "default_transaction_read_only": "on",
-                "application_name": "sift-generated-sql",
+                "application_name": "distill-generated-sql",
             }
         },
     )

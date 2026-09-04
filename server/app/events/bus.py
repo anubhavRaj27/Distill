@@ -45,11 +45,24 @@ logger = get_logger(__name__)
 # be a memory leak. Dropping it is safe because reconnecting replays from the log.
 SUBSCRIBER_QUEUE_LIMIT = 512
 
-_SESSION_KEY = "sift_pending_events"
+_SESSION_KEY = "distill_pending_events"
 
 
-@dataclass
+@dataclass(eq=False)
 class _Subscriber:
+    """One connected stream.
+
+    ``eq=False`` is required, not stylistic. Subscribers are held in a ``set`` per
+    workspace, and a plain ``@dataclass`` generates ``__eq__``, which sets ``__hash__`` to
+    ``None`` and makes the class unhashable. Adding one to the set then raises
+    ``TypeError: unhashable type``, so every event stream fails on connect while the
+    response headers still look perfectly correct: the client gets a valid
+    ``text/event-stream`` that never delivers anything.
+
+    Identity is also the right semantics here. Two subscribers with equal queues are still
+    two different browser tabs, so they must be two distinct set members.
+    """
+
     queue: asyncio.Queue[dict[str, Any]] = field(
         default_factory=lambda: asyncio.Queue(maxsize=SUBSCRIBER_QUEUE_LIMIT)
     )

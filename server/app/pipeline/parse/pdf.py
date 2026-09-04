@@ -178,7 +178,7 @@ def parse(
     if not parsed.has_text:
         raise ParseFailed(
             "We could not find any text in this PDF, even after running text recognition. "
-            "If it is a photograph or a handwritten document, Sift cannot read it yet."
+            "If it is a photograph or a handwritten document, Distill cannot read it yet."
         )
 
     logger.info(

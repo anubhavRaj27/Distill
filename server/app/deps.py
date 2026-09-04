@@ -21,6 +21,7 @@ from app.db.session import get_sessionmaker
 from app.errors import Unauthorised
 from app.events.bus import bus
 from app.logging import bind_context
+from app.pipeline.worker import discard_submissions, flush_submissions
 from app.types import WorkspaceId
 
 
@@ -36,10 +37,15 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         except Exception:
             await session.rollback()
             bus.discard_staged(session)
+            discard_submissions(session)
             raise
         else:
             await session.commit()
+            # Order matters only in that BOTH must happen after the commit. An event
+            # describing a row that was rolled back is a lie; a queued job for a row that
+            # was rolled back is a dropped job with a confusing log line.
             bus.flush_after_commit(session)
+            flush_submissions(session)
 
 
 Session = Annotated[AsyncSession, Depends(get_session)]

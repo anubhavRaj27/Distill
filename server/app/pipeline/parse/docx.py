@@ -70,7 +70,7 @@ def parse(
     except Exception as exc:
         raise ParseFailed(
             "We could not read this Word document. It may be corrupt, or saved in the "
-            "older .doc format, which Sift does not support.",
+            "older .doc format, which Distill does not support.",
             library_error=type(exc).__name__,
         ) from exc
 

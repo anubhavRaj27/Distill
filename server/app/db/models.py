@@ -38,7 +38,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.domain.document import DocumentStatus, SourceFormat
-from app.domain.fields import FieldType, Tier, ValueStatus
+from app.domain.fields import FieldType, SchemaChangeAuthor, Tier, ValueStatus
 
 
 class Base(DeclarativeBase):
@@ -265,7 +265,15 @@ class SchemaVersion(Base):
     # [{key, label, type, description, enum_values?, currency_default?, source_keys, weight}]
     fields: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
 
-    created_by: Mapped[str] = mapped_column(String(16), nullable=False, server_default="model")
+    # Constrained, not a bare VARCHAR. Decisions D23 and D25 make this column the difference
+    # between "the system changed your schema without asking" and "you changed it", which
+    # the history view renders and the user's trust rests on. A value outside the vocabulary
+    # would be a silently mislabelled audit entry, so the database refuses it.
+    created_by: Mapped[SchemaChangeAuthor] = mapped_column(
+        _enum(SchemaChangeAuthor, "schema_change_author"),
+        nullable=False,
+        server_default=SchemaChangeAuthor.MODEL_AUTO.value,
+    )
     change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("schema_versions.id", ondelete="SET NULL"), nullable=True

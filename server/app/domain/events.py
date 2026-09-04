@@ -22,7 +22,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.domain.document import DocumentStatus
-from app.domain.fields import FieldValue
+from app.domain.fields import FieldValue, SchemaChangeAuthor
 from app.domain.records import Record
 
 
@@ -97,6 +97,19 @@ class SchemaVersionEvent(BaseEvent):
     removed_field_keys: list[str] = Field(default_factory=list)
     renamed: dict[str, str] = Field(
         default_factory=dict, description="Old key to new key, for renames."
+    )
+    applied_by: SchemaChangeAuthor = Field(
+        description="Whether the system applied this without asking, or the user decided "
+        "it. Decisions D23 and D24. This is not a detail: an auto-applied change arrives "
+        "with no interaction behind it, so the interface owes the user a visible note in "
+        "the moment and a marked entry in schema history. Reversibility is what makes "
+        "auto-apply trustworthy, and it is worth nothing if the change is invisible."
+    )
+    change_summary: str | None = Field(
+        default=None,
+        description="One line describing what changed, written for a person, such as "
+        "\"mapped 'Supplier' to vendor_name\". Rendered in schema history and in the "
+        "auto-apply note.",
     )
 
 

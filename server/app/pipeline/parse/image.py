@@ -2,7 +2,7 @@
 
 COORDINATE CHOICE
 -----------------
-An image has no notion of points, so Sift treats **one pixel as one point** for images:
+An image has no notion of points, so Distill treats **one pixel as one point** for images:
 ``width_pt = image.width``. That keeps the single convention in ``app.domain.geometry``
 intact (a box is always in page points, and the viewer's scale is always
 ``rendered_width_px / width_pt``) without inventing a dots-per-inch value the file does not
@@ -92,7 +92,7 @@ def parse(
 
     if not parsed.has_text:
         raise ParseFailed(
-            "We could not find any readable text in this image. Sift reads typed text in "
+            "We could not find any readable text in this image. Distill reads typed text in "
             "scans and photographs, but not handwriting."
         )
 

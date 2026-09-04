@@ -128,6 +128,87 @@ class ValueStatus(StrEnum):
     NOT_PRESENT = "not_present"  # a human asserted this field is absent from this document
 
 
+def fold_label(text: str) -> str:
+    """Fold a field label or key so that spelling variants compare equal.
+
+    ``"Vendor Name"``, ``"vendor_name"``, and ``"VENDOR-NAME"`` all fold to ``vendor_name``.
+
+    This is the **exact-match** fold, used by decision D24's first auto-map signal in
+    ``app.schema.similarity``: two labels that differ only in casing or separators are the
+    same label, and that costs no embedding call to establish.
+
+    There are deliberately two label folds in this codebase, doing different jobs, and
+    conflating them would be a bug:
+
+    * **This one** folds case and separators only. It is for deciding *equality*, so it
+      must not discard anything meaningful.
+    * ``app.llm.fake._normalise_label`` additionally drops filler words such as "number"
+      and "reference". It is for *fuzzy similarity* scoring, where discarding noise words
+      is what lets ``Invoice No`` score well against ``invoice_number``. Using it for
+      equality would make genuinely different labels compare equal.
+
+    Also deliberately not ``validate_field_key``. That one is a security gate producing a
+    legal SQL identifier and rejects what it cannot make safe (review finding 8.1). This
+    one is a comparison aid and never rejects anything.
+    """
+    lowered = "".join(character if character.isalnum() else " " for character in text.lower())
+    return "_".join(lowered.split())
+
+
+# Words that carry no distinguishing meaning in a field label. Dropping them is what lets
+# ``Invoice No`` score well against ``invoice_number``, which is the same field written
+# differently, and recognising that is the unification problem this product is about.
+#
+# "date" is deliberately NOT in this set. It carries meaning, unlike "no" and "number":
+# stripping it collapsed "Issue Date" to "issue" and "Date" to nothing, so a spreadsheet
+# column called "Date" scored badly against an "Issue Date" field for the wrong reason.
+# It now scores below the threshold on its own merits and becomes a proposal the user
+# decides, which is what product principle 3 asks for.
+LABEL_FILLER_WORDS: frozenset[str] = frozenset(
+    {"no", "num", "number", "id", "ref", "reference", "the", "of"}
+)
+
+
+def fold_label_for_similarity(text: str) -> str:
+    """Fold a label for FUZZY comparison: case, punctuation, and filler words removed.
+
+    The counterpart to ``fold_label``, and the difference matters. Use this one for
+    *scoring* how alike two labels are (decision D24's string similarity signal). Use
+    ``fold_label`` for deciding whether two labels are *the same* label, where discarding
+    filler words would make genuinely different fields compare equal.
+
+    Falls back to the punctuation-folded text when a label is nothing but filler words, so
+    a field literally called "Number" still folds to something rather than to nothing.
+
+    NOT SAFE FOR GATING AN AUTOMATIC DECISION. This fold is lossy on purpose, and the loss
+    is not always harmless: it scores ``Supplier`` against ``Supplier ID`` at 1.00, because
+    both fold to "supplier". Used to gate decision D24's auto-map, that would silently merge
+    a company name into an identifier column. Its only caller is the offline provider's
+    loose field matching in ``app.llm.fake``, where a wrong match shows up as a visible,
+    correctable value in a cell rather than as a schema change. Decision D24's string signal
+    uses ``fold_label`` instead.
+    """
+    lowered = "".join(character if character.isalnum() else " " for character in text.lower())
+    words = [word for word in lowered.split() if word not in LABEL_FILLER_WORDS]
+    return " ".join(words) or lowered.strip()
+
+
+class SchemaChangeAuthor(StrEnum):
+    """Who applied a schema version. Decisions D23 and D24.
+
+    Load-bearing rather than decorative: this is what the history view reads to mark an
+    entry "applied automatically", and it is the audit trail that makes confidence-gated
+    auto-apply defensible. A change the system made without asking has to be as visible
+    afterwards as one the user made deliberately, so both are the same kind of row and this
+    column is the only thing distinguishing them.
+
+    Never the workspace token itself. Only its hash is ever stored (decision D8).
+    """
+
+    MODEL_AUTO = "model_auto"  # confident match or clearly novel field, applied unprompted
+    USER = "user"  # decided through a proposal card, or a direct schema edit
+
+
 # ---------------------------------------------------------------------------
 # Schema
 # ---------------------------------------------------------------------------
