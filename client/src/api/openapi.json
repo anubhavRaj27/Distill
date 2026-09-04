@@ -1,0 +1,2682 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Distill",
+    "description": "Distill turns unstructured and semi-structured documents into clean, structured data that can\nbe searched and queried.\n\nThe interesting problems are not extraction from a single document, which modern language\nmodels largely solve, but **unification** (turning many mutually disagreeing documents into\none coherent, queryable schema) and **trust** (making every extracted value traceable to\nwhere it came from, and cheap for a person to correct).\n\nAuthentication is a workspace bearer token, issued once at workspace creation. There are no\naccounts.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Liveness and readiness",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces": {
+      "post": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Create an anonymous workspace",
+        "operationId": "create_workspace_api_v1_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateWorkspaceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}": {
+      "get": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Schema, documents, and counts for a cold start",
+        "operationId": "get_workspace_api_v1_workspaces__workspace_id__get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOverview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/documents": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Upload one or more documents",
+        "operationId": "upload_api_v1_workspaces__workspace_id__documents_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_api_v1_workspaces__workspace_id__documents_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/documents/seed": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Load the sample documents",
+        "description": "Load the curated sample set. Requirement FR-05, decision D15.\n\nReads ``samples/manifest.json`` rather than hard-coding filenames, so dropping files\ninto ``samples/`` is the only step needed to change the demo corpus.",
+        "operationId": "seed_api_v1_workspaces__workspace_id__documents_seed_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/documents/{document_id}": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "One document",
+        "operationId": "get_document_api_v1_workspaces__workspace_id__documents__document_id__get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Document identifier.",
+              "title": "Document Id"
+            },
+            "description": "Document identifier."
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Delete a document",
+        "operationId": "delete_document_api_v1_workspaces__workspace_id__documents__document_id__delete",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Document identifier.",
+              "title": "Document Id"
+            },
+            "description": "Document identifier."
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/documents/{document_id}/file": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "The original file, with byte-range support",
+        "description": "Stream the original. Range requests are supported because pdf.js relies on them.\n\nWithout ranges, opening page one of a fifty megabyte scan downloads all fifty\nmegabytes first, which is the difference between a viewer that feels instant and one\nthat does not.",
+        "operationId": "original_file_api_v1_workspaces__workspace_id__documents__document_id__file_get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Document identifier.",
+              "title": "Document Id"
+            },
+            "description": "Document identifier."
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/documents/{document_id}/pages/{page_index}/image": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "A rendered page image",
+        "operationId": "page_image_api_v1_workspaces__workspace_id__documents__document_id__pages__page_index__image_get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Document identifier.",
+              "title": "Document Id"
+            },
+            "description": "Document identifier."
+          },
+          {
+            "name": "page_index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Page Index"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/documents/{document_id}/reextract": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Re-run extraction, preserving human corrections",
+        "description": "Re-run the pipeline for one document. Requirement FR-34.\n\nHuman-verified values survive by construction: the write path filters them out and a\ndisagreeing model answer is recorded beside the human's rather than over it. See\n``app.pipeline.persist`` and decision D16.",
+        "operationId": "reextract_api_v1_workspaces__workspace_id__documents__document_id__reextract_post",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Document identifier.",
+              "title": "Document Id"
+            },
+            "description": "Document identifier."
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReextractResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/records": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Records, cursor paged",
+        "operationId": "list_records_api_v1_workspaces__workspace_id__records_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "From a previous page.",
+              "title": "Cursor"
+            },
+            "description": "From a previous page."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/records/{record_id}/fields/{field_key}": {
+      "patch": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Correct one value",
+        "description": "Record a human decision about one value. Requirements FR-23 and FR-34.\n\nFrom this point the value is immune to re-extraction: the write path filters\nhuman-owned rows, and a later model answer that disagrees is stored beside it rather\nthan over it (decision D16).",
+        "operationId": "correct_field_api_v1_workspaces__workspace_id__records__record_id__fields__field_key__patch",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Record identifier.",
+              "title": "Record Id"
+            },
+            "description": "Record identifier."
+          },
+          {
+            "name": "field_key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Field Key"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FieldValue"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/review": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "The review queue",
+        "description": "Cells needing attention, highest impact first. Requirement FR-32.\n\nOrdered by impact rather than by tier alone, because \"which of these low-confidence\ncells matters\" is the question a user actually has: a shaky total on an invoice is worth\nmore attention than a shaky note.",
+        "operationId": "review_queue_api_v1_workspaces__workspace_id__review_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewQueue"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/schema": {
+      "get": {
+        "tags": [
+          "schema"
+        ],
+        "summary": "The current schema",
+        "operationId": "get_schema_api_v1_workspaces__workspace_id__schema_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "schema"
+        ],
+        "summary": "Edit the schema",
+        "operationId": "update_schema_api_v1_workspaces__workspace_id__schema_patch",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSchemaRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/schema/versions": {
+      "get": {
+        "tags": [
+          "schema"
+        ],
+        "summary": "Schema history",
+        "description": "Requirement FR-15. Marks which entries the system applied without asking.",
+        "operationId": "schema_history_api_v1_workspaces__workspace_id__schema_versions_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/schema/revert": {
+      "post": {
+        "tags": [
+          "schema"
+        ],
+        "summary": "Revert the schema",
+        "description": "Requirement FR-15's one-click revert.\n\nApplies the old fields as a NEW version rather than deleting rows, so the history keeps\nboth the mistake and the correction.",
+        "operationId": "revert_schema_api_v1_workspaces__workspace_id__schema_revert_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevertRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/proposals": {
+      "get": {
+        "tags": [
+          "schema"
+        ],
+        "summary": "Outstanding schema questions",
+        "description": "Only questions that needed a human live here. Decision D23.\n\nAn automatically applied change writes a ``schema_versions`` row and no proposal, so\n\"how many decisions are outstanding\" is a row count rather than a filtered one.",
+        "operationId": "list_proposals_api_v1_workspaces__workspace_id__proposals_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "include_resolved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Resolved"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/proposals/{proposal_id}/resolve": {
+      "post": {
+        "tags": [
+          "schema"
+        ],
+        "summary": "Decide a schema question",
+        "operationId": "resolve_proposal_api_v1_workspaces__workspace_id__proposals__proposal_id__resolve_post",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proposal Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveProposalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "Live workspace events (Server-Sent Events)",
+        "operationId": "events_api_v1_workspaces__workspace_id__events_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BBox": {
+        "properties": {
+          "x0": {
+            "type": "number",
+            "title": "X0",
+            "description": "Left edge, points from the left of the page."
+          },
+          "top": {
+            "type": "number",
+            "title": "Top",
+            "description": "Top edge, points from the TOP of the page."
+          },
+          "x1": {
+            "type": "number",
+            "title": "X1",
+            "description": "Right edge, points from the left of the page."
+          },
+          "bottom": {
+            "type": "number",
+            "title": "Bottom",
+            "description": "Bottom edge, points from the TOP of the page."
+          }
+        },
+        "type": "object",
+        "required": [
+          "x0",
+          "top",
+          "x1",
+          "bottom"
+        ],
+        "title": "BBox",
+        "description": "An axis-aligned box in top-left-origin page points. See the module docstring."
+      },
+      "Body_upload_api_v1_workspaces__workspace_id__documents_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "One or more documents."
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_upload_api_v1_workspaces__workspace_id__documents_post"
+      },
+      "CheckResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "CheckResult"
+      },
+      "CorrectionRequest": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "not_present": {
+            "type": "boolean",
+            "title": "Not Present",
+            "description": "The user asserts this document does not contain this field. A correction in its own right, and protected from re-extraction the same way an edited value is.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "CorrectionRequest",
+        "description": "Either a value, or an assertion that the field is absent from this document."
+      },
+      "CreateWorkspaceRequest": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "title": "CreateWorkspaceRequest"
+      },
+      "CreateWorkspaceResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Bearer token for every subsequent request. Returned ONCE and never recoverable: only its hash is stored. Anyone holding it has full access to this workspace, which is the accepted tradeoff of having no accounts (decision D8)."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "token",
+          "created_at"
+        ],
+        "title": "CreateWorkspaceResponse"
+      },
+      "DocumentDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime": {
+            "type": "string",
+            "title": "Mime"
+          },
+          "source_format": {
+            "$ref": "#/components/schemas/SourceFormat"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DocumentStatus"
+          },
+          "stage_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Detail"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "pages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Pages",
+            "description": "Per-page dimensions IN POINTS plus the image path. The viewer divides the width it actually rendered by `width_pt` to get its overlay scale, so it never needs to know about dots per inch."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "mime",
+          "source_format",
+          "size_bytes",
+          "status",
+          "stage_detail",
+          "failure_reason",
+          "page_count",
+          "attempts",
+          "created_at"
+        ],
+        "title": "DocumentDetail"
+      },
+      "DocumentStatus": {
+        "type": "string",
+        "enum": [
+          "uploaded",
+          "parsed",
+          "extracting",
+          "awaiting_schema",
+          "done",
+          "failed"
+        ],
+        "title": "DocumentStatus",
+        "description": "Where a document is in the pipeline. Rendered directly as the progress list.\n\nThe observability requirement and the user experience are the same feature here: the\nprogress list in the interface IS this state machine, so every state has to be a state\na person would want to see, and every transition publishes an event.\n\nTransitions::\n\n    uploaded -> parsed -> extracting -> awaiting_schema -> done\n         |         |          |               |\n         +---------+----------+---------------+--> failed\n\n``awaiting_schema`` is the state review finding 8.5 introduced. A document in the very\nfirst batch finishes open extraction before the workspace has a schema, so it cannot\nproduce records yet. Without this state the interface would have to show it as either\nstill working (a lie) or done (also a lie, since no row appeared)."
+      },
+      "DocumentSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DocumentStatus"
+          },
+          "stage_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Detail"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "status",
+          "size_bytes",
+          "created_at"
+        ],
+        "title": "DocumentSummary"
+      },
+      "FieldSpec": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Column name in the generated view. Machine identifier."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "What the interface shows a person."
+          },
+          "type": {
+            "$ref": "#/components/schemas/FieldType"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "What this field means. Sent to the model during schema-guided extraction, and used for similarity matching during drift detection.",
+            "default": ""
+          },
+          "enum_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enum Values",
+            "description": "Permitted values, for FieldType.ENUM only."
+          },
+          "currency_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Default",
+            "description": "ISO 4217 code assumed when a document states an amount with no currency marker, for FieldType.CURRENCY only."
+          },
+          "source_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Keys",
+            "description": "The raw keys from open extraction that were unified into this field. Kept so the user can see WHY a field exists, and so drift detection knows which aliases have already been resolved."
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Weight",
+            "description": "Review priority multiplier. The review queue orders by weight * (1 - confidence), so a wrong total matters more than a wrong note. Currency and date fields default higher, set in app.schema.propose.",
+            "default": 1.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "type"
+        ],
+        "title": "FieldSpec",
+        "description": "One field in a workspace's schema, as the user has agreed to it."
+      },
+      "FieldType": {
+        "type": "string",
+        "enum": [
+          "string",
+          "number",
+          "currency",
+          "date",
+          "boolean",
+          "enum",
+          "string_list"
+        ],
+        "title": "FieldType",
+        "description": "The supported field types. Requirement FR-12.\n\nThe stored representation of each is documented in ``app.domain.values``, which is the\nonly module that converts between a raw model output and one of these."
+      },
+      "FieldValue": {
+        "properties": {
+          "field_key": {
+            "type": "string",
+            "title": "Field Key"
+          },
+          "value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "The value, in the stored representation for its type. Null means the field is genuinely absent from this document, not that extraction failed."
+          },
+          "value_type": {
+            "$ref": "#/components/schemas/FieldType"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence",
+            "description": "The model's self-report. Never the tier."
+          },
+          "tier": {
+            "$ref": "#/components/schemas/Tier"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ValueStatus",
+            "default": "model"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Provenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Value"
+          },
+          "model_value_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Value At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field_key",
+          "value_type",
+          "tier"
+        ],
+        "title": "FieldValue",
+        "description": "One extracted or corrected value, with everything needed to trust it."
+      },
+      "GroundingFailure": {
+        "type": "string",
+        "enum": [
+          "no_quote",
+          "quote_not_found",
+          "page_out_of_range",
+          "no_text_layer"
+        ],
+        "title": "GroundingFailure",
+        "description": "Why a value could not be located in its document.\n\nRecorded rather than swallowed. A value that cannot be grounded has its tier capped at\nlow (see ``app.pipeline.score``), and this is the reason the interface shows the user.\nAn ungroundable value is the strongest hallucination signal we have: a value the model\ninvented has no quote to find. See decision D5."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ],
+            "title": "Status"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "process_id": {
+            "type": "integer",
+            "title": "Process Id",
+            "description": "Operating system process identifier. The in-process worker queue and event bus require exactly one API process, so seeing this value change between requests means the deployment is misconfigured. See decision D9."
+          },
+          "database": {
+            "$ref": "#/components/schemas/CheckResult"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/CheckResult"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/CheckResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "environment",
+          "process_id",
+          "database",
+          "storage",
+          "llm"
+        ],
+        "title": "HealthResponse"
+      },
+      "ProposalList": {
+        "properties": {
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalSummary"
+            },
+            "type": "array",
+            "title": "Proposals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposals"
+        ],
+        "title": "ProposalList"
+      },
+      "ProposalSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "document_id",
+          "payload",
+          "created_at"
+        ],
+        "title": "ProposalSummary"
+      },
+      "Provenance": {
+        "properties": {
+          "page_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Index",
+            "description": "Zero-based page the value was found on, if known."
+          },
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/BBox"
+            },
+            "type": "array",
+            "title": "Boxes",
+            "description": "One box per visual line of the matched quote. Empty means grounding failed, in which case `failure` says why. Multiple boxes rather than one union box, because a quote that wraps must not highlight the content between its fragments (requirement FR-30)."
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote",
+            "description": "The verbatim span the model cited as evidence. Shown to the user in the viewer side card (requirement FR-31)."
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning",
+            "description": "The model's short justification for this value. FR-31."
+          },
+          "match_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Score",
+            "description": "Fuzzy match score of the quote against the page text, 0 to 100. Feeds tier derivation."
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator",
+            "description": "Human-readable address within the source, for formats where one is meaningful: 'Sheet1!B7', 'paragraph 12', 'line 48'. Display only, never parsed."
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroundingFailure"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set if and only if `boxes` is empty."
+          }
+        },
+        "type": "object",
+        "title": "Provenance",
+        "description": "The trail from a value back to the pixels it came from.\n\nAn empty ``boxes`` list with a populated ``failure`` is a legitimate, fully described\nstate: we have a value, we know the model's justification for it, and we are telling the\nuser honestly that we could not find that justification in the document."
+      },
+      "Record": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name",
+            "description": "Original filename. Shown as the row's identity."
+          },
+          "schema_version": {
+            "type": "integer",
+            "title": "Schema Version"
+          },
+          "values": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldValue"
+            },
+            "type": "object",
+            "title": "Values",
+            "description": "Keyed by field key. A field absent from this mapping was never extracted for this document, which is different from a field present with a null value, which means the document genuinely does not contain it."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "document_id",
+          "document_name",
+          "schema_version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Record",
+        "description": "One row of the unified table."
+      },
+      "RecordPage": {
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/Record"
+            },
+            "type": "array",
+            "title": "Records"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "description": "Opaque. Pass back as `cursor` for the next page."
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total records in the workspace, for the row count."
+          }
+        },
+        "type": "object",
+        "required": [
+          "records",
+          "total"
+        ],
+        "title": "RecordPage",
+        "description": "A cursor-paged slice of records."
+      },
+      "ReextractResponse": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "message"
+        ],
+        "title": "ReextractResponse"
+      },
+      "RejectedUpload": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "code",
+          "message"
+        ],
+        "title": "RejectedUpload"
+      },
+      "ResolveProposalRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "map",
+              "add",
+              "ignore",
+              "merge"
+            ],
+            "title": "Action"
+          },
+          "target_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Key",
+            "description": "For 'map', the existing field to map onto. For 'merge', the field to merge into."
+          },
+          "field": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FieldSpec"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For 'add', the field to create, so the user can rename or retype it before it lands."
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ResolveProposalRequest",
+        "description": "The user's decision on a proposal card. Requirement FR-13's three actions."
+      },
+      "RevertRequest": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "RevertRequest"
+      },
+      "ReviewItem": {
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Record Id"
+          },
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "field_key": {
+            "type": "string",
+            "title": "Field Key"
+          },
+          "field_label": {
+            "type": "string",
+            "title": "Field Label"
+          },
+          "value": {
+            "$ref": "#/components/schemas/FieldValue"
+          },
+          "impact": {
+            "type": "number",
+            "title": "Impact",
+            "description": "Ordering score: field weight times uncertainty, with a conflict outranking a suspicion at the same weight. See app.pipeline.score.impact."
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "document_id",
+          "document_name",
+          "field_key",
+          "field_label",
+          "value",
+          "impact"
+        ],
+        "title": "ReviewItem",
+        "description": "One cell that wants a human's attention."
+      },
+      "ReviewQueue": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ReviewQueue"
+      },
+      "SchemaChangeAuthor": {
+        "type": "string",
+        "enum": [
+          "model_auto",
+          "user"
+        ],
+        "title": "SchemaChangeAuthor",
+        "description": "Who applied a schema version. Decisions D23 and D24.\n\nLoad-bearing rather than decorative: this is what the history view reads to mark an\nentry \"applied automatically\", and it is the audit trail that makes confidence-gated\nauto-apply defensible. A change the system made without asking has to be as visible\nafterwards as one the user made deliberately, so both are the same kind of row and this\ncolumn is the only thing distinguishing them.\n\nNever the workspace token itself. Only its hash is ever stored (decision D8)."
+      },
+      "SchemaHistory": {
+        "properties": {
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/SchemaVersionSummary"
+            },
+            "type": "array",
+            "title": "Versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "versions"
+        ],
+        "title": "SchemaHistory"
+      },
+      "SchemaResponse": {
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldSpec"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "SchemaResponse"
+      },
+      "SchemaVersionSummary": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/SchemaChangeAuthor"
+          },
+          "change_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Summary"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "field_count": {
+            "type": "integer",
+            "title": "Field Count"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "created_by",
+          "change_summary",
+          "created_at",
+          "field_count",
+          "is_current"
+        ],
+        "title": "SchemaVersionSummary"
+      },
+      "SeedResponse": {
+        "properties": {
+          "loaded": {
+            "items": {
+              "$ref": "#/components/schemas/UploadedDocument"
+            },
+            "type": "array",
+            "title": "Loaded"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "SeedResponse"
+      },
+      "SourceFormat": {
+        "type": "string",
+        "enum": [
+          "pdf",
+          "image",
+          "docx",
+          "xlsx",
+          "csv",
+          "text"
+        ],
+        "title": "SourceFormat",
+        "description": "Formats Distill can parse. Requirement FR-02."
+      },
+      "Tier": {
+        "type": "string",
+        "enum": [
+          "high",
+          "medium",
+          "low",
+          "conflict",
+          "verified"
+        ],
+        "title": "Tier",
+        "description": "How much a value should be trusted. Always DERIVED, never asked of the model.\n\nSee decision D5 and the table in implementation.md section 6.4. The derivation lives in\n``app.pipeline.score`` and nowhere else."
+      },
+      "UpdateSchemaRequest": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldSpec"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Fields"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 280
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "What you changed, for the history view."
+          }
+        },
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "title": "UpdateSchemaRequest",
+        "description": "The complete new field list. Requirement FR-11.\n\nA whole list rather than a patch, deliberately: renames, retypes, removals, and\nreorderings all become one shape, and the server never has to infer intent from a\nsequence of operations."
+      },
+      "UploadResponse": {
+        "properties": {
+          "accepted": {
+            "items": {
+              "$ref": "#/components/schemas/UploadedDocument"
+            },
+            "type": "array",
+            "title": "Accepted"
+          },
+          "rejected": {
+            "items": {
+              "$ref": "#/components/schemas/RejectedUpload"
+            },
+            "type": "array",
+            "title": "Rejected"
+          }
+        },
+        "type": "object",
+        "title": "UploadResponse",
+        "description": "Partial success is the normal case, so accepted and rejected come back together.\n\nOne unreadable file in a drop of twelve must not fail the other eleven, which is\nguarantee 3 in the backend plan and requirement 3.6."
+      },
+      "UploadedDocument": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DocumentStatus"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "source_format": {
+            "$ref": "#/components/schemas/SourceFormat"
+          },
+          "detected_mime": {
+            "type": "string",
+            "title": "Detected Mime"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "Set when the file's contents disagree with its extension. The content decides which parser runs; this explains what we concluded."
+          },
+          "duplicate_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of",
+            "description": "Set when this exact file is already in the workspace. The upload is accepted and points at the existing document rather than processing it twice."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "status",
+          "size_bytes",
+          "source_format",
+          "detected_mime"
+        ],
+        "title": "UploadedDocument"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "ValueStatus": {
+        "type": "string",
+        "enum": [
+          "model",
+          "human_verified",
+          "not_present"
+        ],
+        "title": "ValueStatus",
+        "description": "Where a value came from. Drives the never-lose-a-correction guarantee.\n\nEvery write path a model can reach filters on ``status <> 'human_verified'``. This is\nenforced in SQL rather than by convention, which is what makes principle 4 of\nrequirements.md a guarantee instead of an intention."
+      },
+      "WorkspaceOverview": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Version",
+            "description": "Null when no schema has been agreed yet."
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldSpec"
+            },
+            "type": "array",
+            "title": "Fields"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentSummary"
+            },
+            "type": "array",
+            "title": "Documents"
+          },
+          "record_count": {
+            "type": "integer",
+            "title": "Record Count",
+            "default": 0
+          },
+          "last_event_seq": {
+            "type": "integer",
+            "title": "Last Event Seq",
+            "description": "The newest event sequence number. The interface opens its event stream with this as Last-Event-ID, so a cold start streams only what happens NEXT rather than replaying the entire history it has just loaded.",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "created_at"
+        ],
+        "title": "WorkspaceOverview",
+        "description": "Everything the interface needs for a cold start, in one request."
+      }
+    }
+  }
+}

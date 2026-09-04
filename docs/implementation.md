@@ -1,537 +1,794 @@
-# Distill: Implementation Document (First Draft)
+# Distill: Implementation Document (v2)
 
-**Companion to:** `requirements.md`**Author:** Anubhav
-**Date:** September 2, 2026
-**Status:** Draft v1. Code sketches are illustrative and must be verified against the installed package versions on day 1.
+**Companion to:** `requirements.md` v2
+**Author:** Anubhav Raj
+**Date:** September 4, 2026 (v1 was September 2, 2026)
+**Status:** v2, governing. Supersedes v1 in full. Sections marked **built** describe code
+that exists and has been verified against a live server; sections marked **new** are the
+remaining work.
 
 ---
 
 ## 1. Architecture overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│  Browser (React 19 + TypeScript, Vite)                              │
-│                                                                     │
-│  Upload ─► Progress ─► Data Table ─► Cell ─► Source Viewer          │
-│                          │                    (pdf.js + highlights) │
-│  Schema Panel ◄─ Proposal Card (A2UI surface)                       │
-│  Query Box ─► Result Surface (A2UI surface, custom catalog)         │
-│                                                                     │
-│  ── one module: /web/src/a2ui ── MessageProcessor + catalog + SSE   │
-└───────────────┬───────────────────────────────────┬─────────────────┘
-                │ REST (typed client from OpenAPI)   │ SSE streams
-┌───────────────▼───────────────────────────────────▼─────────────────┐
-│  API (Python 3.12, FastAPI)                                         │
-│                                                                     │
-│  /documents ─► Ingest worker ─► Parse ─► Extract ─► Ground ─► Score │
-│  /schema     ─► Unify / Drift detector ─► Proposal (A2UI JSON)      │
-│  /query      ─► NL→SQL agent ─► read-only exec ─► Result (A2UI JSON)│
-│  /events, /query (SSE) ─► progress, rows, surfaces                  │
-└───────────────┬───────────────────────────┬─────────────────────────┘
-                │                           │
-        ┌───────▼────────┐        ┌─────────▼─────────┐     ┌──────────┐
-        │ Postgres 16    │        │ Object storage    │     │ LLM API  │
-        │ records, field │        │ originals, page   │     │ (hosted) │
-        │ values, schema │        │ renders           │     │          │
-        │ versions       │        │ (local volume)    │     │          │
-        └────────────────┘        └───────────────────┘     └──────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Browser  (React 19, TypeScript, Vite; client/)                          │
+│                                                                          │
+│   / Upload ──► /w/{id}/chat  Chat ◄──────────► Source viewer (overlay)   │
+│                  │  prose + citations + A2UI visual        ▲             │
+│                  │                                         │             │
+│               /w/{id}/data  Data: unified table + A2UI dashboard panels  │
+│                                                                          │
+│   client/src/a2ui: the only importer of @a2ui/*  (renderer, catalog,     │
+│                    fallback, inspect)                                    │
+└──────────────┬───────────────────────────────────────┬───────────────────┘
+               │ REST (typed client from OpenAPI)      │ SSE /events
+┌──────────────▼───────────────────────────────────────▼───────────────────┐
+│  Server  (Python 3.12, FastAPI; server/)                                 │
+│                                                                          │
+│  documents ─► worker ─► parse ─► extract ─► ground ─► score ─► persist   │
+│                                   │                             │        │
+│                                   └─► unify schema (auto only)  └─► index│
+│                                                                (chunks + │
+│                                                                 vectors) │
+│  chat ─► retrieve (cosine + records digest) ─► plan (structured)         │
+│        ─► evaluate query spec ─► build A2UI ─► stream prose (SSE)        │
+│  dashboard ─► field stats ─► plan (structured) ─► evaluate ─► A2UI       │
+└──────────────┬──────────────────────────────┬────────────────────────────┘
+               │                              │
+      ┌────────▼─────────┐        ┌───────────▼───────────┐     ┌─────────┐
+      │ Postgres 16      │        │ Local file storage    │     │ Gemini  │
+      │ records, values, │        │ originals, page PNGs  │     │ (google │
+      │ chunks+vectors,  │        │                       │     │ -genai) │
+      │ chat, dashboard, │        └───────────────────────┘     └─────────┘
+      │ event log        │
+      └──────────────────┘
 ```
 
-Two things matter most in this diagram:
+Three things carry the design:
 
-1. **All A2UI knowledge lives in one frontend module** (`/web/src/a2ui`). The rest of the app consumes plain React components and a `useSurface(streamUrl)` hook. If the protocol changes, one folder changes.
-2. **The backend is a pipeline with explicit stages**, each of which emits an SSE event. The frontend progress list is a direct rendering of those events, so observability and UX are the same feature.
+1. **The model never produces a number that is displayed.** For any visual, the model emits
+   a _query specification_; deterministic code evaluates it over `field_values`; the result
+   is bound into the A2UI data model by path. Decision D37. This is also what makes the
+   dashboard trustworthy without a review step.
+2. **One provenance path.** Every format is rendered to page images with word geometry
+   (decision D18), so a chat citation and a table cell open the same viewer with the same
+   overlay code. PDF pages use the backend render too (decision D43), which removes pdf.js
+   from the client.
+3. **A2UI is confined to one module per side.** `server/app/a2ui/` builds messages;
+   `client/src/a2ui/` renders them. Nothing else knows the protocol.
 
 ---
 
 ## 2. Technology choices
 
-### 2.1 Frontend (given: React + TypeScript)
+### 2.1 Frontend (built unless noted)
 
-| Concern | Choice | Version (verified Sept 2, 2026) | Why |
-| --- | --- | --- | --- |
-| Build | Vite | 8.x | Fast, standard, first-class TS. |
-| Framework | React | 19.2.x | Required by the `@a2ui/react` peer range (`^19.2.7`). |
-| Language | TypeScript | pin to what `create-vite` scaffolds; enable `strict` | Avoid surprises from the TS 7 line unless the scaffold already uses it. |
-| Styling | styled-components + Radix Primitives (unstyled, accessible) | styled-components 6.5.x, `radix-ui` 1.6.x | Author fluency is the deciding factor for a 5-day build. Radix supplies the accessibility and behavior (dialogs, menus, tooltips, selects, focus management) that shadcn/ui would have, without the Tailwind dependency. A2UI catalog components use the same styled primitives so agent-generated UI is indistinguishable from hand-built UI. See section 2.3 for the constraints this choice carries. |
-| Server state | TanStack Query | 5.x | Caching, invalidation after SSE events, retries. |
-| Table | TanStack Table + TanStack Virtual | Table 9.x | Headless, virtualized, fully controllable cell rendering (needed for confidence tiers and provenance cells). |
-| UI state | Zustand | current | Small stores for selection, review cursor, viewer state. |
-| Document viewer | react-pdf (pdf.js) | 10.x | Renders PDF pages to canvas; we draw highlight overlays in page coordinates. Non-PDF sources are shown as backend-rendered page images with the same overlay layer. |
-| Charts | Recharts | current | Used only inside the A2UI `BarChart` catalog component. |
-| A2UI | `@a2ui/react` + `@a2ui/web_core` | 0.11.0 / 0.10.7, import from `/v0_9` | Official React renderer; v0.9 is the recommended protocol per the package README. |
-| Schema validation | Zod | **pin 3.25.x** | `@a2ui/react` peer-depends on Zod 3.x. Zod 4 is current on npm and must not be installed. |
-| API client | `openapi-typescript` + `openapi-fetch` | current | Types generated from FastAPI's OpenAPI document; no hand-written request types. |
-| Tests | Vitest + Testing Library, MSW, Playwright | 4.x / 2.x / 1.62 | Unit and component tests with mocked network; one end-to-end test that runs the demo script. |
+| Concern           | Choice                                                                       | Version                | Why                                                                                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build             | Vite                                                                         | 8.2                    | Scaffolded by `create-vite`. Decision D33.                                                                                                                                      |
+| Framework         | React                                                                        | 19.2.8                 | Required by `@a2ui/react` peer range.                                                                                                                                           |
+| Language          | TypeScript, `strict`, `noUncheckedIndexedAccess`                             | 6.0.3                  | As scaffolded.                                                                                                                                                                  |
+| Lint              | oxlint                                                                       | 1.79                   | As scaffolded. Decision D33.                                                                                                                                                    |
+| Styling           | styled-components                                                            | 6.5                    | Decision D11. Warm-paper tokens in `src/ui/theme.ts`, decision D32. Radix Primitives added only where a primitive is needed (dialog for the viewer, dropdown for column menus). |
+| Routing           | `react-router`, declarative                                                  | 7.18                   | Decision D30. Routes: `/`, `/w/:id` (redirects to chat), `/w/:id/chat`, `/w/:id/data`.                                                                                          |
+| Server state      | TanStack Query                                                               | 5                      | SSE events write into the cache with `setQueryData`.                                                                                                                            |
+| UI state          | Zustand                                                                      | 5                      | Viewer open state, selected citation, inspect toggle.                                                                                                                           |
+| Table (**new**)   | TanStack Table                                                               | 8.x current            | Headless sort, visibility, column API. No virtualisation: a workspace holds tens of rows.                                                                                       |
+| Charts (**new**)  | Recharts                                                                     | current                | Inside the A2UI `BarChart` and `LineChart` catalog components only.                                                                                                             |
+| A2UI (**new**)    | `@a2ui/react` + `@a2ui/web_core`, `/v0_9` imports                            | 0.11.0 / 0.10.7, exact | Official renderer.                                                                                                                                                              |
+| Schema validation | Zod                                                                          | **3.25.76 exact**      | `@a2ui/react` peer range. Zod 4 must not be installed.                                                                                                                          |
+| API client        | `openapi-fetch`; types via pinned `npx openapi-typescript`, output committed | 0.17 / 7.13            | Decision D33.                                                                                                                                                                   |
+| Tests             | Vitest 4 + Testing Library; MSW (**new**)                                    |                        | Unit and component tests with a mocked network.                                                                                                                                 |
 
-### 2.2 Backend (open choice): Python 3.12 + FastAPI
+Removed from v1's list: react-pdf (decision D43), TanStack Virtual, Playwright (cut to a
+manual demo script; see section 9).
 
-Alternatives seriously considered:
+### 2.2 Backend (built unless noted)
 
-- **Node + TypeScript.** Shared types with the frontend are attractive. Rejected because document parsing (PDF word geometry, OCR, DOCX, XLSX) and LLM structured-output tooling are noticeably more mature in Python, and the A2UI reference agents are Python, which makes their prompt patterns easy to borrow.
-- **Go.** Excellent for the API layer, weak for parsing and LLM tooling. Rejected for a 5-day build.
+| Concern           | Choice                                                              | Why                                                                                                                                                                                                                                   |
+| ----------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime           | Python 3.12, `uv`                                                   | Decisions D2, D12.                                                                                                                                                                                                                    |
+| Web               | FastAPI, `sse-starlette`                                            | Async, Pydantic-native, OpenAPI for the typed client.                                                                                                                                                                                 |
+| Database          | Postgres 16, SQLAlchemy 2 async, Alembic                            | Decision D4 (values half; the per-workspace SQL view is cut).                                                                                                                                                                         |
+| Parsing           | pdfplumber, pypdfium2, Tesseract, python-docx, openpyxl, `filetype` | Decision D3. Every format rendered to page images, decision D18.                                                                                                                                                                      |
+| Grounding         | RapidFuzz                                                           | Quote to word-box matching, section 6.2.                                                                                                                                                                                              |
+| LLM               | Gemini via `google-genai` directly                                  | Decisions D13, D20. Pro tier for extraction and schema, Flash tier for chat planning and prose, dashboard planning, and suggestions. `generate_content_stream` for prose (**new**, decision D44). `gemini-embedding-001` for vectors. |
+| Vectors (**new**) | Stored as JSONB float arrays; cosine computed in process            | Decision D36. Upgrade path to pgvector documented there.                                                                                                                                                                              |
+| Jobs              | In-process asyncio worker, one process                              | Decision D9.                                                                                                                                                                                                                          |
+| Events            | Persisted `workspace_events` log plus in-process bus                | Decision D14.                                                                                                                                                                                                                         |
+| Logging           | structlog with correlation identifier middleware                    |                                                                                                                                                                                                                                       |
+| A2UI (**new**)    | Hand-built message builders, `jsonschema` validation in tests       | No official Python emitter.                                                                                                                                                                                                           |
 
-| Concern | Choice | Version | Why |
-| --- | --- | --- | --- |
-| Web framework | FastAPI | 0.141.x | Async, Pydantic-native, OpenAPI for the typed frontend client. |
-| Validation and LLM structured output | Pydantic + Instructor | 2.13.x / 1.16.x | Extraction results are Pydantic models; Instructor handles retries when the model returns malformed output and is provider-agnostic. |
-| Database | Postgres 16 via SQLAlchemy 2.0 (async) + Alembic | 2.0.x | Relational query patterns; JSONB for flexible field values; one datastore. |
-| PDF parsing | pdfplumber + pypdfium2 | 0.11.x | Word-level bounding boxes (needed for provenance) and fast page rendering to PNG. |
-| OCR | Tesseract via pytesseract | system package | For scanned pages with no text layer. Handwriting out of scope. |
-| Office formats | python-docx, openpyxl | current | DOCX paragraphs and XLSX cell ranges as provenance units. |
-| Streaming | sse-starlette | current | SSE with event IDs for resume. |
-| Jobs | In-process asyncio worker queue | n/a | Sufficient for a single-instance 5-day deployment; upgrade path to Redis + arq documented in `decisions.md`. |
-| Logging | structlog + correlation ID middleware | current | Every log line and every error response carries a request ID that the frontend shows in error toasts. |
-| LLM | Hosted Claude Sonnet-class model through Instructor's Anthropic client | confirm current model ID on day 1 | Strong structured output and long context for multi-page documents. Provider is swappable through Instructor. |
-
-### 2.3 Styling decision: styled-components over Tailwind + shadcn/ui
-
-shadcn/ui is a Tailwind-only library (its components are copied into the repository as Tailwind-classed JSX), so it is not usable without Tailwind. The real choice is therefore Tailwind + shadcn/ui versus a styled API on top of Radix Primitives.
-
-**Decision:** styled-components 6 + Radix Primitives.
-
-**Reasoning:** Tailwind's advantages for this project come down to one thing, shadcn/ui giving a finished component set on day 1. That is a velocity win but not a decisive one, because Radix Primitives supply the same behavior and accessibility, and the visual layer is a few hours of styled primitives that the author can write faster than learning a utility vocabulary under time pressure. The judges explicitly do not score visual polish; they score whether the UX was thought through. Fluency wins.
-
-**Known constraints and how they are handled:**
-
-| Constraint | Mitigation |
-| --- | --- |
-| styled-components entered maintenance mode on March 17, 2025, and its maintainer advises against adopting it for new projects. It still receives releases (6.5.3, August 2026), and its concerns are React Server Components and runtime cost. This project is a Vite single-page app with no server components, so the main stated reason does not apply. | State this openly in `decisions.md`. Keep every styled definition in `web/src/ui/` so a migration to Linaria (same `styled` API, zero runtime, `@wyw-in-js/vite`) is mechanical if ever needed. |
-| Runtime CSS-in-JS in a virtualized table with 5,000 rows: dynamic props inside template literals generate a class per distinct value and re-inject styles on scroll. | Table cells use **static** styled components with variants driven by `data-tier` and `data-type` attributes and CSS variables, never by interpolated props. Tier colors and spacing are theme tokens on `:root`. A Playwright performance check asserts smooth scrolling on the seeded 5,000-row fixture. |
-| No off-the-shelf component set. | A small `web/src/ui/` kit built on Radix: Button, Input, Select, Dialog, DropdownMenu, Tooltip, Tabs, Badge, Toast. Estimated half a day on day 1, budgeted in the plan. |
-| Theming for the A2UI catalog. | The catalog components import the same `ThemeProvider` tokens, so agent-generated surfaces inherit the app theme automatically. |
-
-**When to reverse this decision:** only if the day-1 UI kit takes more than a day, which would signal that the fluency assumption was wrong. In that case switch to Tailwind + shadcn/ui before any feature code depends on the kit.
-
-**Why not Docling?** It gives better layout understanding, but its dependency footprint (multiple GB of models) makes the one-command setup and the free-tier deployment painful. pdfplumber gives us word boxes, which is what provenance needs. Recorded in `decisions.md`.
+Removed from v1: Instructor (D20), sqlglot and the read-only database role (D35), the
+`schema/view.py` pivot view (D35).
 
 ---
 
 ## 3. Repository layout
 
 ```
-distill/
-├── README.md               one-command setup, architecture summary, demo script
-├── decisions.md            required by the brief; see section 12 for seed entries
-├── docker-compose.yml      postgres + api + web; needs only LLM_API_KEY
-├── Makefile                make dev | test | e2e | seed
-├── samples/                8 heterogeneous documents + expected extraction fixtures
-├── api/
-│   ├── pyproject.toml
+Zamp assignment/
+├── CLAUDE.md
+├── README.md                 setup, architecture summary, demo script
+├── decisions.md              decision log (required deliverable)
+├── Makefile                  setup | dev | test | seed          (new)
+├── docs/                     requirements.md, implementation.md
+├── samples/                  heterogeneous sample documents + manifest.json   (new)
+├── server/
+│   ├── pyproject.toml, uv.lock, alembic.ini, .env.example
 │   ├── app/
-│   │   ├── main.py             FastAPI app, middleware, routers
-│   │   ├── config.py
-│   │   ├── db/                 models, session, migrations (alembic)
-│   │   ├── routers/            workspaces, documents, schema, records, query, events, actions
-│   │   ├── pipeline/           parse.py, extract.py, ground.py, score.py, worker.py
-│   │   ├── schema/             propose.py, drift.py, versioning.py
-│   │   ├── query/              nl2sql.py, guard.py, execute.py, present.py (A2UI emitter)
-│   │   ├── a2ui/               message builders, JSON Schema validation of emitted messages
-│   │   └── events.py           SSE event types (shared vocabulary with frontend)
-│   └── tests/
-└── web/
-    ├── package.json
-    ├── src/
-    │   ├── app/                routes, providers, layout
-    │   ├── api/                generated OpenAPI types + thin client
-    │   ├── features/
-    │   │   ├── upload/
-    │   │   ├── processing/     progress list driven by SSE
-    │   │   ├── table/          DataTable, cell renderers, confidence tiers
-    │   │   ├── viewer/         DocumentViewer, HighlightLayer, coordinate math
-    │   │   ├── review/         ReviewQueue, keyboard flow
-    │   │   ├── schema/         SchemaPanel, ProposalHost (renders A2UI proposal surface)
-    │   │   └── query/          QueryBox, ResultHost (renders A2UI result surface)
-    │   ├── a2ui/               THE ONLY place that imports @a2ui/*
-    │   │   ├── processor.ts    creates MessageProcessor with project catalog
-    │   │   ├── transport.ts    SSE → processor.processMessages, reconnect logic
-    │   │   ├── useSurface.ts   React hook: surfaces, status, error, raw stream
-    │   │   ├── catalog/        ResultTable, Metric, BarChart, ProvenanceCell,
-    │   │   │                   SchemaProposal, FieldMapping (Zod API + implementation)
-    │   │   ├── Fallback.tsx    deterministic table renderer for malformed surfaces
-    │   │   └── SurfaceBoundary.tsx  error boundary + logging
-    │   ├── ui/                 styled-components + Radix kit: theme tokens, Button, Input,
-    │   │                       Select, Dialog, DropdownMenu, Tooltip, Tabs, Badge, Toast
-    │   ├── lib/                events client, logger, formatters
-    │   └── test/               setup, MSW handlers, fixtures
-    └── e2e/                    Playwright demo-script test
+│   │   ├── main.py, config.py, deps.py, auth.py, errors.py, logging.py, middleware.py
+│   │   ├── db/               models.py, session.py, migrations/
+│   │   ├── domain/           document, fields, values, geometry, provenance, records, events
+│   │   ├── events/           bus.py, stream.py
+│   │   ├── storage/          local.py
+│   │   ├── llm/              base.py, gemini.py, fake.py, jsonschema.py, registry.py, prompts/
+│   │   ├── pipeline/         parse/, extract.py, ground.py, score.py, persist.py,
+│   │   │                     process.py, worker.py, index.py                      (index new)
+│   │   ├── schema/           similarity.py, embeddings.py, propose.py, drift.py, versioning.py
+│   │   ├── retrieval/        chunking.py, search.py                                (new)
+│   │   ├── chat/             answer.py, citations.py, service.py, suggestions.py  (new)
+│   │   ├── insights/         queryspec.py, evaluate.py, stats.py, dashboard.py    (new)
+│   │   ├── a2ui/             catalog.py, build.py, schema/ (v0.9 JSON Schema)      (new)
+│   │   └── routers/          health, workspaces, documents, records, schema, events,
+│   │                         chat, dashboard                              (chat, dashboard new)
+│   └── tests/                unit/, integration/, fixtures/
+└── client/
+    ├── package.json, vite.config.ts, tsconfig*.json
+    └── src/
+        ├── app/              App.tsx, Providers.tsx, WorkspaceLayout.tsx (header, nav,
+        │                     add-documents, processing strip host)
+        ├── api/              client.ts, schema.d.ts (generated), openapi.json
+        ├── features/
+        │   ├── upload/       FirstRunScreen and parts                      (built)
+        │   ├── processing/   ProcessingStrip, useWorkspaceEvents           (new)
+        │   ├── chat/         ChatScreen, MessageList, AssistantMessage, Citations,
+        │   │                 Composer, Suggestions, useChat                (new)
+        │   ├── data/         DataScreen, RecordsTable, cells/, ColumnMenu, Dashboard,
+        │   │                 DashboardPanel, useRecords, useDashboard      (new)
+        │   └── viewer/       SourceViewer, PageImage, HighlightLayer, useViewer (new)
+        ├── a2ui/             processor.ts, SurfaceHost.tsx, SurfaceBoundary.tsx,
+        │                     Fallback.tsx, Inspect.tsx, catalog/ (Metric, BarChart,
+        │                     LineChart, ResultTable)                       (new)
+        ├── ui/               theme, GlobalStyle, Button, Wordmark, (Dialog, Menu new)
+        ├── lib/              files, logger, workspace-token, formatters (new), sse (new)
+        └── test/             setup, msw handlers (new)
 ```
+
+Rule for the client: a feature folder owns its screen, its hooks, and its components. Shared
+primitives live in `ui/`; shared logic in `lib/`; protocol code in `a2ui/`. Nothing in
+`features/` imports from another feature except through `app/`.
 
 ---
 
 ## 4. Data model
 
-```sql
-workspaces        (id, token_hash, created_at)
-documents         (id, workspace_id, filename, mime, size, status, failure_reason,
-                   page_count, created_at)
-pages             (id, document_id, index, width, height, image_key, text_layer jsonb)
-                   -- text_layer: [{text, x0, y0, x1, y1}] per word, page coordinates
-schema_versions   (id, workspace_id, version, fields jsonb, created_at, created_by, parent_id)
-                   -- fields: [{key, label, type, description, enum_values?, currency?}]
-                   -- created_by: 'model_auto' (confident match or clearly novel field,
-                   --   applied without a prompt) | 'user' (decided via a proposal card, or
-                   --   a direct schema edit). Never the workspace token itself: only its
-                   --   hash is ever stored (decision D8). Both are equally real entries in
-                   --   history; see decision D23.
-records           (id, workspace_id, document_id, schema_version_id, created_at)
-field_values      (id, record_id, field_key, value jsonb, value_type,
-                   confidence numeric, tier text, status text,
-                   provenance jsonb, model_run_id, updated_at)
-                   -- tier: high | medium | low | conflict | verified
-                   -- status: model | human_verified | not_present
-                   -- provenance: {page_index, bbox:[x0,y0,x1,y1], quote, reasoning}
-proposals         (id, workspace_id, document_id, kind, payload jsonb, status, created_at)
-                   -- kind: initial_schema | drift ; payload includes the A2UI surface
-queries           (id, workspace_id, question, sql, row_count, duration_ms, created_at)
+Built tables are unchanged unless noted. Types are indicative.
+
+```
+workspaces          (id, token_hash, label, event_seq, created_at)                    built
+documents           (id, workspace_id, filename, mime, source_format, size_bytes,
+                     content_hash, storage_key, status, stage_detail, failure_reason,
+                     attempts, page_count, created_at, updated_at)                    built
+pages               (id, document_id, index, width_pt, height_pt, image_key,
+                     ocr_applied, locator, text_layer jsonb)                          built
+document_extractions(id, document_id, kind, schema_version, payload, model_name,
+                     model_run_id, created_at)                                        built
+schema_versions     (id, workspace_id, version, fields jsonb, created_by,
+                     change_summary, parent_id, created_at)                           built
+                     -- kept as the store of the current schema and as an audit trail
+                     -- in the database; not exposed as a history view in v2 (D38).
+records             (id, workspace_id, document_id, schema_version_id, ...)           built
+field_values        (id, record_id, field_key, value jsonb, value_type, confidence,
+                     tier, status, provenance jsonb, model_value, model_value_at,
+                     model_run_id, updated_at)                                        built
+workspace_events    (id, workspace_id, seq, type, payload, created_at)               built
+
+chunks              (id, document_id, page_index, ordinal, text, word_start, word_end,
+                     token_estimate, embedding jsonb, created_at)                     new
+                     -- one passage of a page; word_start/word_end index into
+                     -- pages.text_layer so a citation maps to boxes without re-parsing.
+chat_messages       (id, workspace_id, role, status, content, sources jsonb,
+                     citations jsonb, visual jsonb, surface jsonb, model_run_id,
+                     error, created_at, completed_at)                                 new
+                     -- role: user | assistant. status: streaming | done | stopped |
+                     -- failed. sources: retrieved chunk refs. citations: [{n, chunk_id,
+                     -- document_id, page_index, boxes, excerpt}]. visual: the query
+                     -- spec the model chose. surface: the A2UI messages built from its
+                     -- evaluation. content is written once at the end of the stream
+                     -- (or on stop); while streaming, text lives in the in-memory
+                     -- answer buffer (D44).
+dashboards          (id, workspace_id, status, stale, panels jsonb, generated_at,
+                     model_run_id, error)                                             new
+                     -- one row per workspace. panels: [{title, kind, rationale,
+                     -- query, surface}]. status: pending | ready | failed.
+
+dropped:  proposals (D38), queries (D35)
 ```
 
 Design notes:
 
-- **One `field_values` row per (record, field).** This makes provenance, confidence, and human-verified status first-class and makes "never overwrite a human correction" a one-line `WHERE status <> 'human_verified'`.
-- **A per-workspace SQL view** `ws_<id>_records` is regenerated whenever the schema version changes. It pivots `field_values` into typed columns (`(value->>'amount')::numeric`, `(value->>0)::date`, and so on). Natural-language queries target this view only, so the LLM sees a flat, typed table and the executor never touches base tables.
-- Rejected alternative: one physical table per workspace with real columns. Faster to query, but schema changes become migrations and human corrections need a shadow table. Recorded in `decisions.md`.
+- `field_values` stays tall (one row per record and field) so "never overwrite a
+  human-verified value" remains a `WHERE status <> 'human_verified'` clause (D4, D16).
+- Query specifications are evaluated in Python over the workspace's `field_values` rather
+  than through a pivot view, because the workspace is small and the evaluator is easier to
+  test than generated SQL (decision D35).
+- Vectors live in JSONB and similarity is computed in process (decision D36). A workspace of
+  25 documents at roughly 40 passages each is about a thousand vectors of 768 floats, which
+  is trivially scanned.
 
 ---
 
 ## 5. API contract
 
-All routes prefixed `/api/v1`. Workspace token in `Authorization: Bearer <token>`.
+All routes under `/api/v1`. Workspace token in `Authorization: Bearer <token>`.
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| POST | `/workspaces` | Create anonymous workspace; returns token. |
-| POST | `/workspaces/{id}/seed` | Load sample documents. |
-| GET | `/workspaces/{id}` | Schema (current version), documents, record count. |
-| POST | `/workspaces/{id}/documents` | Multipart upload (many files). Returns document IDs; processing is async. |
-| GET | `/workspaces/{id}/documents/{docId}/file` | Original file stream (Range supported for pdf.js). |
-| GET | `/workspaces/{id}/documents/{docId}/pages/{n}/image` | Rendered page PNG for non-PDF sources and thumbnails. |
-| GET | `/workspaces/{id}/records?cursor=&limit=` | Paged records with field values and provenance. |
-| PATCH | `/workspaces/{id}/records/{recId}/fields/{key}` | Human correction: `{value}` or `{not_present: true}`. |
-| POST | `/workspaces/{id}/documents/{docId}/reextract` | Re-run extraction; honors human-verified values. |
-| GET | `/workspaces/{id}/schema/versions` | Version history. |
-| PATCH | `/workspaces/{id}/schema` | Apply edits or a proposal decision; creates a new version. |
-| POST | `/workspaces/{id}/schema/revert` | `{version}`. |
-| POST | `/workspaces/{id}/schema/backfill` | `{field_keys}`; async, progress via events. |
-| GET | `/workspaces/{id}/events` | **SSE.** `Last-Event-ID` supported. |
-| POST | `/workspaces/{id}/query` | `{question}` → **SSE** stream: `sql`, then A2UI messages, then `done`. |
-| POST | `/workspaces/{id}/actions` | A2UI action round-trip: `{surface_id, action, context}` → SSE of follow-up A2UI messages. |
-| GET | `/workspaces/{id}/export?format=csv|json&filter=` | Export current view. |
-| GET | `/healthz` | Liveness, DB check, LLM key presence (not value). |
+| Method | Path                                                 | Purpose                                                                                                                                                                                 | State                       |
+| ------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| POST   | `/workspaces`                                        | Create anonymous workspace; returns token once.                                                                                                                                         | built                       |
+| GET    | `/workspaces/{id}`                                   | Cold start: schema, documents, record count, dashboard status.                                                                                                                          | built, add dashboard status |
+| POST   | `/workspaces/{id}/documents`                         | Multipart upload, many files. Async processing.                                                                                                                                         | built                       |
+| POST   | `/workspaces/{id}/documents/seed`                    | Load the sample manifest.                                                                                                                                                               | built, samples pending      |
+| GET    | `/workspaces/{id}/documents/{docId}`                 | One document with pages.                                                                                                                                                                | built                       |
+| GET    | `/workspaces/{id}/documents/{docId}/file`            | Original, byte ranges.                                                                                                                                                                  | built                       |
+| GET    | `/workspaces/{id}/documents/{docId}/pages/{n}/image` | Rendered page PNG.                                                                                                                                                                      | built                       |
+| POST   | `/workspaces/{id}/documents/{docId}/reextract`       | Re-run extraction honouring verified values.                                                                                                                                            | built                       |
+| DELETE | `/workspaces/{id}/documents/{docId}`                 | Remove document, record, chunks.                                                                                                                                                        | built, add chunks           |
+| GET    | `/workspaces/{id}/events`                            | SSE, `Last-Event-ID` resume.                                                                                                                                                            | built                       |
+| GET    | `/workspaces/{id}/records`                           | Cursor-paged records with values and provenance.                                                                                                                                        | built                       |
+| PATCH  | `/workspaces/{id}/records/{recId}/fields/{key}`      | Human correction.                                                                                                                                                                       | built                       |
+| GET    | `/workspaces/{id}/schema`                            | Current fields.                                                                                                                                                                         | built                       |
+| PATCH  | `/workspaces/{id}/schema`                            | Rename or merge fields.                                                                                                                                                                 | built (edit), add merge     |
+| GET    | `/workspaces/{id}/chat/messages`                     | Conversation history, persisted state only.                                                                                                                                             | new                         |
+| POST   | `/workspaces/{id}/chat/messages`                     | `{question}` → `202 {user_message, message_id, stream_url}`. Starts generation as a background task.                                                                                    | new                         |
+| GET    | `/workspaces/{id}/chat/messages/{msgId}/stream`      | **SSE**, per-answer stream (section 5.2). `Last-Event-ID` resume from the in-memory buffer; if the message is already terminal, replays the persisted message as a single `done` event. | new                         |
+| POST   | `/workspaces/{id}/chat/messages/{msgId}/stop`        | Cancel generation; persists what has streamed with `status = stopped`.                                                                                                                  | new                         |
+| GET    | `/workspaces/{id}/chat/suggestions`                  | Three suggested questions.                                                                                                                                                              | new                         |
+| GET    | `/workspaces/{id}/dashboard`                         | Current panels, status, stale flag.                                                                                                                                                     | new                         |
+| POST   | `/workspaces/{id}/dashboard/generate`                | Regenerate; async, progress over events.                                                                                                                                                | new                         |
+| GET    | `/workspaces/{id}/export?format=csv`                 | Table export.                                                                                                                                                                           | new, Could                  |
+| GET    | `/healthz`                                           | Liveness, database, provider name.                                                                                                                                                      | built                       |
+
+Removed: `/review`, `/proposals`, `/proposals/{id}/decide`, `/schema/versions`,
+`/schema/revert`, `/schema/backfill`, `/query`, `/actions`.
 
 ### 5.1 SSE event vocabulary (`/events`)
 
-```tsx
+```ts
 type WorkspaceEvent =
-  | { type: 'document.status'; document_id: string; status: 'uploaded'|'parsed'|'extracting'|'done'|'failed';
-      stage_detail?: string; failure_reason?: string; attempt?: number }
-  | { type: 'record.upsert'; record: Record }            // streamed per document as extraction completes
-  | { type: 'field.updated'; record_id: string; field_key: string; value: FieldValue }
-  | { type: 'schema.proposal'; proposal_id: string; kind: 'initial_schema'|'drift'; surface: A2UIMessage[] }
-  | { type: 'schema.version'; version: number }
-  | { type: 'backfill.progress'; done: number; total: number }
-  | { type: 'heartbeat' };
+  | {
+      type: "document.status";
+      document_id: string;
+      status:
+        | "uploaded"
+        | "parsing"
+        | "extracting"
+        | "indexing"
+        | "done"
+        | "failed";
+      stage_detail?: string;
+      failure_reason?: string;
+      attempt?: number;
+    }
+  | { type: "record.upsert"; record: Record }
+  | {
+      type: "field.updated";
+      record_id: string;
+      field_key: string;
+      value: FieldValue;
+    }
+  | { type: "schema.updated"; version: number; summary: string }
+  | {
+      type: "chat.progress";
+      message_id: string;
+      stage: "retrieving" | "reading" | "building" | "done" | "failed";
+      detail?: string;
+    }
+  | {
+      type: "dashboard.status";
+      status: "pending" | "ready" | "failed";
+      stale: boolean;
+    }
+  | { type: "heartbeat" };
 ```
 
-Every event has an `id` (monotonic per workspace) so reconnects resume with `Last-Event-ID`. The frontend applies events to the TanStack Query cache directly (`setQueryData`) instead of refetching, which is what keeps the table from flickering during streaming.
+`indexing` is the new document stage (chunk and embed). `chat.progress` and
+`dashboard.status` are new. `schema.proposal`, `schema.version`, and `backfill.progress`
+are removed. `chat.progress` on the workspace stream carries only coarse state (a message
+started, finished, or failed) so a second tab shows the conversation moving; the tokens
+themselves travel on the per-message stream below and are never written to
+`workspace_events`.
+
+### 5.2 Per-message answer stream (`/chat/messages/{msgId}/stream`)
+
+Decision D44. Each event has a monotonic `id` starting at 1 for that message. Events in
+the order a client will normally see them:
+
+```ts
+type AnswerEvent =
+  | {
+      type: "status";
+      stage:
+        | "retrieving"
+        | "reading"
+        | "planning"
+        | "answering"
+        | "done"
+        | "stopped"
+        | "failed";
+      detail?: string;
+    }
+  | {
+      type: "sources";
+      sources: Array<{
+        chunk_id: string;
+        document_id: string;
+        filename: string;
+        page_index: number | null;
+        locator?: string;
+      }>;
+    }
+  | {
+      type: "visual";
+      kind: "metric" | "bar" | "line" | "table";
+      title: string;
+      surface: A2UIMessage[];
+    } // complete array, sent once, before tokens
+  | {
+      type: "visual_skipped";
+      reason: "none_planned" | "empty_result" | "evaluation_failed";
+    }
+  | { type: "token"; text: string } // prose delta, placeholders already substituted
+  | {
+      type: "citation";
+      n: number;
+      chunk_id: string;
+      document_id: string;
+      filename: string;
+      page_index: number | null;
+      boxes: Box[];
+      excerpt: string;
+    }
+  | { type: "done"; message: ChatMessage } // the persisted message, authoritative
+  | { type: "error"; message: string; correlation_id: string };
+```
+
+Rules: `visual` or `visual_skipped` always precedes the first `token`, so the client can
+reserve the card's space before prose starts. A `citation` event is emitted the first time
+its marker appears in the token stream, before the token that contains the marker's closing
+bracket, so the client never renders an unresolved marker. `done` carries the whole message
+so a client that reconnected late can replace its local state wholesale.
 
 ---
 
 ## 6. Backend pipeline
 
-### 6.1 Ingest and parse (`pipeline/parse.py`)
+### 6.1 Parse, extract, ground, score, persist (built)
 
-1. Sniff content type from bytes (not extension). Reject mismatches.
-2. PDF: pdfplumber extracts words with boxes per page; pypdfium2 renders each page to PNG at 144 DPI for thumbnails and for the OCR path. If a page has fewer than 5 words, run Tesseract on the render and use its word boxes.
-3. Images: Tesseract directly.
-4. DOCX: paragraphs become "lines" with a synthetic provenance unit `{paragraph_index}`; backend renders a simple page image so the viewer has something to highlight.
-5. XLSX and CSV: each sheet becomes a page; provenance unit is a cell range `{sheet, range}`.
-6. TXT: line offsets.
+Unchanged from what exists. Summary for orientation:
 
-Output: a normalized `ParsedDocument { pages: [{ index, width, height, words: [{text, bbox}], lines: [...] }] }`. Everything downstream is format-agnostic.
+- **Parse** sniffs content type from bytes, then routes to a format parser. Every format
+  produces pages with word geometry and a rendered PNG (D18). Pages with fewer than
+  `ocr_min_words_per_page` words go through Tesseract.
+- **Extract** calls Gemini with a flat response shape: a list of `{key, value_text,
+type_guess, evidence_quote, page_index, confidence, reasoning}` (D19). The first batch
+  uses open extraction; once a schema exists, guided extraction communicates the schema in
+  the prompt and reports `extra_fields`.
+- **Ground** locates each `evidence_quote` in the page's word sequence with RapidFuzz and
+  returns word boxes (one per line if wrapped). Unlocatable quotes cap the tier at low.
+- **Score** derives the tier from grounding, confidence, and whether a judgment was made in
+  parsing the value (D5, D21).
+- **Persist** writes records and `field_values`, never touching `human_verified` rows;
+  disagreement with a verified value lands in `model_value` with the conflict tier (D16).
 
-### 6.2 Extract (`pipeline/extract.py`)
+### 6.2 Schema unification (built, narrowed)
 
-Two modes, both through Instructor with Pydantic response models:
+The initial schema is proposed by the model from the first batch and applied immediately.
+Later documents' `extra_fields` are classified against the schema with string similarity and
+embedding cosine (D24, D27). v2 changes only what happens to the **ask** outcome:
 
-- **Open extraction** (no schema yet): the model returns a list of `{key, value, value_type, evidence_quote, page_index, confidence, reasoning}` for every salient field it finds. Used for the first batch.
-- **Schema-guided extraction** (schema exists): the model fills the current schema. The response model is generated dynamically from `schema_versions.fields` with `pydantic.create_model`, plus an `extra_fields` list for anything salient that did not fit. `extra_fields` is what feeds drift detection.
+| Classification                                                             | v1            | v2 (decision D38)                                              |
+| -------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------- |
+| Unambiguous match                                                          | auto-map      | auto-map (unchanged)                                           |
+| Clearly novel                                                              | auto-add      | auto-add (unchanged)                                           |
+| Ask (borderline, competing candidates, type mismatch, unconfirmed novelty) | proposal card | **auto-add as a separate field**, `change_summary` records why |
 
-Prompting details that matter:
+The asymmetry argument from D25 still holds: a wrong split is a cheap merge later, a wrong
+merge is expensive to unpick. The user's merge is `PATCH /schema` with
+`{merge: {from: key, into: key}}`, which moves values and provenance and writes a new
+`schema_versions` row. `proposals`, the proposal routes, and the debounce setting are
+removed. `schema_versions` stays as the store of the current schema.
 
-- Pages are sent as numbered text blocks with line numbers, and the model must cite `page_index` and a verbatim `evidence_quote` for every value. This is the contract that makes grounding possible.
-- Currency values are extracted as `{amount, currency}`; dates as ISO strings; the model is told to return `null` rather than guess.
-- Max 3 retries on validation failure (Instructor), then the document is marked failed with the reason.
+### 6.3 Index: chunking and embedding (new, `pipeline/index.py`, `retrieval/`)
 
-### 6.3 Ground (`pipeline/ground.py`): the provenance sub-problem
+Runs after persist, as the document's `indexing` stage.
 
-Given `evidence_quote` and `page_index`, find the bounding box:
+1. **Chunking** (`retrieval/chunking.py`). For each page, walk `text_layer.lines` and
+   accumulate lines into passages of roughly 80 to 160 words, breaking at line boundaries,
+   with a one-line overlap between neighbours. Chunks are kept this small because a chat
+   citation highlights the whole chunk's word span (decision D45), so chunk size is
+   highlight size. Each chunk records `page_index`,
+   `word_start`, `word_end` (indices into the page's word list), and the text. A spreadsheet
+   page chunks by row groups; a DOCX page by paragraphs; the logic is the same because D18
+   already gave every format lines and words.
+2. **Records digest.** One extra chunk per document with `page_index = null` whose text is
+   the document's extracted record rendered as `label: value` lines. It is embedded like any
+   other chunk, so a question phrased in the schema's vocabulary retrieves the record even
+   when the page text uses different words. It carries no boxes and is never cited by
+   quote; a citation to a digest chunk resolves to the underlying `field_values` provenance.
+3. **Embedding.** Batches of up to 64 chunk texts through `LLMClient.embed` with
+   `gemini-embedding-001`. `FakeClient` returns recorded vectors for the sample corpus and
+   deterministic hashed pseudo-vectors otherwise, so the test suite and a no-key clone
+   retrieve something plausible (D13).
+4. Chunks are written in the document's transaction; `document.status` moves to `done` and
+   the `record.upsert` event fires only after indexing, so "askable" and "in the table" are
+   the same moment.
 
-1. Normalize both quote and page words (lowercase, collapse whitespace, strip currency symbols and thousands separators).
-2. Sliding-window fuzzy match of the quote against the page's word sequence (RapidFuzz partial ratio, threshold 85). Window size is the quote's word count plus or minus 2.
-3. Bounding box is the union of matched word boxes. If words span two lines, return one box per line (the viewer draws multiple rectangles).
-4. If no match on the cited page, try neighboring pages (models are frequently off by one on page breaks). If still nothing, `provenance.bbox = null` and the confidence tier is capped at `low`, with `reasoning` noting "could not locate quote in document."
+**Retrieval** (`retrieval/search.py`): embed the question, cosine against every chunk in the
+workspace, take the top `chat_top_k` (default 8) above `chat_min_similarity`, and always
+append the records digests of the documents those chunks belong to. Open question 1 in the
+requirements (a lexical pass for identifiers) is a Should: if time allows, add a simple
+token-overlap score and take the union of the top results from both.
 
-This step is deterministic and fully unit-testable with fixture pages, and it is where most "the model hallucinated a value" cases get caught: a hallucinated value has no quote to ground.
+### 6.4 Chat answer (new, `chat/`)
 
-### 6.4 Score (`pipeline/score.py`)
+Two model calls per answer, both on the Flash tier, run by a background task that writes
+into an in-memory **answer buffer** (`chat/buffer.py`, one per in-flight message: a list of
+events with sequence numbers plus an `asyncio.Condition`). The SSE route tails the buffer;
+the task does not know or care whether anyone is listening (decision D44).
 
-`tier` is derived, never asked of the model directly:
+**Step 1, retrieve** (section 6.3). Emit `status: retrieving`, then `sources` and
+`status: reading` with the count of passages and documents.
 
-| Condition | Tier |
-| --- | --- |
-| Grounded, model confidence ≥ 0.85, value passes type validation | high |
-| Grounded, confidence 0.6 to 0.85, or minor normalization applied (e.g. date format inferred) | medium |
-| Not grounded, or confidence < 0.6, or type coercion needed | low |
-| Two extraction runs disagree, or re-extraction disagrees with a human-verified value | conflict |
-| Human edited or accepted | verified |
+**Step 2, plan** (`CallKind.CHAT_PLAN`, structured). Prompt: the schema, the retrieved
+passages tagged `[chunk:<id>] document "<name>" page <n>`, the records digests, the last
+four turns, the question. Returns:
 
-The review queue orders by `impact = weight(field) × (1 - confidence)`, where currency and date fields carry higher weight by default and the user can adjust weights later (not in the 5-day slice).
+```python
+class ChatPlan(BaseModel):
+    answerable: bool
+    not_answerable_reason: str | None
+    visual: Visual | None           # section 6.5; the query spec, never numbers
+```
 
-### 6.5 Schema proposal and drift (`schema/`)
+If `visual` is present, evaluate its `DataQuery` (section 6.5), build the A2UI surface
+(section 6.6), and emit `visual`. Otherwise emit `visual_skipped` with the reason. Either
+way this happens **before** any prose token, so the visual card is on screen while the
+answer streams beneath it (decision D47).
 
-**Initial proposal:** after the first batch completes open extraction, one LLM call receives all `(key, value_type, sample values, document_id)` tuples and returns canonical fields: `{key, label, type, description, source_keys: [...], coverage}`. The backend validates that every source key maps to exactly one canonical field, then applies it directly — creates the `schema_versions` row with `created_by='model_auto'` and emits `schema.version`. This never blocks; the full field list renders in the schema panel and the table fills.
+**Step 3, answer** (`CallKind.CHAT_ANSWER`, streamed text via `LLMClient.stream_text`).
+Prompt: everything from step 2 plus, when a visual exists, the evaluated result as a
+compact table with named paths (`result.total`, `result.rows[0].label`, and so on). Rules
+in the system instruction:
 
-Each proposed unification of two or more source keys is then re-checked with the same D24 scoring used for drift. A merge the rule finds uncertain is **undone before the version is written**: the keys stay as separate fields, and a non-blocking `initial_schema` proposal is queued asking whether to merge them (decision D25). Confident merges — which is what `vendor_name` / `Supplier` / `Vendor` should be — are kept, so the unified-table demo is unaffected. The resolution action is a field merge (FR-16), not a split, because this path never merges on a guess.
+- write only from the passages and the result; say plainly when they do not support an
+  answer;
+- cite every factual claim inline with `[^chunk:<id>]` markers; there are no quotes to
+  write, the chunk is the citation (decision D45);
+- refer to any figure that comes from the result with a placeholder, `{{result.total}}`,
+  never by retyping it (decision D46); figures that appear verbatim in a cited passage may
+  be repeated as written;
+- do not mention the chart itself except as "the chart above" or "the table above".
 
-**Drift detection:** when schema-guided extraction returns `extra_fields`, each is scored against every existing field with two independent signals (decision D24): string similarity over the normalized `label`, and embedding cosine over `label + description`. The cheap string pass runs first, so a label that is identical after normalization never spends an embedding call. Three zones, not two:
+**Stream processing** (`chat/stream.py`) transforms the raw token stream before it reaches
+the buffer:
 
-- **auto-map** — requires all of: (a) a normalized-exact/alias hit, *or* string ≥ `drift_string_automap_min` (0.90), *or* embedding ≥ `drift_embedding_automap_min` (0.95); (b) the best candidate beats the runner-up by ≥ `drift_candidate_margin_min` (0.05) on whichever signal fired; (c) type compatibility. Applied immediately as `created_by='model_auto'`; no card.
-- **auto-add as new** — `max(string, embedding) < drift_novel_max` (0.30) against *every* existing field. Also `created_by='model_auto'`; backfill across existing documents is enqueued automatically rather than offered, since adding the field was itself automatic.
-- **everything else** — a mid-band score, two candidates inside the margin, or a type mismatch. Emits an A2UI `SchemaProposal` surface with `FieldMapping` components — map to existing / add as new / ignore — whose actions round-trip through `/actions` and are applied as `created_by='user'` once the user decides.
+1. **Marker resolution.** Hold back text from an unmatched `[^` until its `]`. On close,
+   validate the chunk identifier against the retrieved set. Known: assign the next citation
+   number (or reuse an existing one for a repeated chunk), emit a `citation` event with the
+   chunk's boxes (word span from `chunks.word_start` to `word_end`) and a short excerpt,
+   then emit the token with the marker rewritten to `[^n]`. Unknown: drop the marker.
+2. **Placeholder substitution.** Hold back text from an unmatched `{{` until `}}`. Resolve
+   the path against the evaluated result and emit the formatted value (currency with code,
+   date localised by type). An unresolvable path emits nothing and logs
+   `chat.placeholder_unresolved`.
+3. Everything else is forwarded as `token` events, coalesced to at most one event per 40 ms
+   so a fast model does not produce thousands of tiny frames.
 
-`LLMClient` gains `embed()` for this. `GeminiClient` calls the real embeddings endpoint — actual usage assumes a working API key, per D13. `FakeClient` replays recorded vectors for tests and a no-key reviewer clone, same as its other fixtures. A genuine call failure goes through the existing `LLMUnavailable`/retry path like any other model call, not a designed fallback (D24).
+**Finish.** On completion, join the emitted text, persist the assistant message with
+`status = done`, `content`, `sources`, `citations`, `visual`, `surface`, emit `done` with
+the persisted message, fire `chat.progress` on the workspace stream, and release the
+buffer after a grace period (60 s) so late resumers can still catch up. On `stop`, cancel
+the task, persist with `status = stopped`. On a model failure, persist `status = failed`
+with `error` and emit `error`.
 
-Every path — auto-map, auto-add, or user decision — writes one `schema_versions` row and one `schema.version` event, so schema history (FR-15) is a complete, reversible log regardless of which path produced a change. This is what makes the auto-apply zones safe: nothing is silent in the sense of "untracked," only in the sense of "not blocking."
+**Query specification model** (`insights/queryspec.py`, shared with the dashboard):
 
-**Applying a decision** (automatic or user-made) creates a new `schema_versions` row, regenerates the workspace view, and (if fields were added) enqueues backfill. Backfill runs schema-guided extraction restricted to the new fields and never touches `human_verified` rows.
+```python
+class DataQuery(BaseModel):
+    measure_field: str | None       # field key; None means count of records
+    aggregate: Literal['sum','count','avg','min','max']
+    group_by: str | None            # field key
+    bucket: Literal['none','month','quarter','year'] = 'none'   # for date group_by
+    filters: list[Filter] = []      # {field, op: eq|ne|gt|gte|lt|lte|contains|missing|present, value}
+    sort: Literal['value_desc','value_asc','label_asc'] = 'value_desc'
+    limit: int = 20
 
-### 6.6 Query (`query/`)
+class Visual(BaseModel):
+    kind: Literal['metric','bar','line','table']
+    title: str
+    query: DataQuery
+    unit_hint: str | None           # e.g. currency code the server should format with
+```
 
-1. `nl2sql.py`: the model receives the view's column list with types and three sample rows, plus the question, and returns `{sql, explanation, presentation_hint: 'table'|'metric'|'bar_chart'|'list'|'message'}`.
-2. `guard.py`: parse with `sqlglot`; reject anything that is not a single `SELECT`; reject references to any relation other than the workspace view; inject `LIMIT 500`; run under a Postgres role with `SELECT` only and `statement_timeout = 5s`.
-3. `execute.py`: run, capture rows, duration, and column types.
-4. `present.py`: build A2UI messages. The `presentation_hint` is a hint; the emitter overrides it when the data shape contradicts it (one row and one numeric column is always `Metric`; more than 30 rows is never `BarChart`). Result rows include `record_id` and `field_key` so `ProvenanceCell` can link back.
+**Citations to digest chunks.** A records-digest chunk has no page or boxes. A marker that
+cites one resolves to the underlying record's field provenance: the `citation` event carries
+the page and boxes of the field value the digest line came from, and the excerpt is the
+`label: value` line. This keeps "every citation lights up on a page" true for structured
+facts too.
 
-If the SQL fails, the failure is fed back to the model once for a repair attempt; a second failure returns a `message` surface explaining what was tried.
+**`LLMClient` changes.** The protocol gains `stream_text(request) -> AsyncIterator[str]`.
+`GeminiClient` wraps `generate_content_stream` and yields `chunk.text`. `FakeClient` yields
+a recorded answer in word-sized pieces with a small delay, so the client's streaming path is
+exercised in tests and in a no-key clone (D13).
+
+### 6.5 Query specification evaluation (new, `insights/`)
+
+`insights/queryspec.py` holds the `DataQuery` model (shared with the dashboard).
+`insights/evaluate.py` evaluates it in Python over the workspace's records:
+
+- load records with their `field_values` (one query, the workspace is small);
+- apply filters with type-aware comparison (`values.py` already parses every stored shape);
+- group by the `group_by` field, bucketing dates when asked;
+- aggregate the measure; `count` with no measure counts records;
+- sort and limit;
+- return `{columns: [{key, label, type}], rows: [{label, value, record_ids: [...]}]}`.
+
+Every row carries the `record_ids` that contributed, and a `table` visual carries
+`record_id` and `field_key` per cell, which is what lets provenance work inside A2UI (FR-43).
+
+`insights/stats.py` computes per-field statistics for the dashboard planner: type,
+coverage, distinct count, numeric min, max, and sum, date range, top five values.
+
+### 6.6 A2UI building (new, `a2ui/`)
+
+`a2ui/catalog.py` is the single declarative table of custom components and their property
+schemas (mirrored by Zod on the client). `a2ui/build.py` turns an evaluated result plus a
+`Visual` into a v0.9 message array:
+
+```
+createSurface        { surfaceId }
+updateDataModel      { path: '/result', value: { title, unit, columns, rows } }
+updateComponents     [ Column(root) → Text(title), <kind component bound to /result> ]
+```
+
+| Visual kind | Component     | Binding                                                          |
+| ----------- | ------------- | ---------------------------------------------------------------- |
+| metric      | `Metric`      | `value: {path: '/result/rows/0/value'}`, `label`, `unit`         |
+| bar         | `BarChart`    | `rows: {path: '/result/rows'}`, `xKey: 'label'`, `yKey: 'value'` |
+| line        | `LineChart`   | same as bar, used when `bucket != none`                          |
+| table       | `ResultTable` | `columns`, `rows: {path: '/result/rows'}`                        |
+
+Tests validate every emitted array against the v0.9 JSON Schema vendored under
+`a2ui/schema/`. The model never sees or writes an A2UI message; it writes a `Visual`.
+
+### 6.7 Dashboard generation (new, `insights/dashboard.py`)
+
+Triggered when the last document of the first batch reaches a terminal state, and by
+`POST /dashboard/generate`. One structured call to the Flash tier, `CallKind.PLAN_DASHBOARD`:
+
+**Prompt:** document count, the schema, the per-field statistics, and the instruction to
+propose up to six panels a person scanning this collection would want, each as a title, a
+kind, a `DataQuery`, and a one-sentence rationale grounded in the statistics.
+
+**Response model:** `DashboardPlan { panels: list[Panel] }` where `Panel` is `Visual` plus
+`rationale: str`.
+
+**Post-processing:** evaluate every panel; drop empty results, single-row bar charts, and
+metrics over fields with coverage below a third; build a surface per surviving panel; write
+the `dashboards` row; emit `dashboard.status`. Documents added, values corrected, or fields
+merged set `stale = true`.
+
+### 6.8 Suggested questions (new, `chat/suggestions.py`)
+
+`CallKind.SUGGEST_QUESTIONS` on the Flash tier with the schema, statistics, and the first
+digest chunk of three documents. Returns three short questions. Cached on the workspace until
+the schema changes.
+
+### 6.9 `CallKind` changes
+
+`NL2SQL` is removed. Added: `CHAT_PLAN` (structured), `CHAT_ANSWER` (streamed text),
+`PLAN_DASHBOARD`. `SUGGEST_QUESTIONS` stays. `needs_strong_model` remains true only for
+extraction and schema calls.
 
 ---
 
-## 7. A2UI integration (frontend)
+## 7. A2UI integration (client)
 
 ### 7.1 Installation
 
 ```bash
-npm i @a2ui/react@0.11.0 @a2ui/web_core@0.10.7 zod@^3.25.76
+npm i @a2ui/react@0.11.0 @a2ui/web_core@0.10.7 recharts @tanstack/react-table
 ```
 
-Pin exactly in `package.json` (no caret on the two `@a2ui` packages). The renderer has shipped breaking changes at 0.9.1, 0.10.0, and 0.11.0.
+Exact pins on the two `@a2ui` packages. Zod stays at `3.25.76`. Install with
+`--legacy-peer-deps` as a one-off if npm's solver crashes (decision D33); the lockfile makes
+the result reproducible.
 
-### 7.2 Processor and transport (`a2ui/processor.ts`, `a2ui/transport.ts`)
+### 7.2 Module shape (`client/src/a2ui/`)
 
-```tsx
-import { MessageProcessor } from '@a2ui/web_core/v0_9';
-import { basicCatalog } from '@a2ui/react/v0_9';
-import { distillCatalog } from './catalog';
+- `processor.ts`: creates a `MessageProcessor` with the basic catalog plus the project
+  catalog. One processor per surface; created inside `SurfaceHost`.
+- `SurfaceHost.tsx`: takes a complete `messages: A2UIMessage[]` array (from a chat
+  `visual` event or a dashboard panel), feeds it to a fresh processor, subscribes to surface
+  creation, and renders `A2uiSurface`. A2UI messages are never streamed piecemeal: the
+  answer stream is SSE, but the surface arrives whole in one event (decision D47).
+- `SurfaceBoundary.tsx`: error boundary around every host; on render error, unknown
+  component, or a surface that never appears, renders `Fallback.tsx` and logs
+  `a2ui.fallback`.
+- `Fallback.tsx`: reads `/result` from the data model in the message array and renders rows
+  as a plain table. Always has something to show because the server always sends the data
+  model.
+- `Inspect.tsx`: developer toggle showing the raw message array.
+- `catalog/`: `Metric`, `BarChart`, `LineChart`, `ResultTable`, each as an `.api.ts` (Zod)
+  and a `.tsx` implementation built with the same theme tokens as the rest of the client.
+  `ResultTable` reuses the cell renderers from `features/data/cells/` and opens the viewer
+  through a callback prop supplied by the host.
 
-export function createProcessor() {
-  return new MessageProcessor([basicCatalog, distillCatalog]);
-}
+### 7.3 Safety
 
-// transport.ts: SSE lines → processor
-export function connectSurfaceStream(url: string, processor: MessageProcessor, onMeta: (m: MetaEvent) => void) {
-  const es = new EventSource(url); // for POST /query use fetch + ReadableStream instead
-  es.addEventListener('a2ui', (e) => processor.processMessages([JSON.parse(e.data)]));
-  es.addEventListener('sql',  (e) => onMeta({ type: 'sql', ...JSON.parse(e.data) }));
-  es.addEventListener('done', () => es.close());
-  return () => es.close();
-}
-```
-
-`POST /query` cannot use `EventSource` (GET only), so the query transport uses `fetch` with a `ReadableStream` reader and a small SSE line parser. Both transports share the reconnect and parsing code.
-
-### 7.3 Surface hook (`a2ui/useSurface.ts`)
-
-Follows the pattern in the `@a2ui/react` README: subscribe to `processor.onSurfaceCreated` and `onSurfaceDeleted`, mirror `processor.model.surfacesMap` into React state, and expose `{ surfaces, status: 'idle'|'streaming'|'done'|'error', rawMessages }`. `rawMessages` powers the "Inspect surface" developer toggle.
-
-### 7.4 Custom catalog (`a2ui/catalog/`)
-
-A2UI v0.9 separates a component's API (a Zod schema) from its implementation. Sketch for the result table:
-
-```tsx
-// ResultTable.api.ts
-import { z } from 'zod';
-import { CommonSchemas } from '@a2ui/web_core/v0_9';
-
-export const ResultTableApi = {
-  name: 'ResultTable',
-  schema: z.object({
-    columns: z.array(z.object({ key: z.string(), label: z.string(), type: z.enum(['string','number','currency','date','boolean']) })),
-    rows: CommonSchemas.DynamicString,        // JSON pointer path into the data model, e.g. {path: '/rows'}
-    onRowSelect: CommonSchemas.Action.optional(),
-  }),
-};
-
-// ResultTable.tsx
-import { createComponentImplementation } from '@a2ui/react/v0_9';
-export const ResultTable = createComponentImplementation(ResultTableApi, ({ props }) => {
-  // props.rows is resolved by the Generic Binder; props.onRowSelect is a ready-to-call function
-  return <DataTableLite columns={props.columns} rows={parseRows(props.rows)} onRowSelect={props.onRowSelect} />;
-});
-```
-
-Catalog members and their purpose:
-
-| Component | Used in | Notes |
-| --- | --- | --- |
-| `ResultTable` | query results | Reuses the same cell renderers as the main table; virtualized above 100 rows. |
-| `Metric` | query results | Big number, unit, optional comparison text. |
-| `BarChart` | query results | Recharts; capped at 30 bars; falls back to `ResultTable` above that. |
-| `ProvenanceCell` | inside `ResultTable` | Carries `record_id` and `field_key`; click opens the viewer. |
-| `SchemaProposal` | schema panel | Container for `FieldMapping` children with Accept all / Review actions. |
-| `FieldMapping` | schema proposals | Field name, detected type, sample values, three-way choice; the choice is an A2UI action. |
-
-Exact helper names for child references (`componentId()`, `childList()`) and the action-dispatch wiring must be confirmed against the installed README on day 1; the 0.11.0 changelog changed how child references are marked.
-
-### 7.5 Safety and fallback
-
-- `SurfaceBoundary.tsx` wraps every `A2uiSurface`. On render error, on `onError` reports of unknown component types, or if no surface arrives within 15 seconds, it renders `Fallback.tsx` with the raw result rows (the backend always sends rows in the data model, so the fallback has something to show) and logs an `a2ui.fallback` event.
-- Agent-provided strings are rendered as text, never as HTML. Component count per surface is capped at 200 in the transport layer before the processor sees the messages.
-- The backend validates every emitted message against the v0.9 JSON Schema in tests, so malformed payloads are caught in CI rather than in the browser.
-
-### 7.6 Deployment and build risks (verified September 3, 2026)
-
-A2UI is pure JavaScript with no native dependencies, so it adds nothing to the Docker build and needs no system packages. The risks are build-configuration and packaging issues, all of which are handled at day 1 rather than discovered at deploy time.
-
-| Risk | Verified finding | Handling |
-| --- | --- | --- |
-| **Zod version conflict** | Confirmed hard runtime failure. See section 7.1. | Pin `zod@3.25.76` exactly; CI asserts `npm ls zod` shows one version. |
-| **Default catalog CSS is broken in the published tarball** | `@a2ui/react@0.11.0` compiles its CSS-module imports to empty objects, so `Button` renders as `<button class="">`. The stylesheet `v0_9/index.css` ships in the tarball but is absent from the package `exports` map, so importing it by package name fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. The declared `./styles/structural.css` export points to a file that does not exist in the tarball at all. | **Does not affect us.** We ship our own styled-components catalog, and the basic catalog's layout components (`Row`, `Column`, `Card`) use inline styles, which work. We use the basic catalog only for layout and text. If default styling were ever needed, the fallback is `injectBasicCatalogStyles()` from `web_core`, which uses `adoptedStyleSheets` and needs no bundler CSS handling. This is a second, independent reason the styled-components decision in section 2.3 is the right one. |
-| **`injectBasicCatalogStyles()` crashes under jsdom** | Throws `Cannot read properties of undefined (reading 'includes')` because jsdom does not implement `document.adoptedStyleSheets`. | Do not call it (see above). If it is ever needed, add an `adoptedStyleSheets = []` polyfill to `web/src/test/setup.ts`. |
-| **Bundle size** | A minimal surface plus the basic catalog builds to 239 kB raw, 56 kB gzipped, pulling in `markdown-it`, `date-fns`, `zod`, `zod-to-json-schema`, and `@preact/signals-core`. | Acceptable for a desktop-first tool. The A2UI route is lazy-loaded with `React.lazy` so the initial table view does not pay for it. Budget asserted in CI with `size-limit` at 70 kB gzipped for the A2UI chunk. |
-| **SSE buffering behind a proxy** | Not A2UI-specific, but A2UI streaming is the thing that breaks. Reverse proxies buffer `text/event-stream` and compression middleware defeats it entirely, producing a surface that renders only after the whole response completes. | Set `X-Accel-Buffering: no` and `Cache-Control: no-cache` on all SSE responses; exclude `/events` and `/query` from the compression middleware; send a comment heartbeat every 15 seconds. Deployed-environment smoke test asserts the first A2UI message arrives before the last one. |
-| **Protocol churn** | Breaking changes in three consecutive minor releases; v1.0 is a release candidate. | Exact pins, lockfile committed, `npm ci` in the Docker build, and all A2UI code confined to `web/src/a2ui/`. |
-| **Renderer regressions reaching production** | The published package has had defects (the CSS issue above; a manifest problem reported in April 2026). | A Vitest smoke test renders one surface per catalog component and asserts on output; it runs in CI, so a bad upgrade fails the build rather than the demo. |
-
-The net answer on deployment: **no, A2UI will not cause deployment problems**, provided Zod is pinned to 3 and the SSE endpoints are configured to stream. Both are one-line fixes, and both are day-1 checklist items in section 13.
+Strings render as text. The host caps components per surface at 100 and string length at
+2,000 characters before the processor sees the messages. The catalog is the allow-list.
 
 ---
 
-## 8. Frontend implementation details
+## 8. Client implementation details
 
-### 8.1 State model
+### 8.1 Workspace layout (`app/WorkspaceLayout.tsx`)
 
-- **Server state** (documents, records, schema, versions): TanStack Query. SSE events mutate the cache with `setQueryData`; no polling.
-- **UI state** (selected cell, review cursor, viewer page and zoom, column layout): Zustand, persisted per workspace in `localStorage` for column layout only.
-- **A2UI state**: owned by `MessageProcessor` instances inside the hook; never duplicated into Zustand.
+Header with wordmark, workspace label, "Add documents" (opens the same intake used on
+screen 1), "Copy link" (D31), and two tabs: Chat and Data. The processing strip renders
+under the header on both tabs while any document is not terminal. `useWorkspaceEvents`
+opens the SSE connection once per layout and applies events to the TanStack Query cache.
 
-### 8.2 Data table
+### 8.2 Chat (`features/chat/`)
 
-- TanStack Table with `@tanstack/react-virtual` for rows and columns.
-- Cell renderer is selected by field type; each renderer receives `FieldValue` and draws the tier marker (an icon plus a subtle left border, never color alone).
-- Inline edit uses a type-specific editor (date picker, currency input with code, enum select). Save issues `PATCH .../fields/{key}` with optimistic update and rollback on failure.
+- `useChat`: `GET messages` on mount. Asking is a mutation: append the user bubble and an
+  assistant bubble in `streaming` state, `POST messages`, then hand the returned
+  `stream_url` to `useAnswerStream`.
+- `useAnswerStream(messageId, streamUrl)` (`lib/sse.ts` underneath): opens a native
+  `EventSource` (the stream is a `GET`, so no custom parser), applies events to a local
+  reducer keyed by message id, and reconnects with backoff. The browser sends
+  `Last-Event-ID` on its own reconnects; on a deliberate remount the hook passes the last
+  seen id as a query parameter. On `done` it writes the persisted message into the TanStack
+  Query cache and closes. On `error` or a terminal reconnect failure it falls back to
+  `GET messages` to recover whatever was persisted. A **Stop** button calls the stop route
+  and closes the source.
+- Streaming reducer state per message: `stage`, `sources`, `visual` (or `skipped`), `text`
+  (appended tokens), `citations` (by `n`), `status`. Tokens are appended into a `ref` and
+  flushed to state on `requestAnimationFrame`, so a burst of frames costs one render.
+- `AssistantMessage` renders, top to bottom: the **stage line** with source chips (collapses
+  to a single "6 passages from 4 documents" line once prose starts); the **visual card**
+  (`SurfaceHost` in a `SurfaceBoundary` with the inspect toggle) once `visual` arrives, with
+  a fixed-height skeleton reserved from `status: planning` until `visual` or
+  `visual_skipped` so the prose below never jumps; the **prose**, rendered by a small
+  streaming markdown renderer that tolerates an unclosed emphasis or list at the tail and
+  never emits raw HTML, with `[^n]` rendered as numbered buttons; a blinking caret while
+  streaming; then the **citations list** as they resolve; and a "Stopped" or error footer
+  when applicable. Decision D47 covers why the visual sits above the prose.
+- Clicking a marker or citation calls
+  `useViewer().open({documentId, pageIndex, boxes, excerpt})`. A `ResultTable` cell inside
+  the visual opens the viewer the same way through the callback the host supplies.
+- Auto-scroll follows the stream only while the user is at the bottom of the conversation;
+  scrolling up pauses it and shows a "Jump to latest" pill.
 
-### 8.3 Document viewer and highlight math
+### 8.3 Data (`features/data/`)
 
-- PDF pages render with react-pdf at a chosen scale `s`. Provenance boxes are stored in PDF points with a top-left origin as produced by pdfplumber. Overlay rectangle = `bbox × s`. (pdfplumber already flips the PDF's bottom-left origin, so no extra transform; this is asserted by a unit test with a known fixture.)
-- For non-PDF sources, the backend serves a page image plus its pixel dimensions; the same overlay code runs with `s = renderedWidth / imageWidth`.
-- Clicking a cell scrolls the viewer to the page, animates the highlight, and shows a side card with quote and reasoning.
+- `RecordsTable`: TanStack Table over `GET records`; columns from `GET schema`; cell
+  renderers by type in `cells/`, each drawing the tier mark and label from theme tokens.
+  Column header menu: sort, hide, rename, merge into.
+- Cell click opens the viewer with the value's provenance and reasoning. Cell double-click
+  (FR-50, Should) opens a type-specific editor; save issues the PATCH with optimistic
+  update and rollback.
+- `Dashboard`: `GET dashboard`; renders a `DashboardPanel` per panel (title, rationale,
+  `SurfaceHost`), a stale banner, and Regenerate. Status changes arrive over events.
 
-### 8.4 Review queue
+### 8.4 Source viewer (`features/viewer/`)
 
-- Derived selector over records: cells where `tier ∈ {low, conflict}` ordered by impact. Keyboard handler is a single `useReviewKeys` hook; every action is available as a visible button too.
+- `SourceViewer`: a right-side panel (Radix Dialog in non-modal mode) with the page image
+  from `/pages/{n}/image`, page controls, and the detail card.
+- `HighlightLayer`: draws rectangles from boxes in page points scaled by
+  `renderedWidth / width_pt`. Same code for every format because every format is a backend
+  render (D18, D43). A unit test asserts the scaling with a known fixture.
 
-### 8.5 Empty and error states
+### 8.5 State
 
-- Empty workspace: illustration-free, one sentence, drop zone, "Try with sample documents."
-- Every error toast shows the correlation ID and a "copy details" button.
+- Server state in TanStack Query, mutated by workspace SSE events.
+- In-flight answer state in the `useAnswerStream` reducer, local to the chat feature; it is
+  written into the TanStack Query cache only on `done`, so the cache holds persisted truth
+  and the reducer holds the live stream.
+- UI state in one Zustand store: viewer target, inspect toggle, hidden columns (persisted
+  per workspace in `localStorage`).
+- A2UI state lives inside each `SurfaceHost`'s processor and is never copied elsewhere.
 
 ---
 
 ## 9. Testing strategy
 
-Tests are chosen to catch failures we would actually hit, not to pad coverage.
+**Backend (pytest, `uv run pytest` from `server/`; about 350 tests exist)**
 
-**Backend (pytest)**
-
-- `ground.py`: quotes with different casing, currency formatting, line wraps, off-by-one page citation, and unfindable quotes. Uses fixture pages from `samples/`.
-- `score.py`: tier table above as parametrized cases.
-- `schema/drift.py`: rename detection (`Supplier` → `vendor_name`), type conflict, genuinely new field.
-- `query/guard.py`: rejects `UPDATE`, `;` chaining, references to base tables, missing `LIMIT`.
-- Re-extraction preserves `human_verified` rows (integration test against a Postgres test container).
-- Every emitted A2UI message validates against the v0.9 JSON Schema.
-- SSE resume: events after `Last-Event-ID` are replayed exactly once.
+- Existing: parsers, geometry, grounding, scoring, values, schema similarity and drift,
+  event stream resume, offline extraction, workspaces and view integration.
+- Remove: tests for proposals, review queue, schema revert, and `schema/view.py`.
+- New: chunking (boundaries, overlap, word spans map back to boxes); retrieval ranking on a
+  fixture corpus with recorded vectors; `DataQuery` evaluation (filters per type, date
+  buckets, count without measure, empty results); stream processing with markers and
+  placeholders split across token boundaries, unknown chunk identifiers dropped, repeated
+  chunks reusing a number, `citation` emitted before its token; the answer buffer replays
+  from a given sequence and a late subscriber to a finished message receives one `done`;
+  stop persists partial text; A2UI builders validate against the v0.9 JSON Schema for every
+  kind; dashboard post-processing drops degenerate panels; merge moves values and
+  provenance and preserves verified status.
 
 **Frontend (Vitest + Testing Library + MSW)**
 
-- Highlight overlay coordinate math with known boxes and scales.
-- Table applies `record.upsert` and `field.updated` events without remounting rows (assert row identity).
-- Confidence tier renders an icon and text label, not only a color.
-- Inline edit: optimistic update and rollback on 500.
-- A2UI: a fixture stream renders `Metric`; a stream with an unknown component triggers `Fallback` and logs the event; a stream that never arrives triggers the timeout fallback.
-- SSE transport reconnects with backoff and sends `Last-Event-ID`.
+- Existing: theme contrast, file intake, first-run screen.
+- New: highlight scaling math; cell renderers show a tier mark and label; `SurfaceHost`
+  renders each catalog component from a fixture array; an unknown component triggers the
+  fallback and logs; the answer stream reducer applies a recorded event sequence and yields
+  the expected text, citations, and visual, in order; a `visual` event before tokens fills
+  the reserved skeleton without shifting the prose; a citation button opens the viewer; a
+  reconnect replays from the last id without duplicated text; Stop leaves partial text
+  marked stopped; the processing strip applies `document.status` events without remounting
+  rows.
 
-**End to end (Playwright)**
+**End to end**
 
-- One test that runs the acceptance demo script from `requirements.md` section 8 against a seeded workspace with the LLM mocked by a recorded fixture, so it is deterministic in CI.
-
-**CI (GitHub Actions)**: lint, typecheck, backend tests with Postgres service, frontend tests, Playwright against `docker compose`. Green CI is a precondition for deploy.
+A written demo script in the README (requirements section 8), run manually before
+submission. Playwright is cut for this round.
 
 ---
 
 ## 10. Setup, deployment, observability
 
-**Local:** `cp .env.example .env`, set `LLM_API_KEY`, then `docker compose up`. Compose starts Postgres, runs migrations, seeds nothing (the UI's sample button does that), and serves the web build from the API container at `http://localhost:8000`. `make dev` runs Vite and Uvicorn with hot reload for development.
+**Local setup (`make setup`)**: checks for Homebrew; installs `postgresql@16`, `tesseract`,
+`uv` if missing; starts Postgres; creates the `distill` database and role from
+`server/scripts/bootstrap_db.sql`; `uv sync` in `server/`; `npm ci` in `client/`; runs
+`alembic upgrade head`. **`make dev`** starts Uvicorn with one worker (D9) and Vite with the
+`/api` proxy. Environment: `GEMINI_API_KEY` is the only required variable with
+`LLM_PROVIDER=gemini`; `LLM_PROVIDER=fake` runs everything offline against recorded fixtures.
 
-**Deployment:** a single container on Fly.io (or Railway) with an attached Postgres and a persistent volume for uploads. Frontend static assets are served by FastAPI so judges get one URL and there is no CORS surface. Environment variables: `DATABASE_URL`, `LLM_API_KEY`, `STORAGE_DIR`, `MAX_UPLOAD_MB`.
+**Deployment**: out of scope to verify without a container runtime. A `Dockerfile` and
+`docker-compose.yml` may be authored as a Could; the README states plainly whether they were
+tested.
 
-**Observability:**
-
-- Backend: structlog JSON logs with `request_id`, `workspace_id`, `document_id`, stage timings, LLM token counts and latency per call. `/healthz` reports DB and storage checks.
-- Frontend: `lib/logger.ts` emits structured events (`upload.start`, `extract.done`, `correction.made`, `query.run`, `a2ui.fallback`) to console in dev and to `POST /api/v1/client-events` in prod (fire-and-forget, batched).
-- The processing progress list in the UI is literally the event log for that document, so users see the same information operators would.
-
----
-
-## 11. Five-day plan
-
-| Day | Goal | Shippable at end of day |
-| --- | --- | --- |
-| 1 | Scaffold monorepo, compose, CI. Theme tokens and the `ui/` kit on Radix (half day, hard stop; see section 2.3). Upload → parse → open extraction → records in DB. Basic table. Verify A2UI package APIs against installed README and write the `useSurface` spike. | A file becomes a table row locally. |
-| 2 | Grounding + scoring + viewer with highlights. SSE events driving progress and table. Sample documents and seed endpoint. Deploy. | **Demo-able slice with a URL:** upload, see rows, click cell, see highlight. |
-| 3 | Initial schema proposal and drift detection. `SchemaProposal` and `FieldMapping` catalog components. Human corrections and re-extraction guarantees. Schema versions and revert. | Heterogeneous documents produce proposals instead of breakage. |
-| 4 | Query: NL→SQL, guard, executor, A2UI presenter, `ResultTable`/`Metric`/`BarChart`, fallback, inspect toggle. Export. | Ask questions, get agent-shaped results. |
-| 5 | Review queue with keyboard flow, empty and error states, accessibility pass, Playwright demo test, README, `decisions.md` polish, final deploy. | Everything in the acceptance script passes. |
-
-Buffer strategy: if day 3 slips, drift detection ships without backfill (FR-14 is Should). If day 4 slips, `BarChart` is cut and `Metric` plus `ResultTable` carry the demo.
+**Observability**: structlog JSON with `request_id`, `workspace_id`, `document_id`, stage
+timings, and per-call model, tokens, latency. Chat and dashboard calls log the retrieved
+chunk identifiers and whether a visual was dropped. The client logs `upload.start`,
+`chat.ask`, `chat.answered`, `chat.visual_dropped`, `a2ui.fallback`, `dashboard.generated`.
 
 ---
 
-## 12. Seed entries for `decisions.md`
+## 11. Plan for the remaining days
 
-Each entry follows the brief's format: decision, alternatives, reasoning, what was cut.
+Day 1 (September 3) and day 2 (September 4) built the backend pipeline, schema inference,
+events, the client scaffold, and the upload screen. Today also carries this pivot.
 
-1. **Framed the problem as unification and trust, not extraction.** Alternatives: single-document extractor with a nice viewer; generic chat-over-documents. Reasoning: extraction alone is commodity; the cross-document schema problem is where naive approaches break and where a finance ops user actually loses time. Cut: per-document Q&A chat.
-2. **Python + FastAPI backend over Node.** Alternatives: Node/TS for shared types; Go. Reasoning: parsing and LLM structured-output tooling maturity; A2UI reference agents are Python. Cut: shared type package; replaced by OpenAPI-generated client.
-3. **pdfplumber + Tesseract over Docling.** Reasoning: word boxes are what provenance needs; Docling's model footprint breaks one-command setup on free tiers. Cut: layout-aware table extraction for complex multi-column PDFs.
-4. **Postgres JSONB `field_values` plus a per-workspace typed view, over physical tables per workspace.** Reasoning: schema changes are cheap, human corrections are first-class, and the LLM still sees a flat typed table. Accepted tradeoff: view regeneration on every schema version; query performance is fine at the scale of this round.
-5. **Derived confidence tiers instead of trusting model self-report.** Reasoning: grounding success is a stronger signal than a number the model made up; conflicts between runs are a real-world failure mode worth surfacing. Cut: a second full extraction pass on every document by default (available as a per-document "double-check" action instead).
-6. **A2UI for query results and schema proposals, not for the whole app.** Alternatives: hand-built result components with a `presentation_hint` switch; CopilotKit's A2UI renderer over AG-UI. Reasoning: agent-chosen presentation is the genuine value; using A2UI everywhere would make the core table depend on an evolving protocol. CopilotKit adds a runtime layer we do not need. Accepted risk: renderer churn, mitigated by exact pins, a single module boundary, and a deterministic fallback.
-7. **SSE over WebSockets.** Reasoning: one-directional streaming is all we need; SSE resumes with `Last-Event-ID` for free and works through every proxy. Cut: live cursors and multi-user presence.
-8. **Anonymous workspaces with a bearer token in the URL, no accounts.** Reasoning: five days; auth demonstrates nothing about the problem. Accepted risk: anyone with the URL can see the workspace; stated clearly in the UI.
-9. **In-process job queue over Redis + worker.** Reasoning: single instance, five days. Documented upgrade path. Accepted risk: a deploy restarts in-flight extractions; the status model makes them resumable on boot.
-10. **Read-only SQL role, `sqlglot` allow-list, 5-second timeout, 500-row cap for generated SQL.** Reasoning: the model writes SQL; we assume it will eventually write something dangerous. Cut: user-editable SQL.
-11. **styled-components + Radix Primitives over Tailwind + shadcn/ui.** Alternatives: Tailwind + shadcn/ui (fastest to a finished component set); Linaria or Panda CSS (styled API with zero runtime). Reasoning: author fluency in a 5-day build outweighs shadcn's head start; Radix provides the accessibility and behavior; the project is a Vite single-page app, so the server-component concern behind styled-components' maintenance mode does not apply. Accepted risks: a library its maintainer no longer recommends for new projects, and runtime CSS-in-JS cost, mitigated by static variants driven by data attributes and a single `ui/` module boundary that makes a Linaria swap mechanical. Cut: a prebuilt component library of any kind.
+| Day                | Backend                                                                                                                                                                                                                                                                                                                                        | Client                                                                                                                                                                                                                                                            | Shippable at end of day                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **3, Sept 5**      | Remove proposals, review, revert, backfill, view, sqlglot. `chunks` and `chat_messages` migrations. Chunking, embedding, retrieval. `DataQuery` model and evaluator with tests. `LLMClient.stream_text` on Gemini and the fake. Plan call, answer buffer, stream processor (markers, placeholders), the three chat routes. `CallKind` changes. | `WorkspaceLayout` with tabs, add-documents, processing strip over SSE. `lib/sse.ts`, `useAnswerStream`, and the `ChatScreen` streaming prose with citation buttons (no visuals yet). `SourceViewer` with highlights from citations.                               | Ask a question and watch it stream with citations that light up the page.                                      |
+| **4, Sept 6**      | A2UI builders and JSON Schema validation. Visual planning and the `visual` event. Suggestions. Sample corpus and manifest. Stop route.                                                                                                                                                                                                         | Install A2UI and Recharts. `a2ui/` module with four catalog components, fallback, inspect. Visual card with reserved skeleton in `AssistantMessage`. Stop button, reconnect, jump-to-latest. `RecordsTable` with typed cells and tiers, cells opening the viewer. | The chat screen works end to end: sources, chart, streaming prose, citations. The table is visible with tiers. |
+| **5, Sept 7**      | Field stats, dashboard planner, evaluation, persistence, stale marking, auto-generation on first batch. Schema merge. Delete cascades chunks.                                                                                                                                                                                                  | `Dashboard` with panels, rationale, stale, regenerate. Column menu rename and merge. Inline cell edit (Should). Empty and error states.                                                                                                                           | The Data screen works end to end. Demo script passes.                                                          |
+| **Buffer, Sept 8** | Export CSV. Lexical retrieval pass.                                                                                                                                                                                                                                                                                                            | Accessibility pass, polish.                                                                                                                                                                                                                                       | README, `decisions.md` final review, submission.                                                               |
+
+Buffer strategy: if day 4 slips, `LineChart` is cut and `Metric`, `BarChart`, `ResultTable`
+carry the chat. If day 5 slips, the dashboard ships with automatic generation only and no
+regenerate control, and inline cell edit is dropped in favour of demonstrating the
+correction guarantee through the re-extract route.
 
 ---
 
-## 13. Day-1 verification checklist
+## 12. Verification checklist for the remaining work
 
-Items in this document that must be confirmed against real packages before code depends on them:
-
-- [ ]  `@a2ui/react@0.11.0` + `@a2ui/web_core@0.10.7` + `zod@3.25.x` install cleanly with React 19.2.x and the README quick-start renders.
-- [ ]  Exact export names for child reference markers and action dispatch in `@a2ui/react/v0_9` (changed in 0.11.0).
-- [ ]  The v0.9 message JSON Schema location inside the A2UI repository, for backend validation in tests.
-- [ ]  Current Anthropic model identifier and Instructor's Anthropic client signature.
-- [ ]  pdfplumber word coordinate origin on the sample PDFs (assert with a fixture before writing overlay math).
-- [ ]  `create-vite` template's TypeScript version and whether `openapi-typescript` runs on it without flags.
+- [ ] `@a2ui/react@0.11.0` and `@a2ui/web_core@0.10.7` install with React 19.2.8 and Zod 3.25.76; a `Metric` surface renders from a fixture array under Vitest.
+- [ ] Exact export names for child references and the data-binding `path` shape in `@a2ui/react/v0_9` (changed in 0.11.0).
+- [ ] The v0.9 JSON Schema file vendored into `server/app/a2ui/schema/` and used by tests.
+- [ ] Gemini `gemini-embedding-001` output dimension confirmed with a real key; cosine implementation tested against it.
+- [ ] `generate_content_stream` on the Flash tier yields text deltas at a cadence that makes the 3 s first-token target realistic; measure with a real key on day 3.
+- [ ] `sse-starlette` sends `id:` lines and honours `Last-Event-ID` on the per-message route the same way it does on `/events`; a Vite dev proxy passes `text/event-stream` through unbuffered.
+- [ ] `DataQuery` evaluation on the sample corpus produces the "total by vendor" and "missing purchase order count" results the demo script needs.
+- [ ] Sample corpus contains at least one non-invoice document with prose (a contract or policy) so the retrieval demo has something non-tabular to cite.
+- [x] pdfplumber coordinate convention asserted against a fixture (decision D17, done).
+- [x] `create-vite` TypeScript version and `openapi-typescript` behaviour (decision D33, done).

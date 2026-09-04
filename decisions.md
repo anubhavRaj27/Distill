@@ -20,7 +20,8 @@ Legend: **Active** the decision stands. **Re-affirmed** it was challenged and he
 
 ## D1. Frame the problem as unification and trust, not extraction
 
-**Date:** September 2, 2026 · **Status:** Active
+**Date:** September 2, 2026 · **Status:** Superseded September 4, 2026 by D34. The trust
+half stands; the unification-with-a-review-loop half is withdrawn.
 
 **Decision.** Treat single-document extraction as table stakes and go deep on two harder
 problems: unifying many mutually disagreeing documents into one queryable schema, and making
@@ -56,19 +57,19 @@ weak for both parsing and model tooling, which is the wrong trade for a five day
 **Re-affirmation, September 3, 2026.** The choice was challenged on three grounds worth
 recording, because two of them are real costs this project now carries.
 
-1. *Nothing in the chosen stack was installed on the development machine.* Python was system
+1. _Nothing in the chosen stack was installed on the development machine._ Python was system
    3.9.6 only, with no Postgres, no Tesseract, and no `uv`. Resolved by installing Python
    3.12.14, Postgres 16.15, Tesseract 5.5.3, and `uv` 0.12.9 through Homebrew. Cost about
    twenty minutes, so this objection did not survive contact with the facts.
-2. *A Node backend would let one Zod schema per Agent-to-User Interface catalog component
-   serve both sides.* This is a genuine loss. The backend now validates emitted messages
+2. _A Node backend would let one Zod schema per Agent-to-User Interface catalog component
+   serve both sides._ This is a genuine loss. The backend now validates emitted messages
    against the protocol's JSON Schema while the client validates with Zod, so requirements
    A2-02 and A2-06 are enforced twice from two sources of truth. **Accepted, and mitigated**
    by generating the backend's component contracts from a single declarative table in
    `app/a2ui/catalog.py` and asserting message validity in tests, so a divergence fails the
    build rather than the demo.
-3. *A Node backend extracting geometry with pdf.js would share a coordinate space with the
-   pdf.js-based viewer by construction.* Also a genuine loss, and the sharper of the two.
+3. _A Node backend extracting geometry with pdf.js would share a coordinate space with the
+   pdf.js-based viewer by construction._ Also a genuine loss, and the sharper of the two.
    The provenance overlay now depends on pdfplumber and pdf.js agreeing about the coordinate
    origin, which is an assumption rather than an identity. **Accepted, and mitigated** by
    promoting it to the first checkpoint in the build: an executable test asserts the
@@ -99,7 +100,8 @@ one-command setup promise and deployment on a free tier.
 
 ## D4. Postgres JSONB field values with a per-workspace typed view
 
-**Date:** September 2, 2026 · **Status:** Active
+**Date:** September 2, 2026 · **Status:** Partly superseded September 4, 2026 by D35. The
+tall `field_values` table stands; the per-workspace SQL view is cut with the SQL query path.
 
 **Decision.** One `field_values` row per record and field pair, with the value stored as
 JSONB, plus a per-workspace SQL view that pivots those rows into typed columns. Generated
@@ -139,7 +141,8 @@ available instead as a per-document "double-check" action.
 
 ## D6. Agent-to-User Interface for query results and schema proposals only
 
-**Date:** September 2, 2026 · **Status:** Active
+**Date:** September 2, 2026 · **Status:** Superseded September 4, 2026 by D39. A2UI now
+serves chat visuals and dashboard panels; schema proposals no longer exist.
 
 **Decision.** Use the Agent-to-User Interface protocol (A2UI, Google's open protocol in
 which an agent emits declarative JSON describing the interface it wants and the client
@@ -209,7 +212,8 @@ and the health route reports the process identifier so a misconfiguration is vis
 
 ## D10. Generated SQL is confined by four independent limits
 
-**Date:** September 2, 2026 · **Status:** Active
+**Date:** September 2, 2026 · **Status:** Superseded September 4, 2026 by D35. No SQL is
+generated any more, so there is nothing to confine.
 
 **Decision.** Every generated query passes an `sqlglot` parse-level allow-list permitting a
 single `SELECT` against this workspace's view only, gets `LIMIT 500` injected, and executes
@@ -274,7 +278,9 @@ document specified only that a `pyproject.toml` exists.
 
 ## D13. Gemini behind a provider protocol, with a fake provider as a first-class implementation
 
-**Date:** September 3, 2026 · **Status:** Active, model identifiers unverified
+**Date:** September 3, 2026 · **Status:** Active, model identifiers unverified. Amended
+September 4, 2026 by D35: the Flash tier now serves chat answers, dashboard planning, and
+suggested questions rather than natural language to SQL, which no longer exists.
 
 **Decision.** Gemini is the intended Large Language Model provider: the Pro tier for
 extraction and schema inference, the Flash tier for translating natural language into SQL.
@@ -358,7 +364,7 @@ records its result in `model_value` and sets the tier to conflict.
 document, with the conflict recorded as a boolean flag.
 
 **Reasoning.** Requirement FR-34 says re-extraction may add a "model now disagrees" flag. A
-flag alone loses *what* the model said, so the interface could tell the user a disagreement
+flag alone loses _what_ the model said, so the interface could tell the user a disagreement
 exists but not show them the two candidates, which makes the flag unactionable. Keeping both
 values is what turns a conflict from a warning into a decision the user can make.
 
@@ -552,7 +558,8 @@ sync (git submodules, a published internal package for shared types).
 
 ## D23. Confidence-gated auto-apply for schema changes, not review-every-field
 
-**Date:** September 4, 2026 · **Status:** Active
+**Date:** September 4, 2026 · **Status:** Superseded September 4, 2026 by D38. The two
+auto-apply zones stand; the third zone no longer produces a card.
 
 **Decision.** A schema change only blocks on a user decision when the model is genuinely
 uncertain. Concretely, when a document's fields are compared against the current schema:
@@ -578,13 +585,13 @@ which path produced them.
 
 **Two consequences, resolved September 4, 2026 during implementation review.**
 
-*An auto-applied change does not write a `proposals` row.* `schema_versions` is the complete
+_An auto-applied change does not write a `proposals` row._ `schema_versions` is the complete
 log of what happened to the schema; `proposals` stays strictly "questions that needed a
 human." Collapsing both into one table would make "how many decisions are outstanding" a
 filtered count rather than a row count, and the history view already reads from
 `schema_versions`, which carries `created_by` and `change_summary` for exactly this purpose.
 
-*An auto-added field enqueues backfill automatically, without offering.* FR-14 says adding a
+_An auto-added field enqueues backfill automatically, without offering._ FR-14 says adding a
 field "offers" backfill, and that stays true for a field the **user** added — they are
 present, mid-decision, and the offer has somewhere to attach. An auto-added field has no such
 moment by construction: the entire point is that nothing interrupted the user. Since backfill
@@ -594,9 +601,9 @@ user would have said anyway.
 
 **Alternatives considered.**
 
-1. *Review every field, every time* (the original spec). Maximizes safety, costs a click per
+1. _Review every field, every time_ (the original spec). Maximizes safety, costs a click per
    field on every document, including cases with only one sane interpretation.
-2. *Full auto-trust: apply every schema change silently, no proposal card at all, ever.*
+2. _Full auto-trust: apply every schema change silently, no proposal card at all, ever._
    Fastest, but removes the review step even for genuinely ambiguous cases — a coin-flip
    match between two candidate fields would get resolved by the model with no human in the
    loop, which is exactly the silent-wrong-merge failure mode section 1.3 of
@@ -612,8 +619,8 @@ where it was pure tax (a 98%-confidence field match, or the very first schema wi
 to disagree with yet).
 
 This does not weaken CLAUDE.md's non-negotiable #3 ("a review loop the user can trust"). It
-changes what "reviewable" means: instead of every change requiring a click *before* it
-applies, every change (automatic or not) is inspectable and reversible *after* it applies,
+changes what "reviewable" means: instead of every change requiring a click _before_ it
+applies, every change (automatic or not) is inspectable and reversible _after_ it applies,
 via schema history. Reversibility, not a confirmation click, is the trust mechanism for the
 auto-apply zones. The originally-specced review-every-field behavior is fully preserved for
 the zone that actually needs it.
@@ -629,7 +636,7 @@ auto-applies, they should move, not the mechanism.
 **Decision.** Drift matching scores a candidate field against each existing field with two
 independent signals, and gates D23's auto-apply zones on them as follows.
 
-*Auto-map* requires **all three** of:
+_Auto-map_ requires **all three** of:
 
 1. any one of — normalized-exact or known-alias match (case, separators, and
    `FieldSpec.source_keys` folded); **or** string similarity ≥ 0.90; **or** embedding
@@ -637,26 +644,26 @@ independent signals, and gates D23's auto-apply zones on them as follows.
 2. the best candidate beats the runner-up by ≥ 0.05 on whichever signal fired;
 3. type compatibility.
 
-*Auto-add as new* requires `max(string, embedding) < 0.30` against **every** existing field.
+_Auto-add as new_ requires `max(string, embedding) < 0.30` against **every** existing field.
 
 Everything else produces the proposal card. The cheap string pass runs first, so a label
 that is identical after normalization never spends an embedding call.
 
 **Alternatives considered.**
 
-1. *Embeddings only* (as implementation.md section 6.5 originally read). Handles synonyms,
+1. _Embeddings only_ (as implementation.md section 6.5 originally read). Handles synonyms,
    but needs a network call for even `vendor_name` versus `Vendor Name`, and leaves the
    fake provider — which must work with no API key, per D13 — with nothing to score with.
-2. *String similarity only.* Free, deterministic, offline, and already half-built in
+2. _String similarity only._ Free, deterministic, offline, and already half-built in
    `app/llm/fake.py` (`LABEL_MATCH_THRESHOLD`, `difflib.SequenceMatcher`). But it scores
    `Supplier` against `vendor_name` at roughly 0.2, so it fails on precisely the renames
    drift detection exists to catch. Every synonym would become a proposal card, which is
    the tedium D23 set out to remove.
-3. *A single weighted blend*, `w1 * string + w2 * embedding`. Rejected because averaging
+3. _A single weighted blend_, `w1 * string + w2 * embedding`. Rejected because averaging
    destroys the signal: a true synonym scores near-zero on string and high on embedding, and
    the blend lands it in the ambiguous band where it needs a card. The two signals are
    evidence of different things and should not be averaged.
-4. *A strict AND of both signals.* Safest against false positives, but it cannot ever
+4. _A strict AND of both signals._ Safest against false positives, but it cannot ever
    auto-map a synonym, since a synonym fails the string test by definition. That is
    alternative 2 with extra steps.
 
@@ -672,7 +679,7 @@ of an unambiguous match when a second field scores nearly as high — `Supplier`
 what routes it to a human instead of a coin flip. This is the same instinct as D5: the
 useful question is rarely "how confident is the score," it is "is there a competing answer."
 
-Novelty inverts the combinator deliberately. Declaring a field *new* is a claim about the
+Novelty inverts the combinator deliberately. Declaring a field _new_ is a claim about the
 absence of a match, so both signals have to agree nothing resembles it; if either sees a
 resemblance, it is not clearly novel and the user decides.
 
@@ -696,11 +703,12 @@ re-embedded once per document, and the two thresholds in configuration.
 
 ## D25. The first batch can be ambiguous with itself; uncertain unification stays split
 
-**Date:** September 4, 2026 · **Status:** Active
+**Date:** September 4, 2026 · **Status:** Superseded September 4, 2026 by D38. "Stays
+split" stands and is now the whole answer; the queued merge question is withdrawn.
 
 **Decision.** D23 originally justified auto-applying the initial schema on the grounds that
 "there is nothing to conflict with." That is wrong, and this entry corrects it. The first
-batch conflicts with *itself*: eight documents can yield `vendor_name` from five of them,
+batch conflicts with _itself_: eight documents can yield `vendor_name` from five of them,
 `Supplier` from two, and `Vendor` from one, and deciding those are one field is exactly the
 judgment call D23 says a human should make when the model is unsure.
 
@@ -711,7 +719,7 @@ So:
    better served by the model's best guess than by a modal.
 2. **Unification within the batch is gated by D24's rule.** Source keys that unify
    confidently are merged into one canonical field, which is the demo path and the common
-   case. Source keys the rule finds *uncertain* are **left as separate fields**, and a
+   case. Source keys the rule finds _uncertain_ are **left as separate fields**, and a
    `initial_schema` proposal is queued asking whether to merge them.
 3. **The queued proposal is non-blocking.** The table is already populated and usable; the
    card is a question waiting in the review surface, not a gate.
@@ -721,15 +729,15 @@ which was the other option considered during implementation review.
 
 **Alternatives considered.**
 
-1. *Remove `initial_schema` entirely* — the reading that produced D23's original wording.
+1. _Remove `initial_schema` entirely_ — the reading that produced D23's original wording.
    Rejected because it does not eliminate intra-batch ambiguity, it just resolves it silently
    in the model's favour, which is the failure mode D23 exists to prevent.
-2. *Merge on uncertainty, then offer to split.* Rejected on asymmetry of harm: a wrong merge
+2. _Merge on uncertainty, then offer to split._ Rejected on asymmetry of harm: a wrong merge
    commingles two genuinely different fields' values under one column, and unpicking it means
    knowing which source key produced each value. A wrong split leaves two clean columns and a
    merge is a cheap, lossless move of values from one to the other. When unsure, prefer the
    error that is cheaper to undo.
-3. *Block the first run on a schema confirmation.* Rejected outright: it breaks acceptance
+3. _Block the first run on a schema confirmation._ Rejected outright: it breaks acceptance
    criterion 1 and re-introduces exactly the friction D23 removed.
 
 **Reasoning.** The asymmetry in alternative 2 is the whole argument. Both directions are
@@ -764,7 +772,7 @@ docstring: fall back to the offline provider and log loudly, on the reasoning th
 key should degrade a deployment rather than take the whole interface down.
 
 **Reasoning.** The original argument treats the fake provider as a degraded version of the
-real one. It is not — it is a *different* provider that synthesises values from
+real one. It is not — it is a _different_ provider that synthesises values from
 label-and-value heuristics, and those values flow downstream wearing exactly the same
 confidence tiers and provenance links as real extraction. There is no point after that where
 the interface, or the user, can tell the difference. An operator who set a key and mistyped
@@ -837,13 +845,13 @@ the 0.90-and-above band it is now confined to.
 
 **Alternatives considered.**
 
-1. *Raise the single shared ceiling to 0.65.* Rejected: it would loosen the embedding half
+1. _Raise the single shared ceiling to 0.65._ Rejected: it would loosen the embedding half
    at the same time, and 0.65 on a cosine is close to where genuinely related terms sit, so
    it would start auto-adding fields that should have been mapped.
-2. *Replace the string metric with word-level overlap for the novelty test only.* Rejected
+2. _Replace the string metric with word-level overlap for the novelty test only._ Rejected
    as a second metric to reason about and test, when a per-signal ceiling achieves the same
    separation with a number.
-3. *Leave 0.30 and accept that auto-add never fires.* Rejected as shipping a dead code path
+3. _Leave 0.30 and accept that auto-add never fires._ Rejected as shipping a dead code path
    while D23 claims three zones. Better to have the zone work and the threshold be honest
    about needing calibration.
 
@@ -861,7 +869,8 @@ different, and set the ceiling above its upper range.
 
 ## D28. An "ask" carries a reason code, and callers act on it differently
 
-**Date:** September 4, 2026 · **Status:** Active, refines decision D23
+**Date:** September 4, 2026 · **Status:** Superseded September 4, 2026 by D38. The reason
+code survives as the text of `change_summary`; nobody is asked anything.
 
 **Decision.** `classify` returns an `AskReason` alongside the `ASK` outcome:
 `COMPETING_CANDIDATES`, `BORDERLINE`, `TYPE_MISMATCH`, or `UNCONFIRMED_NOVELTY`. The
@@ -929,3 +938,670 @@ are committed by definition.
 **Caught by:** an end-to-end run against a live server, not by the test suite. Worth noting,
 because every unit test passed while five of six uploads were being dropped. Regression tests
 now cover the staging, the discard, and the flush.
+
+---
+
+## D30. React Router in declarative mode for the interface, not a type-generated router
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** Route the client with `react-router` 7 used declaratively — a `BrowserRouter`
+with a `Routes` block in `client/src/app/App.tsx`. No file-system routing, no generated
+route tree, no loaders.
+
+**Alternatives considered.** TanStack Router, which would have matched the TanStack Query
+and TanStack Table already chosen and would give typed path and search parameters. React
+Router's own framework mode with file-based routes and loaders. No router at all, switching
+on a piece of state.
+
+**Reasoning.** The application has two routes today and will have perhaps five: the first
+run screen, the workspace shell, and whatever the query console and review queue become.
+TanStack Router's real advantage is type-safe search parameters, and this product keeps
+almost nothing in search parameters — the workspace identifier is a path segment and the
+token is deliberately not in the URL query at all (decision D31). Buying a route-generation
+build step to type two parameters is a poor trade in a five-day build. Framework mode brings
+loaders and a data layer that would duplicate TanStack Query, which already owns server
+state. Doing without a router entirely was rejected because a shared workspace link has to
+be a real URL that survives a reload.
+
+**Cut.** Typed route parameters, which are asserted at the one call site that reads them
+instead. Route-level code splitting, which is not needed until the A2UI chunk arrives; that
+is lazy-loaded on its own rather than per route.
+
+---
+
+## D31. The workspace token travels in the URL fragment, never the query string
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** A shareable workspace link is `/w/{id}#t={token}`. On arrival the fragment is
+read once, written to `localStorage`, and stripped from the address bar with
+`history.replaceState`. In-application navigation carries no token at all, because storage
+already has it.
+
+**Alternatives considered.** A query parameter, `/w/{id}?t={token}`, which is the obvious
+reading of "the token is encoded in a shareable URL" in requirement FR-01. A token in the
+path. Storage only, with no shareable link, which would have contradicted FR-01.
+
+**Reasoning.** Decision D8 accepts that anyone holding the link holds the workspace; that
+is the stated cost of having no accounts. It does not follow that the credential should be
+handed to every intermediary on the way. A query string is sent to the server on every
+request, so it lands in access logs, in any reverse proxy in front of the application, and
+in `Referer` headers on outbound links. A fragment is never transmitted at all. The two
+options are identical for the person pasting a link to a colleague and materially different
+for everything in between, so the fragment is simply the better version of the same feature.
+
+Stripping the fragment after reading it means a reload, a bookmark, or a screenshot of the
+address bar no longer carries the credential either.
+
+**Cut.** Nothing. The link is the same length and works the same way.
+
+**Accepted risk.** A person who bookmarks the stripped URL and later clears site data loses
+the workspace, because the token is unrecoverable by design. The workspace shell will need a
+visible "copy shareable link" affordance so the full link can be recovered while storage
+still has it; that is noted as work, not solved here.
+
+---
+
+## D32. A warm-paper visual language, rebuilt in styled-components rather than adopted as Tailwind
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** Adopt the visual direction from the Flowstep design for screen 1 — warm paper
+ground (`#FAF8F5`), navy ink (`#1A2238`), a serif display face for headlines against a
+humanist sans for the interface, hairline rules, and an illustration in which scattered
+documents narrow through a funnel into one ruled table. Rebuild it as tokens in
+`client/src/ui/theme.ts` and styled-components, rather than importing the design's Tailwind
+classes.
+
+Type is set in system faces only: `Iowan Old Style` / Palatino / Georgia for display, the
+system sans for interface text.
+
+**Alternatives considered.** Pasting the generated Tailwind JSX and adding Tailwind to the
+project, which would have been the fastest route to pixel parity and would have reversed
+decision D11 by the back door. Loading the design's intended webfonts from Google Fonts.
+Inventing a different visual language.
+
+**Reasoning.** The design is a specification of intent, not a source file. Its value is the
+decision that this product should look like a precision instrument on paper rather than
+another indigo SaaS dashboard, and that value survives the translation intact — the
+rendered screen is faithful. Bringing Tailwind in to preserve the class names would have
+undone a decision made on fluency grounds three days earlier, and split the styling story
+across two systems for one screen.
+
+System fonts, because a webfont is a network round-trip on the very screen whose job is to
+explain the product in thirty seconds, and a third-party font request contradicts the line
+in the footer promising the documents never leave the workspace. The serif is doing a
+register job, not a brand job, and a good system serif does it.
+
+The tier palette (high / medium / low / conflict / verified) is defined in the same file
+even though the table that consumes it is a later screen, so the rule that confidence is
+never colour alone has one home. Each tier carries a colour, a mark, and a label, and
+`ui/theme.test.ts` asserts both the second channel and a 4.5:1 contrast ratio for every
+token pair, so the accessibility promise fails the build rather than an audit.
+
+**Cut.** Pixel parity with the design's exact greys, which were warmed slightly to reach the
+contrast floor. The design's webfonts.
+
+---
+
+## D33. Client scaffold taken as `create-vite` ships it, with the codegen tool kept out of the dependency graph
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** Keep what `create-vite` scaffolded — Vite 8.2, React 19.2.8, TypeScript 6.0.3,
+oxlint — and add `strict` plus `noUncheckedIndexedAccess` to the TypeScript configuration.
+Do **not** declare `openapi-typescript` as a dependency: invoke it pinned through `npx` in
+the `api:types` script and commit its output.
+
+**Alternatives considered.** Downgrading the project to TypeScript 5.9 so
+`openapi-typescript` installs cleanly. Setting `legacy-peer-deps=true` in `.npmrc`. An npm
+`overrides` entry narrowing the tool's peer range. Replacing oxlint with ESLint to match the
+wider ecosystem.
+
+**Reasoning.** This settles two items on the day-1 checklist in implementation.md section 13,
+and the answer to one of them is no.
+
+`openapi-typescript@7.13.0` peer-depends on `typescript@^5.x` and therefore does **not**
+install alongside the scaffolded TypeScript 6 without a flag. Downgrading the whole project's
+language to satisfy one code generator is the wrong direction. `legacy-peer-deps` in
+`.npmrc` was rejected outright, because the Zod 3 peer range from `@a2ui/react` is
+load-bearing (CLAUDE.md, and requirement A2-01) and must keep failing loudly if it is ever
+violated — switching off peer checking globally to fix an unrelated tool would disarm the
+one check this project most needs. An `overrides` entry was tried and crashed npm 10.9.2
+outright with `Cannot read properties of null (reading 'edgesOut')`.
+
+What is left is the observation that a code generator is not a dependency of the application.
+`schema.d.ts` is committed, so a fresh checkout builds, tests, and runs without the tool
+present. Only someone regenerating the client after a backend change needs it, and they get
+a pinned version on demand.
+
+A related npm failure is worth recording because it will recur: `npm install vitest@4` also
+crashes the same npm with the same arborist error, over Vitest 4's optional browser-mode
+peers. It was installed with `--legacy-peer-deps` **as a one-off command**, which does not
+persist into configuration; the committed lockfile makes the result reproducible, since
+`npm ci` resolves from the lock rather than re-running the solver.
+
+**Cut.** ESLint, and with it the shared configuration ecosystem — oxlint was already wired
+up by the scaffold and is enough for one lint rule set on a five-day build. Reversal is a
+day-5 decision at worst, not a foundational one.
+
+**Accepted risk.** `npm install <new package>` may hit the same arborist crash again. The
+workaround is known and recorded here rather than rediscovered.
+
+---
+
+## D34. Product pivot: three screens, chat first, no schema review loop
+
+**Date:** September 4, 2026 · **Status:** Active. Supersedes D1 in part and sets the frame
+for D35 through D43.
+
+**Decision.** Distill is three screens and nothing else: **Upload** many documents,
+**Chat** with the whole collection (the main screen), and **Data**, one unified table plus a
+dashboard of charts and metrics the agent decided were worth showing. The schema review loop
+(proposal cards, schema history, one-click revert, the review queue and its keyboard flow)
+and the natural-language-to-SQL query console are removed from the product. The extraction
+pipeline, automatic schema unification, confidence tiers, provenance highlighting, and the
+never-overwrite-a-correction guarantee all stay.
+
+**Alternatives considered.**
+
+1. _Continue the v1 plan._ Two days of backend work implements it and it runs. Rejected on
+   the product judgment below, not on feasibility.
+2. _Keep the review loop but demote it to a side panel._ Rejected because a half-present
+   review loop still needs its data model, its routes, its cards, and its history view to be
+   correct, which is most of the cost for a fraction of the attention.
+3. _Chat only, no table._ Rejected because the prompt asks for structured data, and a table
+   is the honest proof that the documents were actually read into fields.
+
+**Reasoning.** The review loop asks a finance operations person to do schema
+administration: decide whether `Supplier` and `vendor_name` are the same column, adjudicate
+type mismatches, revert schema versions. That is a data engineer's job dressed as a product
+feature. The person who uploaded the pile wants three things: see it as a table, ask
+questions about it and be able to check the answers, and be shown what is interesting
+without asking. v2 is those three things, one screen each.
+
+The parts of v1 that carried trust were never the review loop. They were the citations, the
+highlight on the page, the visible confidence tier, and the guarantee that a human edit
+survives. All of those are kept and extended into the chat and the dashboard.
+
+Extraction, grounding, scoring, unification, and the event log are unchanged by this
+pivot. What is thrown away is the proposal machinery and the SQL path; what is added is
+retrieval, chat, a query-specification evaluator, and A2UI on both new surfaces.
+
+**Cut.** Proposal cards and the `proposals` table and routes; schema history view and
+revert; backfill; the review queue and keyboard flow; natural language to SQL, the SQL
+panel, `sqlglot`, the read-only database role, the per-workspace pivot view; the 5,000-row
+virtualised table; Playwright for this round. Recorded honestly in requirements v2 section 0
+rather than rewritten out of history.
+
+---
+
+## D35. Retrieval over the documents replaces natural language to SQL
+
+**Date:** September 4, 2026 · **Status:** Active. Supersedes D10 and the view half of D4.
+Amends D13.
+
+**Decision.** Questions are answered by retrieval-augmented generation (RAG): the question
+is embedded, the most similar passages of document text are found by cosine similarity, and
+the model answers **only from those passages plus the extracted records**, citing each claim.
+When an answer needs a number, the model emits a query specification that the server
+evaluates over `field_values` in Python (see D37). No SQL is generated anywhere.
+
+**Alternatives considered.**
+
+1. _Natural language to SQL over a typed per-workspace view_ (v1, D4 and D10). Precise for
+   aggregate questions the schema anticipated; blind to everything the schema did not
+   capture, which for a contract or a policy document is nearly all of it.
+2. _Both: SQL for structured questions, retrieval for the rest, with a router._ The most
+   capable option and the most expensive: two query paths, two failure modes, a classifier
+   in front, and the four-limit SQL guard still to build and test. Rejected on the remaining
+   time.
+3. _Retrieval only, with the model computing aggregates from retrieved rows._ Rejected
+   because it violates the data-binding rule in D37: a model summing numbers in prose is
+   exactly the failure a finance user cannot detect.
+
+**Reasoning.** Retrieval answers the question the person actually asked, in the vocabulary
+the documents actually use, and it produces a citation as a by-product because the answer
+came from a passage. That is a better fit for "every value traces to a highlighted region"
+than SQL ever was, since a SQL result's provenance had to be reconstructed from row
+identifiers after the fact.
+
+The structured half is not lost. Each document's extracted record is rendered as a "records
+digest" chunk and embedded alongside the page text, so a question phrased in schema
+vocabulary retrieves the record even when the page says it differently. Aggregations are
+handled by the query-specification evaluator, which is a small, testable Python function
+over the workspace's values, rather than by generated SQL against a pivot view.
+
+**Cut.** `sqlglot`, `DATABASE_URL_READONLY`, `app/schema/view.py`, the `queries` table,
+`CallKind.NL2SQL`. Added: `CallKind.CHAT_ANSWER` and `CallKind.PLAN_DASHBOARD`, both on the
+Flash tier.
+
+---
+
+## D36. Vectors stored as JSONB arrays with in-process cosine, not pgvector
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** Chunk embeddings are stored in a `chunks.embedding` JSONB column as a list of
+floats. Retrieval loads the workspace's vectors and computes cosine similarity in Python.
+
+**Alternatives considered.**
+
+1. _pgvector._ The right answer at scale: indexed nearest-neighbour search in the database.
+   It is an extension that must be installed and enabled; the development machine has a
+   Homebrew Postgres 16 with no extensions, and every reviewer's machine would need the same
+   step in `make setup`.
+2. _A separate vector store (Chroma, Qdrant, LanceDB)._ Another process or another
+   dependency for a workload of a few hundred vectors per workspace.
+3. _SQLite with a vector extension._ Would split the data across two databases.
+
+**Reasoning.** A workspace is bounded by `max_files_per_upload` and practical use to tens of
+documents. At roughly forty passages per document, that is about a thousand vectors of 768
+floats, which a Python loop scans in a few milliseconds. The cost of pgvector is a setup step
+on every machine that touches the project; the benefit is speed the workload does not need.
+The scan is a pure function of the loaded vectors, which also makes retrieval trivially
+testable with recorded fixtures.
+
+**Upgrade path.** The `chunks` table and the `search.py` interface are shaped so that
+swapping the scan for `ORDER BY embedding <=> :q LIMIT k` is a migration that changes the
+column type and one function body.
+
+**Cut.** Approximate nearest-neighbour indexing.
+
+---
+
+## D37. Displayed numbers are computed by the server and bound by path; the model never types them
+
+**Date:** September 4, 2026 · **Status:** Active. This is the rule Anubhav described as
+"we send a variable with the data mapped to it".
+
+**Decision.** Whenever the agent wants to show a figure, a chart, or a table, it does not
+emit the values. It emits a **query specification** (`DataQuery`: measure, aggregate, group
+by, date bucket, filters, sort, limit). Deterministic code evaluates the specification over
+the workspace's `field_values`, writes the result into the A2UI **data model** at `/result`,
+and emits components whose properties are **path bindings** into that data model. The model
+chooses `BarChart` and says the series lives at `/result/rows`; the server puts the real rows
+there.
+
+The general name for the pattern is **data binding** (in A2UI, the data model plus `path`
+references). In prompting terms it is structured output with variable references instead of
+literal values, evaluated by the application. It is the same instinct as function calling
+with the tool result rendered directly, without a second model call to restate the result.
+
+**Alternatives considered.**
+
+1. _Let the model write the numbers into the A2UI component properties._ Simplest, and the
+   most dangerous: a transposed digit in a bar chart is undetectable to the person reading
+   it, in a product whose only claim is that the numbers can be trusted.
+2. _Full function-calling loop._ The model calls an `aggregate_records` tool, receives the
+   result, then writes the answer and the UI. Correct, and it would also let the model
+   inspect the result before deciding on a shape. Rejected for this round because the
+   `LLMClient` protocol has a single `structured()` method, the fake provider would need a
+   tool-call simulator, and the two-turn latency lands on the demo's main screen. The query
+   specification gets most of the benefit in one structured call.
+3. _Model writes SQL._ D35.
+
+**Reasoning.** Separating "what to show" from "what the values are" is what makes both the
+chat visuals and the unsupervised dashboard safe without a human review step. The model is
+good at deciding that spend by vendor is the interesting cut; it is bad at adding up
+fourteen currency amounts. The specification also carries the row identifiers that produced
+each result row, which is how provenance survives inside agent-generated UI (FR-43): a
+number the model typed has no provenance, a number the evaluator computed knows exactly
+which cells it came from.
+
+**Consequences.** A visual whose specification evaluates to nothing is dropped and logged
+rather than shown empty. The `DataQuery` model is shared between the chat answer and the
+dashboard planner, so there is one evaluator to test. The fallback renderer can always show
+`/result/rows` as a table because the data model is always populated by the server.
+
+**Cut.** Free-form numbers in any agent-produced component property. `Metric.value` is a
+path binding, not a literal.
+
+---
+
+## D38. Uncertain schema drift resolves to a separate field, silently
+
+**Date:** September 4, 2026 · **Status:** Active. Supersedes D23, D25, D28. Narrows D24
+and D27, which remain the signals for the auto-map and auto-add zones.
+
+**Decision.** When a new document's field cannot be confidently matched to an existing field
+or confidently declared novel, the system **adds it as a separate field** and records why in
+`schema_versions.change_summary`. No proposal card, no queued question, no history view. The
+user's recourse is a column menu on the Data screen: rename, or "merge into" another field,
+which moves values and provenance and is lossless.
+
+**Alternatives considered.**
+
+1. _Proposal cards_ (D23, D25, D28). Fully designed, partly built. Withdrawn with the review
+   loop in D34.
+2. _Merge on uncertainty._ Rejected on the same asymmetry D25 recorded: a wrong merge pools
+   values from two different fields under one column and unpicking it means knowing which
+   source key produced each value; a wrong split is two clean columns and a merge is a move.
+   When unsure, prefer the error that is cheaper to undo.
+3. _Let the model decide with a coin flip when uncertain._ Rejected: it is alternative 2
+   half the time.
+
+**Reasoning.** Everything D23 through D28 worked out about _when_ the system is unsure is
+still correct and still runs; only the _response_ changes, from asking to defaulting safely.
+The auto-map zone keeps `Supplier` landing in `vendor_name` when the embedding says so; the
+auto-add zone keeps a clearly new field appearing as a new column; the middle zone now does
+the safe thing instead of raising a hand. The user sees one extra column occasionally, with
+a summary that says why, and can fix it in two clicks if they care. Most will not need to.
+
+**Cut.** The `proposals` table and routes, `Proposal.kind`, `AskReason` as a user-facing
+concept (it survives as text in `change_summary`), the debounce setting, and the merge
+question at initial unification.
+
+---
+
+## D39. A2UI for chat visuals and dashboard panels
+
+**Date:** September 4, 2026 · **Status:** Active. Supersedes D6.
+
+**Decision.** The Agent-to-User Interface protocol is used for exactly two surfaces: the
+optional visual inside a chat answer, and each panel of the generated dashboard. In both, the
+server builds a complete message array (`createSurface`, `updateDataModel`,
+`updateComponents`) and the client renders it from a catalog of four custom components
+(`Metric`, `BarChart`, `LineChart`, `ResultTable`) plus the basic catalog for layout and
+text. The rest of the application, including the unified table, is hand-built React.
+
+**Alternatives considered.** Hand-built result components switched on a `kind` string
+returned by the model. This is genuinely close in effort for four component kinds. It was
+rejected because the value of the protocol here is not the renderer, it is the **data
+model**: the path-binding contract is what enforces D37 mechanically, and the JSON Schema
+validation of emitted messages gives the backend a test that the surface is well formed
+before a browser ever sees it. Using A2UI for the main table, as considered and rejected in
+D6, is still rejected for the same reason: the table does not need the agent to choose its
+shape.
+
+**Reasoning.** Both surfaces are "the agent decided what to show", which is the case the
+protocol exists for. Keeping them on one mechanism means one builder module, one renderer
+module, one fallback, and one inspect toggle serving both the chat and the dashboard.
+
+**Accepted risk.** Renderer churn, as in D6. Exact pins, a four-component catalog, and a
+smoke test per component in Vitest.
+
+**Cut.** Streaming A2UI messages piecemeal (a surface arrives whole in one event even
+though the answer around it streams; see D44 and D47), the `SchemaProposal` and
+`FieldMapping` components, A2UI action round-trips as a Must (a row click in
+`ResultTable` is handled on the client; server round-trips are a Could).
+
+---
+
+## D40. Dashboard panels are proposed by the model from field statistics and vetted by evaluation
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** The dashboard is generated by one structured call on the Flash tier that
+receives the document count, the schema, and per-field statistics (type, coverage, distinct
+count, numeric range and sum, date range, top values) and returns up to six panels, each a
+title, a visual kind, a `DataQuery`, and a one-sentence rationale grounded in those
+statistics. The server evaluates every panel and drops the empty and the degenerate (a
+single-bar chart, a metric over a field fewer than a third of documents carry) before
+anything is shown. Panels persist with the workspace and are marked stale when documents are
+added, values corrected, or fields merged.
+
+**Alternatives considered.**
+
+1. _Hard-coded dashboard rules_ ("if a currency field and a string field both have coverage
+   above 70%, chart sum by string"). Deterministic and domain-agnostic in principle, but it
+   cannot know that spend by vendor is more interesting than spend by currency, and the
+   rules would be tuned to invoices within a day.
+2. _Let the model write the panel data._ D37.
+3. _Generate the dashboard on every new document._ One model call per upload for a screen
+   the user may not be looking at. Rejected in favour of marking stale and regenerating on
+   demand or on the first-batch completion.
+
+**Reasoning.** Deciding what is worth showing is judgment, which is what the model is for.
+Computing what is shown is arithmetic, which is what the evaluator is for. The statistics in
+the prompt are what let the model's judgment be grounded rather than generic: it can see
+that `purchase_order` is missing from three documents and propose a metric about it. The
+rationale is shown to the user because a chart with a stated reason is a chart the user can
+disagree with, which is the trust posture of the whole product.
+
+**Cut.** User-arranged or user-pinned panels. Panel-level regeneration. Automatic
+regeneration on upload.
+
+---
+
+## D41. Chat answers are one request and one response, with stage progress over the event stream
+
+**Date:** September 4, 2026 · **Status:** Superseded September 4, 2026 by D44, the same
+day. Anubhav's call: this is a frontend-weighted task and a chat that does not stream reads
+as unfinished. The structured-object concern below is answered by splitting the answer into
+a plan call and a streamed prose call.
+
+**Decision.** `POST /chat/messages` returns the complete assistant message. While it runs,
+`chat.progress` events on the existing workspace stream carry the stage (retrieving,
+reading, building) so the pending bubble can say what is happening. There is no token-level
+streaming of the answer text.
+
+**Alternatives considered.** Streaming the prose token by token, with citations and the
+visual arriving at the end. Streaming A2UI messages progressively, as the v1 plan did for
+query results.
+
+**Reasoning.** The answer is a structured object: prose with citation markers that must
+resolve to validated chunks, citations that must be grounded to boxes, and a visual whose
+specification must be evaluated before it can be rendered. None of that can be shown safely
+until the object is complete, and Gemini's structured output mode returns the object whole.
+Streaming the prose ahead of its citations would show the user claims before the system knew
+whether they were supported. A typical answer completes in a few seconds on the Flash tier;
+a pending state that names the stage is honest about that wait without pretending to a
+streaming experience the content does not have.
+
+**Cut.** The `fetch` plus `ReadableStream` Server-Sent Events parser for `POST` bodies from
+v1 section 7.2, and the A2UI streaming transport.
+
+---
+
+## D42. Corrections stay as inline cell edits; the review queue is cut
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** A person can still correct a value by editing a cell on the Data screen
+(Should), the value becomes human-verified, and re-extraction never overwrites it, with a
+disagreeing model value shown as a conflict (D16 stands, FR-51 is a Must). The review queue,
+impact ordering, and keyboard review flow are removed.
+
+**Alternatives considered.** Keeping the queue as a filter on the table ("show me low
+confidence cells"). Removing corrections entirely.
+
+**Reasoning.** The correction guarantee is a backend property that is already built and
+tested, and it costs nothing to keep. The review queue was a fourth screen's worth of
+interface serving the review loop's mental model, in which a person works through cells
+before trusting the table. v2's model is that confidence is visible where the value is and
+the person corrects what they happen to notice. A sort by tier on the table gets most of
+what the queue offered for free.
+
+**Cut.** `GET /review`, the impact weighting, `useReviewKeys`, and acceptance criteria that
+depended on them.
+
+---
+
+## D43. The source viewer shows backend-rendered page images for every format, including PDF
+
+**Date:** September 4, 2026 · **Status:** Active. Extends D18.
+
+**Decision.** The client's source viewer displays `GET /pages/{n}/image` for every document,
+PDFs included, and draws highlight rectangles scaled by `renderedWidth / width_pt`. The
+client does not embed pdf.js.
+
+**Alternatives considered.** react-pdf (pdf.js) for PDFs with the backend render for other
+formats, as v1 section 8.3 planned.
+
+**Reasoning.** D18 already renders every format to page images with word geometry, and the
+PDF renders already exist because the OCR path and thumbnails needed them. Two rendering
+paths in the viewer means two coordinate systems to keep in agreement, which is the exact
+risk D17 was written to contain. One image and one overlay is one unit test. The cost is
+that a PDF is shown as a raster at 144 DPI rather than as selectable vector text, which for
+a panel whose job is to show where a value came from is acceptable, and the original is one
+click away for anyone who wants it.
+
+**Cut.** react-pdf and the pdf.js worker configuration in Vite. Text selection inside the
+viewer.
+
+---
+
+## D44. Chat answers stream token by token over a per-message Server-Sent Events stream
+
+**Date:** September 4, 2026 · **Status:** Active. Supersedes D41.
+
+**Decision.** Asking a question is two requests. `POST /chat/messages` persists the user
+turn, creates the assistant message in `streaming` state, starts generation as a
+background task, and returns `202` with the message identifier and a stream URL. The client
+opens a native `EventSource` on `GET /chat/messages/{id}/stream`, which tails an in-memory
+**answer buffer** for that message and emits, in order: `status`, `sources`, `visual` or
+`visual_skipped`, `token` events, `citation` events as markers appear, and `done` with the
+persisted message. Every event carries a per-message sequence `id`, so a reconnect resumes
+with `Last-Event-ID` and a late subscriber to a finished message receives one `done`.
+Generation does not depend on a listener: closing the tab does not stop the answer, and
+`POST .../stop` is the only way to cancel. Token events are never written to
+`workspace_events`; the persisted result is the message row.
+
+**Alternatives considered.**
+
+1. _Return the whole answer in one response_ (D41). Simplest and safest for a structured
+   object. Rejected: a chat that sits on a spinner for eight seconds and then drops a wall of
+   text is the one thing a reviewer of a frontend-weighted submission will notice first.
+2. _Stream on the `POST` response itself_ with `fetch` plus a `ReadableStream` line parser.
+   One round trip fewer, but `EventSource` cannot be used, so resume, backoff, and
+   `Last-Event-ID` all have to be hand-written, and a dropped connection kills the generator
+   because the response _is_ the generation. Two requests buy the browser's native
+   reconnect and a generation that outlives the connection.
+3. _Multiplex tokens onto the existing `/events` workspace stream._ One connection, and
+   resume already works. Rejected because D14 persists every workspace event to a table,
+   which is the wrong contract for hundreds of token frames per answer, and because a
+   second tab would receive every token of every answer whether or not it is showing the
+   chat.
+4. _WebSockets._ Bidirectional transport for a one-directional stream; D7 already rejected
+   it for the same reason.
+
+**Reasoning.** The blocker in D41 was real: citations must resolve to validated chunks and
+the visual must be evaluated before it can be shown, and neither can be done on a
+half-received structured object. The answer is not to give up streaming but to stop asking
+one call to produce everything. A short structured **plan** call decides answerability and
+the visual; the visual is evaluated and sent whole before the first token; then a streamed
+**prose** call writes the text, with markers and placeholders resolved by the server as they
+close (D45, D46). Everything the user sees is validated by the time they see it, and it
+arrives as it is written.
+
+The buffer is in memory rather than a table because D9 already pins the application to one
+process, so there is nowhere else a second subscriber could be. It is released a minute
+after completion so a resumer who reconnects late still catches up, after which the
+persisted message is the only source and `GET /chat/messages` serves it.
+
+**Cut.** Streaming A2UI messages piecemeal (the surface is one event, D47). Streaming on
+the dashboard, which is generated in the background and announced over `/events`.
+
+**Accepted cost.** A second stream type on the client with its own reducer and tests, and
+the `LLMClient` protocol growing a `stream_text` method that the fake provider has to
+simulate with recorded text in word-sized pieces.
+
+---
+
+## D45. Citations are chunk-level markers resolved while the answer streams
+
+**Date:** September 4, 2026 · **Status:** Active
+
+**Decision.** The prose model cites with `[^chunk:<id>]` markers and writes no quotes. The
+stream processor holds back an open marker until it closes, validates the identifier
+against the retrieved set, assigns a citation number, and emits a `citation` event carrying
+the chunk's page and boxes (its stored `word_start` to `word_end` span) **before** the token
+containing the rewritten `[^n]`. Unknown identifiers are dropped silently. The highlight in
+the viewer is the whole chunk, so chunks are kept to roughly 80 to 160 words.
+
+**Alternatives considered.**
+
+1. _Verbatim quotes grounded with RapidFuzz_, as the extraction pipeline does and as v2's
+   first draft planned. Tighter highlights. Rejected for chat because a quote cannot be
+   validated until it is complete, which means either holding back whole sentences during
+   the stream or resolving citations after the fact, and a marker that sits unresolved for
+   several seconds is exactly the "is this real?" moment the citation exists to prevent.
+   Quotes also fail to ground often enough on paraphrase that a fallback to the chunk span
+   would have been needed anyway.
+2. _Resolve all citations after streaming completes._ Simplest. Rejected because the markers
+   would appear as dead text during the stream.
+3. _Sentence-level re-grounding after the stream_: match each cited sentence back against
+   the chunk to narrow the box. Possible later as a refinement; not in this round.
+
+**Reasoning.** For the extraction pipeline, a quote is the right unit because a field value
+is a few words on a page. For a chat answer, the unit of evidence is a passage, and the
+chunk already is one. Making the chunk the citation removes a model output that could be
+wrong (the quote) and a matching step that could fail (grounding), and replaces both with a
+lookup. The cost is a paragraph-sized highlight, which the smaller chunk size keeps
+readable. Citations to a records-digest chunk resolve to the field value's own provenance,
+so structured facts still light up on the page.
+
+**Cut.** Quote-level highlights in chat.
+
+---
+
+## D46. Figures in chat prose are placeholders the server substitutes from the evaluated result
+
+**Date:** September 4, 2026 · **Status:** Active. Extends D37 to prose.
+
+**Decision.** When an answer has a visual, the prose model receives the evaluated result
+with named paths and is instructed to refer to any figure from it as `{{result.total}}` or
+`{{result.rows[0].value}}`, never by retyping the number. The stream processor holds back
+text from an open `{{` until `}}`, resolves the path against the result, and emits the
+formatted value (currency with its code, date localised). An unresolvable path emits
+nothing and is logged. Figures that appear verbatim in a cited passage may be repeated as
+written, because their provenance is the citation.
+
+**Alternatives considered.** Passing the computed result into the prompt and trusting the
+model to copy it correctly. Forbidding numbers in prose altogether and pointing at the
+chart. Post-checking every number in the finished prose against the result.
+
+**Reasoning.** D37 made displayed numbers in _components_ come from the evaluator. Prose is
+also a display. A model that has just been shown `48,200.00` will usually write it
+correctly, and "usually" is the problem in a finance product: the one transposition is
+invisible. A placeholder is the same idea as a path binding in A2UI, applied to text, and it
+is what Anubhav was describing as sending a variable with the data mapped to it. It also
+keeps the chart and the sentence about the chart from ever disagreeing, because both read
+the same result. Forbidding numbers would make answers stilted; post-checking would need the
+whole text first, which streaming forbids.
+
+**Cut.** Nothing. Numbers copied from passages remain allowed because they are cited.
+
+---
+
+## D47. A chat visual is one complete A2UI surface, sent before the prose, rendered at the top of the message
+
+**Date:** September 4, 2026 · **Status:** Active. Client-side handling left to the
+implementer by Anubhav; this is the choice.
+
+**Decision.** The visual for a chat answer is built entirely on the server and sent as one
+`visual` event containing the complete A2UI message array, after `sources` and before the
+first `token`. The client reserves a fixed-height skeleton for the card as soon as
+`status: planning` arrives, fills it with a `SurfaceHost` when `visual` arrives (or
+collapses it on `visual_skipped`), and streams the prose beneath it. Citations list last.
+A2UI messages are never streamed piecemeal.
+
+**Alternatives considered.**
+
+1. _Visual below the prose, appearing at the end._ The conventional chat layout. Rejected
+   because the visual is ready first (the plan call finishes before prose starts), so
+   holding it back wastes the one thing that is already done, and a card that arrives under
+   a growing text block pushes the layout every time the text wraps.
+2. _Stream the A2UI messages themselves_ (`createSurface`, then components, then the data
+   model) as v1 planned for query results. Rejected because a surface that renders before
+   its data model arrives shows an empty chart, and because the server has the whole array
+   at once anyway; there is nothing to gain from splitting it.
+3. _Render charts client-side from the evaluated rows without A2UI_, switching on `kind`.
+   Close in effort for four kinds. Rejected because it would give chat and dashboard two
+   rendering paths for the same result shape, and because the A2UI data model is the
+   mechanism that makes D37 enforceable in one place.
+4. _Inline the visual mid-prose at a marker the model places._ Attractive, but it lets the
+   model decide layout, and a marker that never arrives leaves the card orphaned.
+
+**Reasoning.** The order the server produces things is also a good reading order: what was
+searched, what the numbers look like, then the explanation, then the evidence. Reserving
+the card's space before the plan resolves is what makes the stream feel stable: the prose
+never jumps when the chart lands. Sending the surface whole keeps the client's A2UI module
+identical for chat and dashboard, one `SurfaceHost` that takes an array, which is the
+smallest possible protocol surface for a renderer that has shipped breaking changes in
+three consecutive minor versions.
+
+**Cut.** Piecemeal A2UI streaming, model-placed visuals, and more than one visual per
+answer.

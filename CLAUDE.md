@@ -6,11 +6,11 @@ September 3, 2026. Author: Anubhav Raj.
 
 ## Read these first, every session
 
-| File | What it is |
-| --- | --- |
-| `docs/requirements.md` | Governing requirements. Cites are `FR-xx`, `A2-xx`. |
-| `docs/implementation.md` | Governing technical plan. |
-| `decisions.md` | Decision log. **Required deliverable.** |
+| File                     | What it is                                          |
+| ------------------------ | --------------------------------------------------- |
+| `docs/requirements.md`   | Governing requirements. Cites are `FR-xx`, `A2-xx`. |
+| `docs/implementation.md` | Governing technical plan.                           |
+| `decisions.md`           | Decision log. **Required deliverable.**             |
 
 These three files are the plan of record. Follow them. When the code has to diverge,
 update the document in the same change and add a `decisions.md` entry. Never let code
@@ -22,13 +22,17 @@ and spec drift silently.
    format: decision, alternatives considered, reasoning, what was cut. Never delete a
    superseded entry, mark it superseded and link forward.
 2. **Clean file structure**, feature-folder based, especially on the client.
-3. **The hard problem is unification and trust, not extraction.** Schema inference and
-   evolution across heterogeneous documents, with a review loop the user can trust.
-   Extraction from a single document is table stakes.
-4. **Every value on screen traces to a highlighted region of its source document.**
-5. **Never lose a human correction.** Re-extraction and schema changes preserve
+3. **Three screens, nothing else: Upload, Chat, Data.** Chat is the main screen and works
+   by retrieval over the documents. Data is one unified table plus an agent-generated
+   dashboard. There is no schema review loop, no proposal card, no SQL. Decision D34.
+4. **Every value on screen traces to a highlighted region of its source document.** Table
+   cells and chat citations open the same viewer.
+5. **Displayed numbers are computed by the server, never typed by the model.** The agent
+   emits a query specification; the server evaluates it and binds the result into A2UI by
+   path. Decision D37.
+6. **Never lose a human correction.** Re-extraction and schema changes preserve
    human-verified values.
-6. **Domain-agnostic core.** Finance documents are the demo corpus, not an assumption.
+7. **Domain-agnostic core.** Finance documents are the demo corpus, not an assumption.
 
 ## Layout
 
@@ -43,8 +47,8 @@ Zamp assignment/
 └── client/              frontend (React + TypeScript)
 ```
 
-Note: `server/` and `client/` replace the `api/` and `web/` names used in
-`docs/implementation.md` section 3. That rename is intentional.
+Both docs are v2 (September 4, 2026). The pivot from v1 is recorded in `decisions.md`
+D34 through D43 and in requirements section 0; do not reintroduce v1 features.
 
 ## Verified environment facts (September 3, 2026)
 
