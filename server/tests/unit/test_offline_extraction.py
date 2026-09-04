@@ -349,7 +349,7 @@ async def test_a_call_kind_with_no_offline_answer_says_what_to_do(
 
     client = FakeClient(parse_settings)
     request = LLMRequest(
-        kind=CallKind.PLAN_DASHBOARD,
+        kind=CallKind.MAP_DRIFT,
         prompt="",
         response_model=OpenExtraction,
         fixture_key="missing",

@@ -44,6 +44,7 @@ from app.domain.events import DocumentStatusEvent
 from app.domain.fields import FieldSpec, SchemaChangeAuthor
 from app.errors import DistillError, LLMUnavailable, ParseFailed
 from app.events.bus import bus
+from app.insights import dashboard as dashboard_module
 from app.llm.base import LLMClient
 from app.llm.contracts import ExtractedField, OpenExtraction
 from app.logging import get_logger, logging_context
@@ -417,6 +418,7 @@ async def process_document(
         logger.info("process.completed", filename=filename)
 
     await maybe_infer_initial_schema(workspace_id, client=client, settings=settings)
+    await maybe_generate_dashboard(workspace_id, client=client, settings=settings)
 
 
 async def _mark_failed(document_id: UUID, reason: str) -> None:
@@ -575,4 +577,55 @@ async def maybe_infer_initial_schema(
                 fields=len(proposal.fields),
                 documents=len(waiting),
                 kept_separate=len(proposal.kept_separate),
+            )
+
+
+# ---------------------------------------------------------------------------
+# The dashboard, generated once the first batch settles. Requirement FR-33.
+# ---------------------------------------------------------------------------
+
+_dashboard_locks: dict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+
+async def maybe_generate_dashboard(
+    workspace_id: UUID, *, client: LLMClient, settings: Settings
+) -> None:
+    """Generate the dashboard if the first batch has finished and none exists yet.
+
+    Guarded three ways, because generation is a model call and doing it more than once per
+    batch would spend the user's tokens on the same answer:
+
+    * a per-workspace lock, so two documents finishing together do not both generate
+    * a check that nothing is still processing, so a ten file upload generates once at the
+      end rather than ten times
+    * a check that no dashboard has been generated before, so later uploads mark the
+      existing one stale (that happens at upload) instead of silently regenerating it
+    """
+    async with _dashboard_locks[workspace_id]:
+        async with session_scope() as session:
+            busy = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Document)
+                    .where(
+                        Document.workspace_id == workspace_id,
+                        Document.status.in_(
+                            (*_BUSY_STATUSES, DocumentStatus.AWAITING_SCHEMA)
+                        ),
+                    )
+                )
+            ).scalar_one()
+            if busy:
+                return
+
+            row = await dashboard_module.get_or_create(session, workspace_id)
+            if row.generated_at is not None:
+                return
+
+            fields = await versioning.current_fields(session, workspace_id)
+            if not fields:
+                return
+
+            await dashboard_module.generate(
+                session, workspace_id, fields=fields, client=client, settings=settings
             )

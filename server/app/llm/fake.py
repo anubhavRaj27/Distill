@@ -61,6 +61,7 @@ class FakeClient:
             CallKind.GUIDED_EXTRACT: _synthesise_guided_extraction,
             CallKind.CHAT_PLAN: _synthesise_chat_plan,
             CallKind.SUGGEST_QUESTIONS: _synthesise_suggestions,
+            CallKind.PLAN_DASHBOARD: _synthesise_dashboard,
         }
 
     @property
@@ -508,6 +509,180 @@ def _synthesise_chat_plan(request: LLMRequest) -> BaseModel:
     )
 
 
+def _total_phrase(label: str) -> str:
+    """"Total Total Due" reads as a bug, so a label already saying "total" keeps it."""
+    lowered = label.lower()
+    return lowered if lowered.startswith("total") else f"total {lowered}"
+
+
+def _article(word: str) -> str:
+    return "an" if word[:1].lower() in "aeiou" else "a"
+
+
+def _synthesise_dashboard(request: LLMRequest) -> BaseModel:
+    """Propose dashboard panels from the statistics, with no model call. Decision D13.
+
+    Deliberately proposes a VARIED set rather than repeating one shape, because the point
+    of the offline path is to exercise the real one: a plan of six metrics would never
+    reach the bar, line, or table branches of the builder, nor most of the vetting rules.
+
+    It also proposes only what the statistics support, which is the same instruction the
+    real prompt gives. That matters for the demo: a panel the server then drops is a wasted
+    slot, so the offline planner should not be systematically worse at this than a model.
+    """
+    from app.domain.chat import VisualKind
+    from app.insights.dashboard import DashboardPlan, Panel
+    from app.insights.queryspec import DataQuery, Visual
+
+    stats = request.context.get("stats") or []
+    document_count = int(request.context.get("document_count") or 0)
+    if not isinstance(stats, list) or not stats:
+        return DashboardPlan(panels=[])
+
+    def entries(**criteria: object) -> list[dict]:
+        found = [
+            entry
+            for entry in stats
+            if isinstance(entry, dict)
+            and all(entry.get(key) == value for key, value in criteria.items())
+        ]
+        return sorted(found, key=lambda entry: -float(entry.get("coverage") or 0))
+
+    money = entries(type="currency")
+    groupable = [
+        entry
+        for entry in stats
+        if isinstance(entry, dict)
+        and entry.get("groupable")
+        and entry.get("type") in ("string", "enum")
+    ]
+    # Prefer a field whose values actually REPEAT: that is what a category is, and what
+    # makes a bar chart a comparison rather than a list. Falls back to any groupable field
+    # when none repeats, which is the normal state of a very small corpus and not worth
+    # refusing to draw anything over.
+    repeating = [
+        entry
+        for entry in groupable
+        if int(entry.get("distinct") or 0) < int(entry.get("present") or 0)
+    ]
+    groupable = repeating or groupable
+    groupable.sort(key=lambda entry: -float(entry.get("coverage") or 0))
+    dates = entries(type="date")
+
+    panels: list[Panel] = []
+
+    # Lead with the figure that characterises the whole collection.
+    panels.append(
+        Panel(
+            visual=Visual(
+                kind=VisualKind.METRIC,
+                title="Documents in this collection",
+                query=DataQuery(aggregate="count"),
+            ),
+            rationale=f"There are {document_count} documents, the denominator for everything else.",
+        )
+    )
+
+    if money:
+        top = money[0]
+        code = (top.get("currencies") or [None])[0]
+        panels.append(
+            Panel(
+                visual=Visual(
+                    kind=VisualKind.METRIC,
+                    title=_total_phrase(str(top["label"])).capitalize(),
+                    query=DataQuery(aggregate="sum", measure_field=str(top["key"])),
+                    unit_hint=code,
+                ),
+                rationale=(
+                    f"{top['label']} is present in {float(top['coverage']):.0%} of "
+                    f"documents, so the total is meaningful."
+                ),
+            )
+        )
+        if groupable:
+            group = groupable[0]
+            panels.append(
+                Panel(
+                    visual=Visual(
+                        kind=VisualKind.BAR,
+                        title=f"{top['label']} by {group['label'].lower()}",
+                        query=DataQuery(
+                            aggregate="sum",
+                            measure_field=str(top["key"]),
+                            group_by=str(group["key"]),
+                        ),
+                        unit_hint=code,
+                    ),
+                    rationale=(
+                        f"{group['label']} has {group['distinct']} distinct values, few "
+                        f"enough to compare side by side."
+                    ),
+                )
+            )
+
+    if groupable:
+        group = groupable[-1] if len(groupable) > 1 else groupable[0]
+        panels.append(
+            Panel(
+                visual=Visual(
+                    kind=VisualKind.BAR,
+                    title=f"Documents by {group['label'].lower()}",
+                    query=DataQuery(aggregate="count", group_by=str(group["key"])),
+                ),
+                rationale=(
+                    f"{group['label']} splits the collection into {group['distinct']} groups."
+                ),
+            )
+        )
+
+    if dates:
+        date_field = dates[0]
+        panels.append(
+            Panel(
+                visual=Visual(
+                    kind=VisualKind.LINE,
+                    title=f"Documents by month of {date_field['label'].lower()}",
+                    query=DataQuery(
+                        aggregate="count", group_by=str(date_field["key"]), bucket="month"
+                    ),
+                ),
+                rationale=(
+                    f"{date_field['label']} is present in "
+                    f"{float(date_field['coverage']):.0%} of documents, enough for a trend."
+                ),
+            )
+        )
+
+    # A field almost nothing filled in is worth surfacing as a gap rather than a chart.
+    sparse = [
+        entry
+        for entry in stats
+        if isinstance(entry, dict) and 0 < float(entry.get("coverage") or 0) < 0.6
+    ]
+    if sparse:
+        gap = sparse[0]
+        panels.append(
+            Panel(
+                visual=Visual(
+                    kind=VisualKind.METRIC,
+                    title=f"Documents with no {str(gap['label']).lower()}",
+                    query=DataQuery(
+                        aggregate="count",
+                        filters=[{"field": str(gap["key"]), "op": "missing"}],  # type: ignore[list-item]
+                    ),
+                ),
+                rationale=(
+                    f"Only {float(gap['coverage']):.0%} of documents have "
+                    f"{_article(str(gap['label']))} {str(gap['label']).lower()}, "
+                    f"which is worth knowing."
+                ),
+            )
+        )
+
+    return DashboardPlan(panels=panels)
+
+
 def _synthesise_suggestions(request: LLMRequest) -> BaseModel:
     """Three suggested questions built from the schema, with no model call."""
     from app.chat.suggestions import SuggestedQuestions
@@ -531,21 +706,13 @@ def _synthesise_suggestions(request: LLMRequest) -> BaseModel:
     )
     other = next((f for f in fields if f.type is FieldType.STRING and f is not party), None)
 
-    def _measure_phrase(field: FieldSpec) -> str:
-        """"total total due" reads as a bug, so a label already saying "total" keeps it."""
-        label = field.label.lower()
-        return label if label.startswith("total") else f"total {label}"
-
-    def _article(word: str) -> str:
-        return "an" if word[:1] in "aeiou" else "a"
-
     questions: list[str] = []
     if money and party:
         questions.append(
-            f"What is the {_measure_phrase(money)} by {party.label.lower()}?"
+            f"What is the {_total_phrase(money.label)} by {party.label.lower()}?"
         )
     elif money:
-        questions.append(f"What is the {_measure_phrase(money)}?")
+        questions.append(f"What is the {_total_phrase(money.label)}?")
     if other:
         label = other.label.lower()
         questions.append(f"Which documents are missing {_article(label)} {label}?")

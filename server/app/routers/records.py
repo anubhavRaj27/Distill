@@ -18,6 +18,7 @@ from app.domain.fields import FieldValue
 from app.domain.records import Record as RecordPayload
 from app.domain.records import RecordPage
 from app.errors import FieldNotInSchema, RecordNotFound
+from app.insights import dashboard as dashboard_module
 from app.logging import get_logger
 from app.pipeline.persist import apply_human_correction
 from app.schema import versioning
@@ -178,7 +179,7 @@ async def correct_field(
             available=[field.key for field in fields],
         )
 
-    return await apply_human_correction(
+    updated = await apply_human_correction(
         session,
         workspace_id=workspace.id,
         record=record,
@@ -187,6 +188,9 @@ async def correct_field(
         value=body.value,
         not_present=body.not_present,
     )
+    # Requirement FR-52. A corrected value can change every total on the dashboard.
+    await dashboard_module.mark_stale(session, workspace.id, reason="value corrected")
+    return updated
 
 # The review queue and its keyboard flow were removed in v2 (decision D42). A second screen
 # dedicated to checking cells competes with the chat for the user's attention, and the

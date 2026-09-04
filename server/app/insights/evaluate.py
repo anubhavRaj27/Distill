@@ -406,9 +406,14 @@ async def evaluate(
             rows.sort(key=lambda row: row.label)
         case _:
             rows.sort(key=lambda row: (row.value is None, -(row.value or 0.0)))
-    # A bucketed query is a time series, so chronological order beats value order whatever
-    # the model asked for: a line chart sorted by magnitude is not a line chart.
     if query.bucket != "none":
+        # A bucketed query is a time series. Two consequences, both of which override what
+        # the model asked for, because the model chose before seeing the data:
+        #   - chronological order beats value order (a line sorted by magnitude is not a
+        #     line chart), and the bucket labels sort chronologically as strings by design
+        #   - the "not stated" group is dropped: records with no date have no position on a
+        #     time axis, and rendering them as a point implies one
+        rows = [row for row in rows if row.label != MISSING_LABEL]
         rows.sort(key=lambda row: row.label)
     rows = rows[: query.limit]
 

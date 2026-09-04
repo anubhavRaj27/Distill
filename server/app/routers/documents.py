@@ -44,6 +44,7 @@ from app.domain.document import DocumentStatus, SourceFormat
 from app.domain.events import DocumentStatusEvent
 from app.errors import DocumentNotFound, FileTooLarge, NotFound, UnsupportedFileType
 from app.events.bus import bus
+from app.insights import dashboard as dashboard_module
 from app.logging import get_logger
 from app.pipeline.process import content_hash
 from app.pipeline.sniff import HEAD_BYTES, SUPPORTED_EXTENSIONS, sniff
@@ -249,6 +250,11 @@ async def upload(
             )
         finally:
             await _remove(path)
+
+    if any(entry.duplicate_of is None for entry in response.accepted):
+        # New content invalidates the panels. Marked rather than regenerated: see
+        # app.insights.dashboard.mark_stale for why that choice is the user's.
+        await dashboard_module.mark_stale(session, workspace.id, reason="documents added")
 
     logger.info(
         "documents.uploaded",

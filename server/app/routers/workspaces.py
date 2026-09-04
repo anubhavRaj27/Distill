@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from app.auth import hash_token, mint_token
-from app.db.models import Document, Record, SchemaVersion, Workspace
+from app.db.models import DashboardRow, Document, Record, SchemaVersion, Workspace
 from app.deps import CurrentWorkspace, Session
 from app.domain.document import DocumentStatus
 from app.domain.fields import FieldSpec
@@ -57,6 +57,12 @@ class WorkspaceOverview(BaseModel):
     fields: list[FieldSpec] = Field(default_factory=list)
     documents: list[DocumentSummary] = Field(default_factory=list)
     record_count: int = 0
+    dashboard_status: str | None = Field(
+        default=None,
+        description="pending, ready, or failed. Null when no dashboard row exists yet.",
+    )
+    dashboard_stale: bool = False
+    dashboard_panel_count: int = 0
     last_event_seq: int = Field(
         default=0,
         description="The newest event sequence number. The interface opens its event "
@@ -120,6 +126,12 @@ async def get_workspace(workspace: CurrentWorkspace, session: Session) -> Worksp
         )
     ).scalar_one()
 
+    dashboard = (
+        await session.execute(
+            select(DashboardRow).where(DashboardRow.workspace_id == workspace.id)
+        )
+    ).scalar_one_or_none()
+
     return WorkspaceOverview(
         id=workspace.id,
         label=workspace.label,
@@ -140,5 +152,8 @@ async def get_workspace(workspace: CurrentWorkspace, session: Session) -> Worksp
             for document in documents
         ],
         record_count=int(record_count),
+        dashboard_status=dashboard.status.value if dashboard else None,
+        dashboard_stale=bool(dashboard.stale) if dashboard else False,
+        dashboard_panel_count=len(dashboard.panels or []) if dashboard else 0,
         last_event_seq=workspace.event_seq,
     )

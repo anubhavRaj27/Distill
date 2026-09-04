@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.deps import CurrentWorkspace, Session
 from app.domain.fields import FieldSpec
 from app.errors import InvalidSchemaChange
+from app.insights import dashboard as dashboard_module
 from app.logging import get_logger
 from app.schema import versioning
 
@@ -100,6 +101,9 @@ async def update_schema(
     else:  # pragma: no cover - the validator guarantees one of the two
         raise InvalidSchemaChange("Provide exactly one of 'rename' or 'merge'.")
 
+    # A merge moves values between columns and a rename changes what a panel is titled,
+    # so either can make the dashboard wrong rather than merely dated.
+    await dashboard_module.mark_stale(session, workspace.id, reason="schema edited")
     logger.info("schema.updated_by_user", workspace_id=str(workspace.id), version=row.version)
     return SchemaResponse(
         version=row.version, fields=[FieldSpec.model_validate(f) for f in row.fields]
