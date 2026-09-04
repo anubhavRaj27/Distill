@@ -44,7 +44,8 @@ function makeFile(name: string, size = 1024): File {
  * the rule actually has to hold.
  */
 function drop(files: File[]) {
-  const zone = screen.getByText(/drop files to begin/i).closest('div')!.parentElement!;
+  // The prompt text sits directly inside the element carrying the drop handlers.
+  const zone = screen.getByText(/drag files here/i).parentElement!;
   fireEvent.drop(zone, { dataTransfer: { files, types: ['Files'] } });
 }
 
@@ -78,11 +79,9 @@ describe('FirstRunScreen', () => {
     renderScreen();
 
     expect(
-      screen.getByRole('heading', {
-        name: /one table you can trust/i,
-      }),
+      screen.getByRole('heading', { name: /drop your documents in/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/where every number came from/i)).toBeInTheDocument();
+    expect(screen.getByText(/we read the pile and pull out what matters/i)).toBeInTheDocument();
   });
 
   it('offers both ways in, neither buried behind the other', () => {
@@ -92,6 +91,21 @@ describe('FirstRunScreen', () => {
     expect(
       screen.getByRole('button', { name: /try with sample documents/i }),
     ).toBeEnabled();
+  });
+
+  it('shows all three screens in the header, with the two that need a workspace inert', () => {
+    renderScreen();
+
+    // The shape of the product is legible from the first screen: three screens, and the
+    // two that need documents are visibly not available yet rather than hidden.
+    expect(screen.getByRole('link', { name: 'Upload' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Data' })).not.toBeInTheDocument();
+    expect(screen.getByText('Chat')).toBeInTheDocument();
+    expect(screen.getByText('Data')).toBeInTheDocument();
   });
 
   it('gives the file input an accessible name that lists what it accepts', () => {

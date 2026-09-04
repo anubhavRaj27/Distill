@@ -1,8 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import styled from 'styled-components';
 
-import { Button } from '../../ui/Button';
-import { Wordmark } from '../../ui/Wordmark';
+import { AppHeader } from '../../app/AppHeader';
 import { sortIntake, type RejectedFile } from '../../lib/files';
 import { logger } from '../../lib/logger';
 import { DistillationMark } from './components/DistillationMark';
@@ -11,16 +10,16 @@ import { RejectionNotice } from './components/RejectionNotice';
 import { useStartWorkspace } from './useStartWorkspace';
 
 /**
- * Screen 1: first run, no workspace yet.
+ * Screen 1 of three: Upload. Route `/`. Requirements section 3.1.
  *
- * This screen is the trust pitch. A person who has never seen the product should
- * understand it in about thirty seconds without reading documentation, and should be able
- * to try it in one click (product principle 5, requirement FR-05). Everything on it earns
- * its place against that: one sentence of what happens, one picture of mess becoming a
- * table, one place to put files, two ways to start.
+ * A person who has never seen this product should understand it and be able to start in one
+ * action. Everything here earns its place against that: what to do, what is accepted, a
+ * place to put files, and a way in with no files of your own. Dropping files or asking for
+ * the samples creates the workspace and hands off to Chat, where the processing strip takes
+ * over — this screen never becomes a progress page.
  *
- * Deliberately absent: a feature grid, a sign-up, a tour. There are no accounts in this
- * product (decision D8), so there is nothing to stand between arriving and starting.
+ * Deliberately absent: a feature grid, a sign-up, a tour. There are no accounts (decision
+ * D8), so nothing stands between arriving and starting.
  */
 
 const Page = styled.div`
@@ -30,91 +29,89 @@ const Page = styled.div`
   background: ${({ theme }) => theme.color.paper};
 `;
 
-const Masthead = styled.header`
-  padding: ${({ theme }) => theme.space.xxl} ${({ theme }) => theme.space.page}
-    0;
-`;
-
 const Main = styled.main`
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: ${({ theme }) => theme.space.section} ${({ theme }) => theme.space.page};
+  padding: ${({ theme }) => theme.space.page};
 `;
 
-const Hero = styled.div`
-  width: 100%;
-  max-width: ${({ theme }) => theme.measure.prose};
-  text-align: center;
+const Intro = styled.section`
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: ${({ theme }) => theme.space.lg};
+  text-align: center;
+  width: 100%;
 `;
 
 const Headline = styled.h1`
   font-family: ${({ theme }) => theme.font.display};
   font-weight: 400;
-  font-size: clamp(28px, 4vw, 40px);
+  font-size: 34px;
   line-height: 1.15;
-  letter-spacing: -0.01em;
   color: ${({ theme }) => theme.color.ink};
   text-wrap: balance;
 `;
 
 const Standfirst = styled.p`
   max-width: ${({ theme }) => theme.measure.narrow};
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.7;
   color: ${({ theme }) => theme.color.inkMuted};
   text-wrap: pretty;
 `;
 
-const Illustration = styled.div`
-  margin-top: ${({ theme }) => theme.space.xxl};
-  display: flex;
-  justify-content: center;
-  width: 100%;
-`;
-
-const Intake = styled.section`
-  margin-top: ${({ theme }) => theme.space.xxl};
-  width: 100%;
-  max-width: ${({ theme }) => theme.measure.prose};
+const Intake = styled.div`
+  margin-top: ${({ theme }) => theme.space.lg};
+  width: 640px;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
 `;
 
-const Actions = styled.div`
-  margin-top: ${({ theme }) => theme.space.xl};
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: ${({ theme }) => theme.space.lg};
-  flex-wrap: wrap;
-
-  /*
-   * Both routes in are the same width and sit side by side. "Try with sample documents"
-   * is not a lesser option: for a first-time visitor it is usually the better one, and the
-   * requirements ask for it to be equally prominent.
-   */
-  > button {
-    width: 220px;
-  }
-`;
-
-const Footnote = styled.p`
+/**
+ * The sample path, requirement FR-05.
+ *
+ * Quieter than "Choose files" but immediately below it, because for a first-time visitor
+ * with nothing to hand it is the more useful of the two. It is a real button, not a link:
+ * it performs an action rather than navigating.
+ */
+const SampleAction = styled.button`
+  appearance: none;
   margin-top: ${({ theme }) => theme.space.lg};
-  font-size: 12px;
+  padding: 4px 8px;
+
+  font-family: inherit;
+  font-size: 13px;
   color: ${({ theme }) => theme.color.inkMuted};
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color ${({ theme }) => theme.motion.quick};
+
+  span {
+    color: ${({ theme }) => theme.color.ink};
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  &:hover:not(:disabled) {
+    color: ${({ theme }) => theme.color.ink};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
 `;
 
 const StartError = styled.p`
   margin-top: ${({ theme }) => theme.space.lg};
   max-width: ${({ theme }) => theme.measure.narrow};
-  font-size: 14px;
+  font-size: 13px;
   text-align: center;
   color: ${({ theme }) => theme.tier.conflict.color};
 
@@ -125,21 +122,15 @@ const StartError = styled.p`
   }
 `;
 
-const Colophon = styled.footer`
-  border-top: 1px solid ${({ theme }) => theme.color.line};
+const Illustration = styled.section`
   margin-top: ${({ theme }) => theme.space.section};
-  padding: ${({ theme }) => theme.space.lg} ${({ theme }) => theme.space.page};
-
-  p {
-    text-align: center;
-    font-size: 12px;
-    color: ${({ theme }) => theme.color.inkMuted};
-  }
+  display: flex;
+  justify-content: center;
+  width: 100%;
 `;
 
 export function FirstRunScreen() {
   const [rejected, setRejected] = useState<RejectedFile[]>([]);
-  const fileInput = useRef<HTMLInputElement>(null);
   const start = useStartWorkspace();
   const busy = start.isPending;
 
@@ -148,9 +139,8 @@ export function FirstRunScreen() {
       const { accepted, rejected: refused } = sortIntake(files);
 
       // Requirement FR-03: refusals are shown inline and immediately, before any bytes
-      // leave the browser. A mixed selection still uploads what it can — refusing the
-      // whole batch over one bad file would be the wrong trade for someone dropping a
-      // folder.
+      // leave the browser. A mixed selection still uploads what it can — refusing a whole
+      // batch over one bad file would be the wrong trade for someone dropping a folder.
       setRejected(refused);
       if (refused.length > 0) {
         logger.event('files.rejected', {
@@ -171,63 +161,49 @@ export function FirstRunScreen() {
 
   return (
     <Page>
-      <Masthead>
-        <Wordmark />
-      </Masthead>
+      <AppHeader />
 
       <Main>
-        <Hero>
-          <Headline>Every invoice, receipt, and statement — one table you can trust.</Headline>
+        <Intro>
+          <Headline>Drop your documents in.</Headline>
           <Standfirst>
-            Drop in whatever you have. Distill reads it, reconciles it against everything
-            else, and shows you exactly where every number came from.
+            PDF, DOCX, XLSX, CSV, images, and plain text. We read the pile and pull out what
+            matters.
           </Standfirst>
-        </Hero>
 
-        <Illustration>
+          <Intake aria-busy={busy}>
+            <DropZone onFiles={handleFiles} disabled={busy} />
+
+            {rejected.length > 0 && <RejectionNotice rejected={rejected} />}
+
+            {start.isError ? (
+              <StartError role="alert">
+                {start.error.message}
+                {start.error.correlationId && (
+                  <>
+                    {' '}
+                    <code>{start.error.correlationId}</code>
+                  </>
+                )}
+              </StartError>
+            ) : (
+              <SampleAction type="button" disabled={busy} onClick={handleSamples}>
+                {busy && start.variables?.kind === 'samples' ? (
+                  'Loading sample documents…'
+                ) : (
+                  <>
+                    No documents to hand? <span>Try with sample documents</span>
+                  </>
+                )}
+              </SampleAction>
+            )}
+          </Intake>
+        </Intro>
+
+        <Illustration aria-label="Documents settling into a structured table">
           <DistillationMark />
         </Illustration>
-
-        <Intake aria-busy={busy}>
-          <DropZone onFiles={handleFiles} disabled={busy} inputRef={fileInput} />
-
-          {rejected.length > 0 && <RejectionNotice rejected={rejected} />}
-
-          <Actions>
-            <Button
-              type="button"
-              $variant="primary"
-              disabled={busy}
-              onClick={() => fileInput.current?.click()}
-            >
-              {busy && start.variables?.kind === 'files' ? 'Starting…' : 'Choose files'}
-            </Button>
-            <Button type="button" $variant="secondary" disabled={busy} onClick={handleSamples}>
-              {busy && start.variables?.kind === 'samples'
-                ? 'Loading samples…'
-                : 'Try with sample documents'}
-            </Button>
-          </Actions>
-
-          {start.isError ? (
-            <StartError role="alert">
-              {start.error.message}
-              {start.error.correlationId && (
-                <>
-                  {' '}
-                  <code>{start.error.correlationId}</code>
-                </>
-              )}
-            </StartError>
-          ) : (
-            <Footnote>No account needed to try it — sample data only.</Footnote>
-          )}
-        </Intake>
       </Main>
-
-      <Colophon>
-        <p>Distill · your documents never leave this workspace without your say</p>
-      </Colophon>
     </Page>
   );
 }

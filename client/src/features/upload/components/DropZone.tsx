@@ -1,94 +1,126 @@
+import { Upload } from 'lucide-react';
 import { useCallback, useId, useRef, useState } from 'react';
-
 import styled from 'styled-components';
 
 import { ACCEPT_ATTRIBUTE, SUPPORTED_EXTENSIONS } from '../../../lib/files';
 
 const Zone = styled.div`
   position: relative;
-  width: 100%;
+  width: 640px;
+  max-width: 100%;
+  height: 220px;
 
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: ${({ theme }) => theme.space.md};
+
+  background: ${({ theme }) => theme.color.paperRaised};
   border: 1px dashed ${({ theme }) => theme.color.lineStrong};
-  border-radius: ${({ theme }) => theme.radius.sm};
-  background: rgba(255, 255, 255, 0.4);
-
-  padding: ${({ theme }) => theme.space.xxl} ${({ theme }) => theme.space.xl};
-  text-align: center;
+  border-radius: ${({ theme }) => theme.radius.md};
+  cursor: pointer;
 
   transition:
     border-color ${({ theme }) => theme.motion.quick},
     background-color ${({ theme }) => theme.motion.quick};
 
   /*
-   * The dragging state is driven by a data attribute rather than an interpolated prop, so
-   * styled-components generates two classes for this component rather than one per state
-   * change during a drag. Same rule the table cells will follow.
+   * Drag state rides on a data attribute rather than an interpolated prop, so this
+   * component compiles to two classes rather than one per state change during a drag.
+   * The same rule the data table's cells will follow.
    */
   &[data-dragging='true'] {
     border-color: ${({ theme }) => theme.color.ink};
-    background: ${({ theme }) => theme.color.paperRaised};
+    background: ${({ theme }) => theme.color.paperSunken};
+  }
+
+  svg {
+    color: ${({ theme }) => theme.color.ink};
   }
 `;
 
-const Stack = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: ${({ theme }) => theme.space.sm};
-`;
-
-const Glyph = styled.svg`
-  width: 32px;
-  height: 32px;
-  color: ${({ theme }) => theme.color.ink};
-`;
-
-const Headline = styled.p`
-  font-size: 18px;
-  font-weight: 600;
-  color: ${({ theme }) => theme.color.ink};
-`;
-
-const Detail = styled.p`
+const Prompt = styled.span`
   font-size: 14px;
-  color: ${({ theme }) => theme.color.inkMuted};
+  color: ${({ theme }) => theme.color.ink};
+`;
+
+const ChooseButton = styled.button`
+  appearance: none;
+  margin-top: ${({ theme }) => theme.space.xs};
+  padding: 8px 16px;
+
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: ${({ theme }) => theme.color.ink};
+  background: ${({ theme }) => theme.color.paperRaised};
+  border: 1px solid ${({ theme }) => theme.color.lineStrong};
+  border-radius: ${({ theme }) => theme.radius.md};
+  cursor: pointer;
+  transition: background-color ${({ theme }) => theme.motion.quick};
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.color.paperSunken};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
 `;
 
 /**
- * The whole zone is one large label for a visually hidden file input. A keyboard user
- * tabs to a real `<input type="file">` and presses Enter; a pointer user clicks anywhere
- * in the rectangle or drops onto it. No custom key handling, no `role="button"` on a div,
- * and the native picker for free.
+ * The real file input, visually hidden but present in the tab order.
+ *
+ * It is not stretched invisibly across the whole zone. Doing that would put a transparent
+ * input on top of the "Choose files" button and swallow its clicks, and it would give the
+ * zone two overlapping click targets with one accessible name between them. Instead the
+ * input stays small and hidden, the button drives it, and the zone forwards stray pointer
+ * clicks to it as a convenience.
  */
 const HiddenInput = styled.input`
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 `;
 
 export interface DropZoneProps {
   onFiles: (files: File[]) => void;
   disabled?: boolean;
-  /**
-   * The hidden input, exposed so the "Choose files" button below the zone opens the same
-   * native picker instead of duplicating one.
-   */
-  inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-export function DropZone({ onFiles, disabled = false, inputRef }: DropZoneProps) {
+export function DropZone({ onFiles, disabled = false }: DropZoneProps) {
   const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const describedBy = useId();
 
   /*
    * `dragenter` and `dragleave` fire for every child element the pointer crosses, so a
-   * boolean set from the events alone flickers. Counting depth is the standard fix and it
-   * lives in a ref, because it is bookkeeping rather than rendered state.
+   * boolean set straight from those events flickers. Counting depth is the fix, and it
+   * lives in a ref because it is bookkeeping rather than rendered state.
    */
   const depth = useRef(0);
+
+  const openPicker = useCallback(() => {
+    if (!disabled) inputRef.current?.click();
+  }, [disabled]);
+
+  const handleZoneClick = useCallback(
+    (event: React.MouseEvent) => {
+      // The button inside the zone drives the picker itself; without this guard its click
+      // would bubble up here and open the dialog a second time.
+      if ((event.target as HTMLElement).closest('button')) return;
+      openPicker();
+    },
+    [openPicker],
+  );
 
   const handleDragEnter = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -134,25 +166,18 @@ export function DropZone({ onFiles, disabled = false, inputRef }: DropZoneProps)
   return (
     <Zone
       data-dragging={dragging}
+      onClick={handleZoneClick}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <Stack>
-        <Glyph viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-          <path
-            d="M6.5 18a4.5 4.5 0 0 1-.53-8.97 6 6 0 0 1 11.65-1.5A4.25 4.25 0 0 1 18 18"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path d="M12 21v-8m0 0-3 3m3-3 3 3" strokeLinecap="round" strokeLinejoin="round" />
-        </Glyph>
-        <Headline>Drop files to begin</Headline>
-        <Detail id={describedBy}>
-          PDF, scans, spreadsheets, and Word documents — any mix, any format
-        </Detail>
-      </Stack>
+      <Upload size={28} strokeWidth={1.5} aria-hidden="true" />
+      <Prompt id={describedBy}>Drag files here or click to browse</Prompt>
+
+      <ChooseButton type="button" onClick={openPicker} disabled={disabled}>
+        Choose files
+      </ChooseButton>
 
       <HiddenInput
         ref={inputRef}
