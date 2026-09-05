@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Providers } from '../../app/Providers';
 import { makeQueryClient } from '../../app/queryClient';
 import { FirstRunScreen } from './FirstRunScreen';
+import { usePendingUploads } from './pendingUploads';
 
 /**
  * The first-run screen has one job: a person who has never seen this product understands
@@ -52,6 +53,7 @@ function drop(files: File[]) {
 const fetchMock = vi.fn();
 
 beforeEach(() => {
+  usePendingUploads.getState().clear();
   fetchMock.mockReset();
   vi.stubGlobal('fetch', fetchMock);
 });
@@ -75,13 +77,13 @@ function respondOnce(body: unknown, status = 200) {
 }
 
 describe('FirstRunScreen', () => {
-  it('states what the product does before anything has been uploaded', () => {
+  it('names itself and states what it does before anything has been uploaded', () => {
     renderScreen();
 
-    expect(
-      screen.getByRole('heading', { name: /drop your documents in/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/we read the pile and pull out what matters/i)).toBeInTheDocument();
+    // The name is drawn as particles on a canvas, so the accessible name has to come from
+    // real text underneath it. Querying by role is what proves the text is actually there.
+    expect(screen.getByRole('heading', { name: 'Distill' })).toBeInTheDocument();
+    expect(screen.getByText(/pull out what matters/i)).toBeInTheDocument();
   });
 
   it('offers both ways in, neither buried behind the other', () => {
@@ -93,19 +95,15 @@ describe('FirstRunScreen', () => {
     ).toBeEnabled();
   });
 
-  it('shows all three screens in the header, with the two that need a workspace inert', () => {
+  it('shows no application chrome, because there is nothing yet to navigate to', () => {
     renderScreen();
 
-    // The shape of the product is legible from the first screen: three screens, and the
-    // two that need documents are visibly not available yet rather than hidden.
-    expect(screen.getByRole('link', { name: 'Upload' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
-    expect(screen.queryByRole('link', { name: 'Chat' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Data' })).not.toBeInTheDocument();
-    expect(screen.getByText('Chat')).toBeInTheDocument();
-    expect(screen.getByText('Data')).toBeInTheDocument();
+    // Decision D57: the header is workspace chrome. Before an upload, Chat and Data lead
+    // nowhere, so the screen is the product's front door and nothing else.
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+    expect(screen.queryByText('Chat')).not.toBeInTheDocument();
+    expect(screen.queryByText('Data')).not.toBeInTheDocument();
   });
 
   it('gives the file input an accessible name that lists what it accepts', () => {
@@ -129,13 +127,12 @@ describe('FirstRunScreen', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('uploads the acceptable files from a mixed selection and reports the rest', async () => {
+  it('carries a mixed selection onward, refusals included', async () => {
     respondOnce({
       id: '11111111-1111-4111-8111-111111111111',
       token: 'tok_test',
       created_at: new Date().toISOString(),
     });
-    respondOnce({ documents: [] });
 
     renderScreen();
 
@@ -146,7 +143,14 @@ describe('FirstRunScreen', () => {
     // openapi-fetch hands a fully built `Request` to the transport, not (url, init).
     expect(requestAt(0).url).toContain('/api/v1/workspaces');
 
-    expect(await screen.findByRole('status')).toHaveTextContent(/slides\.key/);
+    // The acceptable file is not uploaded from here: the upload screen owns the transfer,
+    // because only it can report progress per file.
+    await waitFor(() => {
+      const staged = usePendingUploads.getState();
+      expect(staged.files.map((file) => file.name)).toEqual(['invoice.pdf']);
+      // And the refusal goes with it, so it is readable on a screen that stays put.
+      expect(staged.rejected.map((entry) => entry.file.name)).toEqual(['slides.key']);
+    });
   });
 
   it('creates a workspace and seeds it when asked for the samples', async () => {

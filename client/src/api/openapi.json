@@ -789,78 +789,6 @@
         }
       }
     },
-    "/api/v1/workspaces/{workspace_id}/review": {
-      "get": {
-        "tags": [
-          "records"
-        ],
-        "summary": "The review queue",
-        "description": "Cells needing attention, highest impact first. Requirement FR-32.\n\nOrdered by impact rather than by tier alone, because \"which of these low-confidence\ncells matters\" is the question a user actually has: a shaky total on an invoice is worth\nmore attention than a shaky note.",
-        "operationId": "review_queue_api_v1_workspaces__workspace_id__review_get",
-        "parameters": [
-          {
-            "name": "workspace_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Workspace Id"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewQueue"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/workspaces/{workspace_id}/schema": {
       "get": {
         "tags": [
@@ -923,7 +851,7 @@
         "tags": [
           "schema"
         ],
-        "summary": "Edit the schema",
+        "summary": "Rename or merge a field",
         "operationId": "update_schema_api_v1_workspaces__workspace_id__schema_patch",
         "parameters": [
           {
@@ -959,285 +887,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateSchemaRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SchemaResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/schema/versions": {
-      "get": {
-        "tags": [
-          "schema"
-        ],
-        "summary": "Schema history",
-        "description": "Requirement FR-15. Marks which entries the system applied without asking.",
-        "operationId": "schema_history_api_v1_workspaces__workspace_id__schema_versions_get",
-        "parameters": [
-          {
-            "name": "workspace_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Workspace Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SchemaHistory"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/schema/revert": {
-      "post": {
-        "tags": [
-          "schema"
-        ],
-        "summary": "Revert the schema",
-        "description": "Requirement FR-15's one-click revert.\n\nApplies the old fields as a NEW version rather than deleting rows, so the history keeps\nboth the mistake and the correction.",
-        "operationId": "revert_schema_api_v1_workspaces__workspace_id__schema_revert_post",
-        "parameters": [
-          {
-            "name": "workspace_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Workspace Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RevertRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SchemaResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/proposals": {
-      "get": {
-        "tags": [
-          "schema"
-        ],
-        "summary": "Outstanding schema questions",
-        "description": "Only questions that needed a human live here. Decision D23.\n\nAn automatically applied change writes a ``schema_versions`` row and no proposal, so\n\"how many decisions are outstanding\" is a row count rather than a filtered one.",
-        "operationId": "list_proposals_api_v1_workspaces__workspace_id__proposals_get",
-        "parameters": [
-          {
-            "name": "workspace_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Workspace Id"
-            }
-          },
-          {
-            "name": "include_resolved",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "title": "Include Resolved"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProposalList"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/proposals/{proposal_id}/resolve": {
-      "post": {
-        "tags": [
-          "schema"
-        ],
-        "summary": "Decide a schema question",
-        "operationId": "resolve_proposal_api_v1_workspaces__workspace_id__proposals__proposal_id__resolve_post",
-        "parameters": [
-          {
-            "name": "proposal_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Proposal Id"
-            }
-          },
-          {
-            "name": "workspace_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Workspace Id"
-            }
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResolveProposalRequest"
               }
             }
           }
@@ -1338,10 +987,509 @@
           }
         }
       }
+    },
+    "/api/v1/workspaces/{workspace_id}/chat/messages": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Conversation history",
+        "description": "Persisted state only. A streaming answer's text lives in its buffer until it\nfinishes, so a message here that says ``streaming`` has empty content on purpose: the\nclient opens its stream to get the rest.",
+        "operationId": "list_messages_api_v1_workspaces__workspace_id__chat_messages_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Ask a question",
+        "operationId": "ask_api_v1_workspaces__workspace_id__chat_messages_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/chat/messages/{message_id}/stream": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "The answer, streamed (Server-Sent Events)",
+        "operationId": "stream_api_v1_workspaces__workspace_id__chat_messages__message_id__stream_get",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/chat/messages/{message_id}/stop": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Stop a streaming answer",
+        "description": "Cancel generation. What already streamed is kept.\n\nKeeping the partial text is deliberate: the user read it, so deleting it would be\nsurprising, and a stopped answer has often already said the useful part.",
+        "operationId": "stop_api_v1_workspaces__workspace_id__chat_messages__message_id__stop_post",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Message Id"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/chat/suggestions": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Suggested questions",
+        "operationId": "suggestions_api_v1_workspaces__workspace_id__chat_suggestions_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/dashboard": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "The current dashboard",
+        "description": "Persisted panels. Requirement FR-34: a refresh never re-runs generation.",
+        "operationId": "get_dashboard_api_v1_workspaces__workspace_id__dashboard_get",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/dashboard/generate": {
+      "post": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Regenerate the dashboard",
+        "description": "Plan, evaluate, vet, and persist.\n\nSynchronous, unlike a chat answer. A dashboard is one structured call and a handful of\nin-process evaluations, so it completes in about a second on the fast tier, and the\nuser pressed a button and is watching. Streaming it would add a second connection to\nreason about for no gain the user could perceive.",
+        "operationId": "generate_api_v1_workspaces__workspace_id__dashboard_generate_post",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AskRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest"
+      },
+      "AskResponse": {
+        "properties": {
+          "user_message": {
+            "$ref": "#/components/schemas/MessageResponse"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Message Id"
+          },
+          "stream_url": {
+            "type": "string",
+            "title": "Stream Url",
+            "description": "Where to read the answer. Given rather than constructed by the client so the route can move without breaking it."
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_message",
+          "message_id",
+          "stream_url"
+        ],
+        "title": "AskResponse",
+        "description": "202. Generation has started; the answer arrives on the stream."
+      },
       "BBox": {
         "properties": {
           "x0": {
@@ -1483,6 +1631,54 @@
         ],
         "title": "CreateWorkspaceResponse"
       },
+      "DashboardResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale",
+            "description": "Documents were added or values corrected since generation. The interface offers to regenerate rather than doing it unasked, because regeneration is a model call."
+          },
+          "panels": {
+            "items": {
+              "$ref": "#/components/schemas/PanelResponse"
+            },
+            "type": "array",
+            "title": "Panels"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "stale"
+        ],
+        "title": "DashboardResponse"
+      },
       "DocumentDetail": {
         "properties": {
           "id": {
@@ -1580,14 +1776,15 @@
         "type": "string",
         "enum": [
           "uploaded",
-          "parsed",
+          "parsing",
           "extracting",
           "awaiting_schema",
+          "indexing",
           "done",
           "failed"
         ],
         "title": "DocumentStatus",
-        "description": "Where a document is in the pipeline. Rendered directly as the progress list.\n\nThe observability requirement and the user experience are the same feature here: the\nprogress list in the interface IS this state machine, so every state has to be a state\na person would want to see, and every transition publishes an event.\n\nTransitions::\n\n    uploaded -> parsed -> extracting -> awaiting_schema -> done\n         |         |          |               |\n         +---------+----------+---------------+--> failed\n\n``awaiting_schema`` is the state review finding 8.5 introduced. A document in the very\nfirst batch finishes open extraction before the workspace has a schema, so it cannot\nproduce records yet. Without this state the interface would have to show it as either\nstill working (a lie) or done (also a lie, since no row appeared)."
+        "description": "Where a document is in the pipeline. Rendered directly as the processing strip.\n\nThe observability requirement and the user experience are the same feature here: the\nstrip in the interface IS this state machine, so every state has to be one a person\nwould want to see, and every transition publishes an event.\n\nTransitions::\n\n    uploaded -> parsing -> extracting -> indexing -> done\n         |          |           |            |\n         +----------+-----------+------------+--> failed\n\n``indexing`` is where a document is chunked and embedded. It matters that it is a\nvisible stage rather than a silent tail of extraction: a document is not askable until\nit is indexed, so ``done`` means \"in the table AND in the chat\", which is the promise\nsection 6.3 of the implementation document makes.\n\nAWAITING_SCHEMA IS INTERNAL AND IS NOT PART OF THE WIRE VOCABULARY\n------------------------------------------------------------------\nA document in the very first batch finishes open extraction before the workspace has a\nschema, so it cannot produce records yet. The worker needs to tell that apart from a\ndocument still mid-model-call, so the distinction is a real database status.\n\nIt is deliberately **not** one of the six statuses in the interface contract\n(implementation.md section 5.1). On the wire it is reported as ``extracting`` with a\n``stage_detail`` of \"waiting for the rest of the batch\", which is honest (the document\nis still inside the extraction phase) and keeps the client's state machine to the six\nstates the contract names. ``for_wire`` is that mapping, in one place."
       },
       "DocumentSummary": {
         "properties": {
@@ -1888,70 +2085,183 @@
         ],
         "title": "HealthResponse"
       },
-      "ProposalList": {
+      "MergeOperation": {
         "properties": {
-          "proposals": {
-            "items": {
-              "$ref": "#/components/schemas/ProposalSummary"
-            },
-            "type": "array",
-            "title": "Proposals"
+          "from": {
+            "type": "string",
+            "title": "From",
+            "description": "The field to absorb. It disappears."
+          },
+          "into": {
+            "type": "string",
+            "title": "Into",
+            "description": "The field that survives."
           }
         },
         "type": "object",
         "required": [
-          "proposals"
+          "from",
+          "into"
         ],
-        "title": "ProposalList"
+        "title": "MergeOperation"
       },
-      "ProposalSummary": {
+      "MessageList": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageResponse"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "MessageList"
+      },
+      "MessageResponse": {
         "properties": {
           "id": {
             "type": "string",
             "format": "uuid",
             "title": "Id"
           },
-          "kind": {
+          "role": {
             "type": "string",
-            "title": "Kind"
+            "title": "Role"
           },
           "status": {
             "type": "string",
             "title": "Status"
           },
-          "document_id": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "sources": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "citations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "visual": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "additionalProperties": true,
+                "type": "object"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Document Id"
+            "title": "Visual"
           },
-          "payload": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Payload"
+          "surface": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surface"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
           },
           "created_at": {
-            "type": "string",
-            "format": "date-time",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
           }
         },
         "type": "object",
         "required": [
           "id",
-          "kind",
+          "role",
           "status",
-          "document_id",
-          "payload",
-          "created_at"
+          "content"
         ],
-        "title": "ProposalSummary"
+        "title": "MessageResponse"
+      },
+      "PanelResponse": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale",
+            "default": ""
+          },
+          "query": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Query"
+          },
+          "surface": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Surface",
+            "description": "A complete A2UI message array. The numbers live in its updateDataModel message and were computed by the server (decision D37)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "kind"
+        ],
+        "title": "PanelResponse"
       },
       "Provenance": {
         "properties": {
@@ -2170,19 +2480,17 @@
         ],
         "title": "RejectedUpload"
       },
-      "ResolveProposalRequest": {
+      "RenameOperation": {
         "properties": {
-          "action": {
+          "from": {
             "type": "string",
-            "enum": [
-              "map",
-              "add",
-              "ignore",
-              "merge"
-            ],
-            "title": "Action"
+            "title": "From"
           },
-          "target_key": {
+          "to": {
+            "type": "string",
+            "title": "To"
+          },
+          "label": {
             "anyOf": [
               {
                 "type": "string"
@@ -2191,133 +2499,16 @@
                 "type": "null"
               }
             ],
-            "title": "Target Key",
-            "description": "For 'map', the existing field to map onto. For 'merge', the field to merge into."
-          },
-          "field": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FieldSpec"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "For 'add', the field to create, so the user can rename or retype it before it lands."
+            "title": "Label",
+            "description": "New display label. Defaults to keeping the current one."
           }
         },
         "type": "object",
         "required": [
-          "action"
+          "from",
+          "to"
         ],
-        "title": "ResolveProposalRequest",
-        "description": "The user's decision on a proposal card. Requirement FR-13's three actions."
-      },
-      "RevertRequest": {
-        "properties": {
-          "version": {
-            "type": "integer",
-            "minimum": 1.0,
-            "title": "Version"
-          }
-        },
-        "type": "object",
-        "required": [
-          "version"
-        ],
-        "title": "RevertRequest"
-      },
-      "ReviewItem": {
-        "properties": {
-          "record_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Record Id"
-          },
-          "document_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Document Id"
-          },
-          "document_name": {
-            "type": "string",
-            "title": "Document Name"
-          },
-          "field_key": {
-            "type": "string",
-            "title": "Field Key"
-          },
-          "field_label": {
-            "type": "string",
-            "title": "Field Label"
-          },
-          "value": {
-            "$ref": "#/components/schemas/FieldValue"
-          },
-          "impact": {
-            "type": "number",
-            "title": "Impact",
-            "description": "Ordering score: field weight times uncertainty, with a conflict outranking a suspicion at the same weight. See app.pipeline.score.impact."
-          }
-        },
-        "type": "object",
-        "required": [
-          "record_id",
-          "document_id",
-          "document_name",
-          "field_key",
-          "field_label",
-          "value",
-          "impact"
-        ],
-        "title": "ReviewItem",
-        "description": "One cell that wants a human's attention."
-      },
-      "ReviewQueue": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ReviewItem"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "ReviewQueue"
-      },
-      "SchemaChangeAuthor": {
-        "type": "string",
-        "enum": [
-          "model_auto",
-          "user"
-        ],
-        "title": "SchemaChangeAuthor",
-        "description": "Who applied a schema version. Decisions D23 and D24.\n\nLoad-bearing rather than decorative: this is what the history view reads to mark an\nentry \"applied automatically\", and it is the audit trail that makes confidence-gated\nauto-apply defensible. A change the system made without asking has to be as visible\nafterwards as one the user made deliberately, so both are the same kind of row and this\ncolumn is the only thing distinguishing them.\n\nNever the workspace token itself. Only its hash is ever stored (decision D8)."
-      },
-      "SchemaHistory": {
-        "properties": {
-          "versions": {
-            "items": {
-              "$ref": "#/components/schemas/SchemaVersionSummary"
-            },
-            "type": "array",
-            "title": "Versions"
-          }
-        },
-        "type": "object",
-        "required": [
-          "versions"
-        ],
-        "title": "SchemaHistory"
+        "title": "RenameOperation"
       },
       "SchemaResponse": {
         "properties": {
@@ -2345,51 +2536,6 @@
           "version"
         ],
         "title": "SchemaResponse"
-      },
-      "SchemaVersionSummary": {
-        "properties": {
-          "version": {
-            "type": "integer",
-            "title": "Version"
-          },
-          "created_by": {
-            "$ref": "#/components/schemas/SchemaChangeAuthor"
-          },
-          "change_summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Change Summary"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "field_count": {
-            "type": "integer",
-            "title": "Field Count"
-          },
-          "is_current": {
-            "type": "boolean",
-            "title": "Is Current"
-          }
-        },
-        "type": "object",
-        "required": [
-          "version",
-          "created_by",
-          "change_summary",
-          "created_at",
-          "field_count",
-          "is_current"
-        ],
-        "title": "SchemaVersionSummary"
       },
       "SeedResponse": {
         "properties": {
@@ -2431,6 +2577,19 @@
         "title": "SourceFormat",
         "description": "Formats Distill can parse. Requirement FR-02."
       },
+      "SuggestionsResponse": {
+        "properties": {
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "title": "SuggestionsResponse"
+      },
       "Tier": {
         "type": "string",
         "enum": [
@@ -2445,34 +2604,30 @@
       },
       "UpdateSchemaRequest": {
         "properties": {
-          "fields": {
-            "items": {
-              "$ref": "#/components/schemas/FieldSpec"
-            },
-            "type": "array",
-            "minItems": 1,
-            "title": "Fields"
-          },
-          "summary": {
+          "rename": {
             "anyOf": [
               {
-                "type": "string",
-                "maxLength": 280
+                "$ref": "#/components/schemas/RenameOperation"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary",
-            "description": "What you changed, for the history view."
+            ]
+          },
+          "merge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MergeOperation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
-        "required": [
-          "fields"
-        ],
         "title": "UpdateSchemaRequest",
-        "description": "The complete new field list. Requirement FR-11.\n\nA whole list rather than a patch, deliberately: renames, retypes, removals, and\nreorderings all become one shape, and the server never has to infer intent from a\nsequence of operations."
+        "description": "One operation per request. Requirement FR-15.\n\nDeliberately not \"here is the whole new field list\". A whole-list edit makes every\nchange look the same to the server, which then has to infer what the user meant by\ndiffing, and a rename is indistinguishable from a delete plus an add. That matters\nbecause a merge has to MOVE values and a rename must not, so the distinction cannot be\nleft to inference."
       },
       "UploadResponse": {
         "properties": {
@@ -2659,6 +2814,28 @@
           "record_count": {
             "type": "integer",
             "title": "Record Count",
+            "default": 0
+          },
+          "dashboard_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dashboard Status",
+            "description": "pending, ready, or failed. Null when no dashboard row exists yet."
+          },
+          "dashboard_stale": {
+            "type": "boolean",
+            "title": "Dashboard Stale",
+            "default": false
+          },
+          "dashboard_panel_count": {
+            "type": "integer",
+            "title": "Dashboard Panel Count",
             "default": 0
           },
           "last_event_seq": {

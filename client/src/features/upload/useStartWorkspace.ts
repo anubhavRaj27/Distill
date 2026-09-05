@@ -2,31 +2,36 @@ import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
 import { api, authHeader, toFailure, type ApiFailure } from '../../api/client';
+import type { RejectedFile } from '../../lib/files';
 import { rememberWorkspace } from '../../lib/workspace-token';
 import { logger } from '../../lib/logger';
+import { usePendingUploads } from './pendingUploads';
 
 /**
- * Starting a workspace from the first-run screen. Requirements FR-01, FR-02, FR-05.
+ * Starting a workspace from screen 1. Requirements FR-01, FR-02, FR-05.
  *
- * Both entry points on this screen — dropping your own files, or asking for the sample
- * set — are the same two steps: mint an anonymous workspace, then give it something to
- * read. They are modelled as one mutation with two shapes rather than two hooks, because
- * the failure handling, the token persistence, and the navigation are identical and
- * should not be written twice.
+ * Both ways in mint an anonymous workspace first, and then diverge, because only one of
+ * them moves bytes out of this browser:
  *
- * The workspace is created first and navigated to immediately. Processing is asynchronous
- * on the server and streams over Server-Sent Events, so the person watches the pipeline
- * run rather than watching a spinner on this screen.
+ * - **Files.** The selection is staged and the person is sent to `/w/{id}/upload`, which
+ *   owns the transfer and shows a bar per file. Uploading here instead would mean a screen
+ *   that cannot report progress holding a screen that exists to report it.
+ * - **Samples.** The server loads them from its own disk (decision D15). There is nothing
+ *   for a progress bar to measure, so this goes straight to Chat, where the processing
+ *   strip picks the story up.
  */
 
-export type StartIntent = { kind: 'files'; files: File[] } | { kind: 'samples' };
+export type StartIntent =
+  | { kind: 'files'; files: File[]; rejected: RejectedFile[] }
+  | { kind: 'samples' };
 
 interface StartedWorkspace {
   workspaceId: string;
   token: string;
+  intent: StartIntent['kind'];
 }
 
-async function createWorkspace(): Promise<StartedWorkspace> {
+async function createWorkspace(): Promise<{ workspaceId: string; token: string }> {
   const { data, error, response } = await api.POST('/api/v1/workspaces', {
     body: { label: null },
   });
@@ -39,57 +44,34 @@ async function createWorkspace(): Promise<StartedWorkspace> {
   return { workspaceId: data.id, token: data.token };
 }
 
-async function uploadFiles(
-  { workspaceId, token }: StartedWorkspace,
-  files: File[],
-): Promise<void> {
-  const form = new FormData();
-  for (const file of files) form.append('files', file);
-
-  const { error, response } = await api.POST(
-    '/api/v1/workspaces/{workspace_id}/documents',
-    {
-      params: { path: { workspace_id: workspaceId }, header: authHeader(token) },
-      // openapi-fetch serialises a plain object as JSON; a multipart upload has to pass
-      // the FormData through untouched, which is what `bodySerializer` is for.
-      body: form as never,
-      bodySerializer: (body: unknown) => body as FormData,
-    },
-  );
-
-  if (error) throw toFailure(error, response?.status);
-}
-
-async function seedSamples({ workspaceId, token }: StartedWorkspace): Promise<void> {
-  const { error, response } = await api.POST(
-    '/api/v1/workspaces/{workspace_id}/documents/seed',
-    { params: { path: { workspace_id: workspaceId }, header: authHeader(token) } },
-  );
-
-  if (error) throw toFailure(error, response?.status);
-}
-
 export function useStartWorkspace() {
   const navigate = useNavigate();
+  const stage = usePendingUploads((state) => state.stage);
 
   return useMutation<StartedWorkspace, ApiFailure, StartIntent>({
     mutationFn: async (intent) => {
-      const started = await createWorkspace();
+      const { workspaceId, token } = await createWorkspace();
 
       if (intent.kind === 'files') {
-        logger.event('upload.start', { files: intent.files.length });
-        await uploadFiles(started, intent.files);
-      } else {
-        logger.event('samples.start', {});
-        await seedSamples(started);
+        // Handed to the upload screen rather than sent from here, refusals included so
+        // FR-03's message survives the navigation.
+        stage(workspaceId, intent.files, intent.rejected);
+        return { workspaceId, token, intent: 'files' };
       }
 
-      return started;
+      logger.event('samples.start', {});
+      const { error, response } = await api.POST(
+        '/api/v1/workspaces/{workspace_id}/documents/seed',
+        { params: { path: { workspace_id: workspaceId }, header: authHeader(token) } },
+      );
+      if (error) throw toFailure(error, response?.status);
+
+      return { workspaceId, token, intent: 'samples' };
     },
-    onSuccess: ({ workspaceId }) => {
-      // The token is already in storage, so the in-app navigation does not need to carry
-      // it. The fragment form exists for links a person shares (decision D31).
-      void navigate(`/w/${workspaceId}`);
+    onSuccess: ({ workspaceId, intent }) => {
+      // The token is already in storage, so in-app navigation does not carry it. The
+      // fragment form exists for links a person shares (decision D31).
+      void navigate(intent === 'files' ? `/w/${workspaceId}/upload` : `/w/${workspaceId}/chat`);
     },
     onError: (failure) => {
       logger.event('workspace.start.failed', {

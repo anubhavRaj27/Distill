@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
 import styled from 'styled-components';
 
-import { AppHeader } from '../../app/AppHeader';
 import { sortIntake, type RejectedFile } from '../../lib/files';
 import { logger } from '../../lib/logger';
-import { DistillationMark } from './components/DistillationMark';
+import { ParticleText } from '../../ui/ParticleText';
+import { theme } from '../../ui/theme';
 import { DropZone } from './components/DropZone';
 import { RejectionNotice } from './components/RejectionNotice';
 import { useStartWorkspace } from './useStartWorkspace';
@@ -13,58 +13,59 @@ import { useStartWorkspace } from './useStartWorkspace';
  * Screen 1 of three: Upload. Route `/`. Requirements section 3.1.
  *
  * A person who has never seen this product should understand it and be able to start in one
- * action. Everything here earns its place against that: what to do, what is accepted, a
- * place to put files, and a way in with no files of your own. Dropping files or asking for
- * the samples creates the workspace and hands off to Chat, where the processing strip takes
- * over — this screen never becomes a progress page.
+ * action. Everything here earns its place against that: the name, one sentence saying what
+ * happens, a place to put files, and a way in with no files of your own. Dropping files or
+ * asking for the samples creates the workspace and hands off, where the processing strip
+ * takes over — this screen never becomes a progress page.
  *
  * Deliberately absent: a feature grid, a sign-up, a tour. There are no accounts (decision
- * D8), so nothing stands between arriving and starting.
+ * D8), so nothing stands between arriving and starting. Also absent, since September 5:
+ * the application header, and the funnel illustration that used to sit below the fold.
+ * Decision D57 records why.
  */
 
 const Page = styled.div`
   min-height: 100%;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: ${({ theme }) => theme.space.page} ${({ theme }) => theme.space.xl};
   background: ${({ theme }) => theme.color.paper};
 `;
 
 const Main = styled.main`
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: ${({ theme }) => theme.space.page};
-`;
-
-const Intro = styled.section`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: ${({ theme }) => theme.space.lg};
-  text-align: center;
   width: 100%;
+  max-width: ${({ theme }) => theme.measure.prose};
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 `;
 
-const Headline = styled.h1`
-  font-family: ${({ theme }) => theme.font.display};
-  font-weight: 400;
-  font-size: 34px;
-  line-height: 1.15;
-  color: ${({ theme }) => theme.color.ink};
-  text-wrap: balance;
+/**
+ * The name, drawn as particles that scatter under the cursor and settle back.
+ *
+ * It is the same argument the funnel illustration used to make — a scattered pile
+ * resolving into something exact — made once, at the top, in the product's own name,
+ * instead of in a 274px diagram that pushed the drop zone toward the fold.
+ */
+const Title = styled.h1`
+  width: 100%;
+  margin: 0;
 `;
 
 const Standfirst = styled.p`
+  margin-top: ${({ theme }) => theme.space.xs};
   max-width: ${({ theme }) => theme.measure.narrow};
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.7;
-  color: ${({ theme }) => theme.color.inkMuted};
+  text-align: center;
   text-wrap: pretty;
+  color: ${({ theme }) => theme.color.inkMuted};
 `;
 
 const Intake = styled.div`
-  margin-top: ${({ theme }) => theme.space.lg};
+  margin-top: ${({ theme }) => theme.space.xxl};
   width: 640px;
   max-width: 100%;
   display: flex;
@@ -122,11 +123,14 @@ const StartError = styled.p`
   }
 `;
 
-const Illustration = styled.section`
-  margin-top: ${({ theme }) => theme.space.section};
-  display: flex;
-  justify-content: center;
-  width: 100%;
+/** What the drop zone will and will not take, stated before anyone tries. Requirement FR-03. */
+const Formats = styled.p`
+  margin-top: ${({ theme }) => theme.space.xxl};
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: ${({ theme }) => theme.color.inkMuted};
+  opacity: 0.75;
 `;
 
 export function FirstRunScreen() {
@@ -141,7 +145,6 @@ export function FirstRunScreen() {
       // Requirement FR-03: refusals are shown inline and immediately, before any bytes
       // leave the browser. A mixed selection still uploads what it can — refusing a whole
       // batch over one bad file would be the wrong trade for someone dropping a folder.
-      setRejected(refused);
       if (refused.length > 0) {
         logger.event('files.rejected', {
           count: refused.length,
@@ -149,7 +152,15 @@ export function FirstRunScreen() {
         });
       }
 
-      if (accepted.length > 0) start.mutate({ kind: 'files', files: accepted });
+      if (accepted.length > 0) {
+        // The refusals travel with the batch: this screen is about to be replaced, and a
+        // notice rendered here would vanish in the same tick it appeared.
+        start.mutate({ kind: 'files', files: accepted, rejected: refused });
+        return;
+      }
+
+      // Nothing acceptable, so nobody is going anywhere. Report it right here.
+      setRejected(refused);
     },
     [start],
   );
@@ -161,48 +172,52 @@ export function FirstRunScreen() {
 
   return (
     <Page>
-      <AppHeader />
-
       <Main>
-        <Intro>
-          <Headline>Drop your documents in.</Headline>
-          <Standfirst>
-            PDF, DOCX, XLSX, CSV, images, and plain text. We read the pile and pull out what
-            matters.
-          </Standfirst>
+        <Title>
+          <ParticleText
+            text="Distill"
+            fontFamily={theme.font.display}
+            fontSize={176}
+            height={210}
+            particleDensity={3}
+            particleSize={1.5}
+          />
+        </Title>
 
-          <Intake aria-busy={busy}>
-            <DropZone onFiles={handleFiles} disabled={busy} />
+        <Standfirst>
+          Drop in a pile of documents. We read them and pull out what matters, into one
+          table you can search, question, and trace back to the page it came from.
+        </Standfirst>
 
-            {rejected.length > 0 && <RejectionNotice rejected={rejected} />}
+        <Intake aria-busy={busy}>
+          <DropZone onFiles={handleFiles} disabled={busy} />
 
-            {start.isError ? (
-              <StartError role="alert">
-                {start.error.message}
-                {start.error.correlationId && (
-                  <>
-                    {' '}
-                    <code>{start.error.correlationId}</code>
-                  </>
-                )}
-              </StartError>
-            ) : (
-              <SampleAction type="button" disabled={busy} onClick={handleSamples}>
-                {busy && start.variables?.kind === 'samples' ? (
-                  'Loading sample documents…'
-                ) : (
-                  <>
-                    No documents to hand? <span>Try with sample documents</span>
-                  </>
-                )}
-              </SampleAction>
-            )}
-          </Intake>
-        </Intro>
+          {rejected.length > 0 && <RejectionNotice rejected={rejected} />}
 
-        <Illustration aria-label="Documents settling into a structured table">
-          <DistillationMark />
-        </Illustration>
+          {start.isError ? (
+            <StartError role="alert">
+              {start.error.message}
+              {start.error.correlationId && (
+                <>
+                  {' '}
+                  <code>{start.error.correlationId}</code>
+                </>
+              )}
+            </StartError>
+          ) : (
+            <SampleAction type="button" disabled={busy} onClick={handleSamples}>
+              {busy && start.variables?.kind === 'samples' ? (
+                'Loading sample documents…'
+              ) : (
+                <>
+                  No documents to hand? <span>Try with sample documents</span>
+                </>
+              )}
+            </SampleAction>
+          )}
+        </Intake>
+
+        <Formats>PDF · DOCX · XLSX · CSV · Images · Text</Formats>
       </Main>
     </Page>
   );

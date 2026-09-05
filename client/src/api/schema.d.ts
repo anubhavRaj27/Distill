@@ -219,30 +219,6 @@ export interface paths {
         patch: operations["correct_field_api_v1_workspaces__workspace_id__records__record_id__fields__field_key__patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The review queue
-         * @description Cells needing attention, highest impact first. Requirement FR-32.
-         *
-         *     Ordered by impact rather than by tier alone, because "which of these low-confidence
-         *     cells matters" is the question a user actually has: a shaky total on an invoice is worth
-         *     more attention than a shaky note.
-         */
-        get: operations["review_queue_api_v1_workspaces__workspace_id__review_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_id}/schema": {
         parameters: {
             query?: never;
@@ -257,91 +233,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Edit the schema */
+        /** Rename or merge a field */
         patch: operations["update_schema_api_v1_workspaces__workspace_id__schema_patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/schema/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Schema history
-         * @description Requirement FR-15. Marks which entries the system applied without asking.
-         */
-        get: operations["schema_history_api_v1_workspaces__workspace_id__schema_versions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/schema/revert": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Revert the schema
-         * @description Requirement FR-15's one-click revert.
-         *
-         *     Applies the old fields as a NEW version rather than deleting rows, so the history keeps
-         *     both the mistake and the correction.
-         */
-        post: operations["revert_schema_api_v1_workspaces__workspace_id__schema_revert_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/proposals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Outstanding schema questions
-         * @description Only questions that needed a human live here. Decision D23.
-         *
-         *     An automatically applied change writes a ``schema_versions`` row and no proposal, so
-         *     "how many decisions are outstanding" is a row count rather than a filtered one.
-         */
-        get: operations["list_proposals_api_v1_workspaces__workspace_id__proposals_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/proposals/{proposal_id}/resolve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Decide a schema question */
-        post: operations["resolve_proposal_api_v1_workspaces__workspace_id__proposals__proposal_id__resolve_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_id}/events": {
@@ -361,10 +254,157 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/chat/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversation history
+         * @description Persisted state only. A streaming answer's text lives in its buffer until it
+         *     finishes, so a message here that says ``streaming`` has empty content on purpose: the
+         *     client opens its stream to get the rest.
+         */
+        get: operations["list_messages_api_v1_workspaces__workspace_id__chat_messages_get"];
+        put?: never;
+        /** Ask a question */
+        post: operations["ask_api_v1_workspaces__workspace_id__chat_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/chat/messages/{message_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The answer, streamed (Server-Sent Events) */
+        get: operations["stream_api_v1_workspaces__workspace_id__chat_messages__message_id__stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/chat/messages/{message_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a streaming answer
+         * @description Cancel generation. What already streamed is kept.
+         *
+         *     Keeping the partial text is deliberate: the user read it, so deleting it would be
+         *     surprising, and a stopped answer has often already said the useful part.
+         */
+        post: operations["stop_api_v1_workspaces__workspace_id__chat_messages__message_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/chat/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Suggested questions */
+        get: operations["suggestions_api_v1_workspaces__workspace_id__chat_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The current dashboard
+         * @description Persisted panels. Requirement FR-34: a refresh never re-runs generation.
+         */
+        get: operations["get_dashboard_api_v1_workspaces__workspace_id__dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/dashboard/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Regenerate the dashboard
+         * @description Plan, evaluate, vet, and persist.
+         *
+         *     Synchronous, unlike a chat answer. A dashboard is one structured call and a handful of
+         *     in-process evaluations, so it completes in about a second on the fast tier, and the
+         *     user pressed a button and is watching. Streaming it would add a second connection to
+         *     reason about for no gain the user could perceive.
+         */
+        post: operations["generate_api_v1_workspaces__workspace_id__dashboard_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AskRequest */
+        AskRequest: {
+            /** Question */
+            question: string;
+        };
+        /**
+         * AskResponse
+         * @description 202. Generation has started; the answer arrives on the stream.
+         */
+        AskResponse: {
+            user_message: components["schemas"]["MessageResponse"];
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+            /**
+             * Stream Url
+             * @description Where to read the answer. Given rather than constructed by the client so the route can move without breaking it.
+             */
+            stream_url: string;
+        };
         /**
          * BBox
          * @description An axis-aligned box in top-left-origin page points. See the module docstring.
@@ -443,6 +483,22 @@ export interface components {
              */
             created_at: string;
         };
+        /** DashboardResponse */
+        DashboardResponse: {
+            /** Status */
+            status: string;
+            /**
+             * Stale
+             * @description Documents were added or values corrected since generation. The interface offers to regenerate rather than doing it unasked, because regeneration is a model call.
+             */
+            stale: boolean;
+            /** Panels */
+            panels?: components["schemas"]["PanelResponse"][];
+            /** Generated At */
+            generated_at?: string | null;
+            /** Error */
+            error?: string | null;
+        };
         /** DocumentDetail */
         DocumentDetail: {
             /**
@@ -481,25 +537,37 @@ export interface components {
         };
         /**
          * DocumentStatus
-         * @description Where a document is in the pipeline. Rendered directly as the progress list.
+         * @description Where a document is in the pipeline. Rendered directly as the processing strip.
          *
          *     The observability requirement and the user experience are the same feature here: the
-         *     progress list in the interface IS this state machine, so every state has to be a state
-         *     a person would want to see, and every transition publishes an event.
+         *     strip in the interface IS this state machine, so every state has to be one a person
+         *     would want to see, and every transition publishes an event.
          *
          *     Transitions::
          *
-         *         uploaded -> parsed -> extracting -> awaiting_schema -> done
-         *              |         |          |               |
-         *              +---------+----------+---------------+--> failed
+         *         uploaded -> parsing -> extracting -> indexing -> done
+         *              |          |           |            |
+         *              +----------+-----------+------------+--> failed
          *
-         *     ``awaiting_schema`` is the state review finding 8.5 introduced. A document in the very
-         *     first batch finishes open extraction before the workspace has a schema, so it cannot
-         *     produce records yet. Without this state the interface would have to show it as either
-         *     still working (a lie) or done (also a lie, since no row appeared).
+         *     ``indexing`` is where a document is chunked and embedded. It matters that it is a
+         *     visible stage rather than a silent tail of extraction: a document is not askable until
+         *     it is indexed, so ``done`` means "in the table AND in the chat", which is the promise
+         *     section 6.3 of the implementation document makes.
+         *
+         *     AWAITING_SCHEMA IS INTERNAL AND IS NOT PART OF THE WIRE VOCABULARY
+         *     ------------------------------------------------------------------
+         *     A document in the very first batch finishes open extraction before the workspace has a
+         *     schema, so it cannot produce records yet. The worker needs to tell that apart from a
+         *     document still mid-model-call, so the distinction is a real database status.
+         *
+         *     It is deliberately **not** one of the six statuses in the interface contract
+         *     (implementation.md section 5.1). On the wire it is reported as ``extracting`` with a
+         *     ``stage_detail`` of "waiting for the rest of the batch", which is honest (the document
+         *     is still inside the extraction phase) and keeps the client's state machine to the six
+         *     states the contract names. ``for_wire`` is that mapping, in one place.
          * @enum {string}
          */
-        DocumentStatus: "uploaded" | "parsed" | "extracting" | "awaiting_schema" | "done" | "failed";
+        DocumentStatus: "uploaded" | "parsing" | "extracting" | "awaiting_schema" | "indexing" | "done" | "failed";
         /** DocumentSummary */
         DocumentSummary: {
             /**
@@ -638,33 +706,82 @@ export interface components {
             storage: components["schemas"]["CheckResult"];
             llm: components["schemas"]["CheckResult"];
         };
-        /** ProposalList */
-        ProposalList: {
-            /** Proposals */
-            proposals: components["schemas"]["ProposalSummary"][];
+        /** MergeOperation */
+        MergeOperation: {
+            /**
+             * From
+             * @description The field to absorb. It disappears.
+             */
+            from: string;
+            /**
+             * Into
+             * @description The field that survives.
+             */
+            into: string;
         };
-        /** ProposalSummary */
-        ProposalSummary: {
+        /** MessageList */
+        MessageList: {
+            /** Messages */
+            messages: components["schemas"]["MessageResponse"][];
+        };
+        /** MessageResponse */
+        MessageResponse: {
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            /** Kind */
-            kind: string;
+            /** Role */
+            role: string;
             /** Status */
             status: string;
-            /** Document Id */
-            document_id: string | null;
-            /** Payload */
-            payload: {
+            /** Content */
+            content: string;
+            /** Sources */
+            sources?: {
+                [key: string]: unknown;
+            }[];
+            /** Citations */
+            citations?: {
+                [key: string]: unknown;
+            }[];
+            /** Visual */
+            visual?: {
+                [key: string]: unknown;
+            } | null;
+            /** Surface */
+            surface?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Error */
+            error?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+        };
+        /** PanelResponse */
+        PanelResponse: {
+            /** Title */
+            title: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /** Query */
+            query?: {
                 [key: string]: unknown;
             };
             /**
-             * Created At
-             * Format: date-time
+             * Surface
+             * @description A complete A2UI message array. The numbers live in its updateDataModel message and were computed by the server (decision D37).
              */
-            created_at: string;
+            surface?: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * Provenance
@@ -785,82 +902,17 @@ export interface components {
             /** Message */
             message: string;
         };
-        /**
-         * ResolveProposalRequest
-         * @description The user's decision on a proposal card. Requirement FR-13's three actions.
-         */
-        ResolveProposalRequest: {
+        /** RenameOperation */
+        RenameOperation: {
+            /** From */
+            from: string;
+            /** To */
+            to: string;
             /**
-             * Action
-             * @enum {string}
+             * Label
+             * @description New display label. Defaults to keeping the current one.
              */
-            action: "map" | "add" | "ignore" | "merge";
-            /**
-             * Target Key
-             * @description For 'map', the existing field to map onto. For 'merge', the field to merge into.
-             */
-            target_key?: string | null;
-            /** @description For 'add', the field to create, so the user can rename or retype it before it lands. */
-            field?: components["schemas"]["FieldSpec"] | null;
-        };
-        /** RevertRequest */
-        RevertRequest: {
-            /** Version */
-            version: number;
-        };
-        /**
-         * ReviewItem
-         * @description One cell that wants a human's attention.
-         */
-        ReviewItem: {
-            /**
-             * Record Id
-             * Format: uuid
-             */
-            record_id: string;
-            /**
-             * Document Id
-             * Format: uuid
-             */
-            document_id: string;
-            /** Document Name */
-            document_name: string;
-            /** Field Key */
-            field_key: string;
-            /** Field Label */
-            field_label: string;
-            value: components["schemas"]["FieldValue"];
-            /**
-             * Impact
-             * @description Ordering score: field weight times uncertainty, with a conflict outranking a suspicion at the same weight. See app.pipeline.score.impact.
-             */
-            impact: number;
-        };
-        /** ReviewQueue */
-        ReviewQueue: {
-            /** Items */
-            items: components["schemas"]["ReviewItem"][];
-            /** Total */
-            total: number;
-        };
-        /**
-         * SchemaChangeAuthor
-         * @description Who applied a schema version. Decisions D23 and D24.
-         *
-         *     Load-bearing rather than decorative: this is what the history view reads to mark an
-         *     entry "applied automatically", and it is the audit trail that makes confidence-gated
-         *     auto-apply defensible. A change the system made without asking has to be as visible
-         *     afterwards as one the user made deliberately, so both are the same kind of row and this
-         *     column is the only thing distinguishing them.
-         *
-         *     Never the workspace token itself. Only its hash is ever stored (decision D8).
-         * @enum {string}
-         */
-        SchemaChangeAuthor: "model_auto" | "user";
-        /** SchemaHistory */
-        SchemaHistory: {
-            /** Versions */
-            versions: components["schemas"]["SchemaVersionSummary"][];
+            label?: string | null;
         };
         /** SchemaResponse */
         SchemaResponse: {
@@ -868,23 +920,6 @@ export interface components {
             version: number | null;
             /** Fields */
             fields?: components["schemas"]["FieldSpec"][];
-        };
-        /** SchemaVersionSummary */
-        SchemaVersionSummary: {
-            /** Version */
-            version: number;
-            created_by: components["schemas"]["SchemaChangeAuthor"];
-            /** Change Summary */
-            change_summary: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Field Count */
-            field_count: number;
-            /** Is Current */
-            is_current: boolean;
         };
         /** SeedResponse */
         SeedResponse: {
@@ -901,6 +936,11 @@ export interface components {
          * @enum {string}
          */
         SourceFormat: "pdf" | "image" | "docx" | "xlsx" | "csv" | "text";
+        /** SuggestionsResponse */
+        SuggestionsResponse: {
+            /** Questions */
+            questions?: string[];
+        };
         /**
          * Tier
          * @description How much a value should be trusted. Always DERIVED, never asked of the model.
@@ -912,20 +952,17 @@ export interface components {
         Tier: "high" | "medium" | "low" | "conflict" | "verified";
         /**
          * UpdateSchemaRequest
-         * @description The complete new field list. Requirement FR-11.
+         * @description One operation per request. Requirement FR-15.
          *
-         *     A whole list rather than a patch, deliberately: renames, retypes, removals, and
-         *     reorderings all become one shape, and the server never has to infer intent from a
-         *     sequence of operations.
+         *     Deliberately not "here is the whole new field list". A whole-list edit makes every
+         *     change look the same to the server, which then has to infer what the user meant by
+         *     diffing, and a rename is indistinguishable from a delete plus an add. That matters
+         *     because a merge has to MOVE values and a rename must not, so the distinction cannot be
+         *     left to inference.
          */
         UpdateSchemaRequest: {
-            /** Fields */
-            fields: components["schemas"]["FieldSpec"][];
-            /**
-             * Summary
-             * @description What you changed, for the history view.
-             */
-            summary?: string | null;
+            rename?: components["schemas"]["RenameOperation"] | null;
+            merge?: components["schemas"]["MergeOperation"] | null;
         };
         /**
          * UploadResponse
@@ -1020,6 +1057,21 @@ export interface components {
              * @default 0
              */
             record_count: number;
+            /**
+             * Dashboard Status
+             * @description pending, ready, or failed. Null when no dashboard row exists yet.
+             */
+            dashboard_status?: string | null;
+            /**
+             * Dashboard Stale
+             * @default false
+             */
+            dashboard_stale: boolean;
+            /**
+             * Dashboard Panel Count
+             * @default 0
+             */
+            dashboard_panel_count: number;
             /**
              * Last Event Seq
              * @description The newest event sequence number. The interface opens its event stream with this as Last-Event-ID, so a cold start streams only what happens NEXT rather than replaying the entire history it has just loaded.
@@ -1443,41 +1495,6 @@ export interface operations {
             };
         };
     };
-    review_queue_api_v1_workspaces__workspace_id__review_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewQueue"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_schema_api_v1_workspaces__workspace_id__schema_get: {
         parameters: {
             query?: never;
@@ -1548,149 +1565,6 @@ export interface operations {
             };
         };
     };
-    schema_history_api_v1_workspaces__workspace_id__schema_versions_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SchemaHistory"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    revert_schema_api_v1_workspaces__workspace_id__schema_revert_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RevertRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SchemaResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_proposals_api_v1_workspaces__workspace_id__proposals_get: {
-        parameters: {
-            query?: {
-                include_resolved?: boolean;
-            };
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProposalList"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    resolve_proposal_api_v1_workspaces__workspace_id__proposals__proposal_id__resolve_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                proposal_id: string;
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResolveProposalRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SchemaResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     events_api_v1_workspaces__workspace_id__events_get: {
         parameters: {
             query?: never;
@@ -1712,6 +1586,244 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_messages_api_v1_workspaces__workspace_id__chat_messages_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_api_v1_workspaces__workspace_id__chat_messages_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_api_v1_workspaces__workspace_id__chat_messages__message_id__stream_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Last-Event-ID"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                message_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_api_v1_workspaces__workspace_id__chat_messages__message_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                message_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggestions_api_v1_workspaces__workspace_id__chat_suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuggestionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dashboard_api_v1_workspaces__workspace_id__dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_api_v1_workspaces__workspace_id__dashboard_generate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardResponse"];
                 };
             };
             /** @description Validation Error */

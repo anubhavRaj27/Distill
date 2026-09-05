@@ -1,7 +1,9 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 
 import { FirstRunScreen } from '../features/upload/FirstRunScreen';
-import { WorkspaceRoute } from './WorkspaceRoute';
+import { ChatScreen } from '../features/chat/ChatScreen';
+import { DataScreen } from '../features/data/DataScreen';
+import { UploadProgressScreen } from '../features/upload/UploadProgressScreen';
 
 /**
  * Three screens and only three: Upload, Chat, Data (decision D34).
@@ -18,9 +20,10 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<FirstRunScreen />} />
-        <Route path="/w/:workspaceId" element={<WorkspaceRoute />} />
-        <Route path="/w/:workspaceId/chat" element={<WorkspaceRoute />} />
-        <Route path="/w/:workspaceId/data" element={<WorkspaceRoute />} />
+        <Route path="/w/:workspaceId/upload" element={<UploadProgressScreen />} />
+        <Route path="/w/:workspaceId" element={<ChatScreen />} />
+        <Route path="/w/:workspaceId/chat" element={<ChatScreen />} />
+        <Route path="/w/:workspaceId/data" element={<DataScreen />} />
       </Routes>
     </BrowserRouter>
   );

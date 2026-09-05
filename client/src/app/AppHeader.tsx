@@ -194,7 +194,12 @@ export function AppHeader({ workspace, active = 'upload', onAddDocuments }: AppH
       <Tabs aria-label="Screens">
         {inWorkspace ? (
           <>
-            <TabLink to="/" aria-current={current('upload')}>
+            {/*
+              Scoped to this workspace. Pointing at "/" here would land a person on the
+              first-run screen while the header still named their workspace, and dropping
+              files there would silently fork a second one.
+            */}
+            <TabLink to={`/w/${workspace.id}/upload`} aria-current={current('upload')}>
               Upload
             </TabLink>
             <TabLink to={`/w/${workspace.id}/chat`} aria-current={current('chat')}>

@@ -15,7 +15,16 @@ type EventName =
   | 'files.rejected'
   | 'correction.made'
   | 'query.run'
-  | 'a2ui.fallback';
+  | 'a2ui.fallback'
+  /*
+   * The answer stream. Reconnects and reattachments are the events worth having when
+   * someone reports "the answer stopped halfway": each says which message, so a client
+   * report lines up with the server's own `chat.stream_opened` / `chat.stream_closed`.
+   */
+  | 'chat.asked'
+  | 'chat.stream_reconnect'
+  | 'chat.stream_reattach'
+  | 'chat.stream_failed';
 
 type Payload = Record<string, unknown>;
 
