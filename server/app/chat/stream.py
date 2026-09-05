@@ -81,6 +81,34 @@ def format_figure(value: Any, unit: str | None) -> str:
     return str(value)
 
 
+_UNIT_LEAD = r"[\s`\"'*)\]]*"
+"""Closing markup that can sit between a substituted figure and the model's repeat of its
+unit. Models write both "`12.00 USD` USD" and "`12.00 USD USD`", so the backtick has to be
+stepped over and then put back."""
+
+
+def _drop_leading_unit(text: str, unit: str) -> str:
+    """Remove one leading repeat of ``unit`` from ``text``, keeping any markup before it.
+
+    Only at a word boundary, and only the first occurrence, so a later "USD" in the model's
+    own sentence survives and a word merely starting with the unit is untouched.
+    """
+    match = re.match(rf"(?P<lead>{_UNIT_LEAD}){re.escape(unit)}\b", text, re.IGNORECASE)
+    if not match:
+        return text
+    lead = match.group("lead")
+    remainder = text[match.end() :]
+    if lead.strip():
+        # Markup such as a closing backtick belongs to the figure, so keep it and drop only
+        # the duplicated unit.
+        return f"{lead.strip()}{remainder}"
+    # Keep one space when the duplicate was preceded by one and a word follows, so
+    # "12.00 USD USD per unit" does not close up into "12.00 USDper unit".
+    if text[:1].isspace() and remainder[:1].isalnum():
+        return f" {remainder}"
+    return remainder
+
+
 @dataclass
 class StreamProcessor:
     """Rewrites one answer's token stream. Single use, one per message."""
@@ -95,6 +123,9 @@ class StreamProcessor:
 
     _pending: str = ""
     _outbox: str = ""
+    _emitted_unit: str | None = None
+    """The unit on the figure just substituted, until the next staged text is checked for a
+    duplicate of it. See ``_stage``."""
     _last_emit: float = field(default_factory=time.monotonic)
     _numbers: dict[str, int] = field(default_factory=dict)
     _citations: list[dict[str, Any]] = field(default_factory=list)
@@ -155,7 +186,11 @@ class StreamProcessor:
                 break  # incomplete placeholder, wait for more
             raw = self._pending[: close_at + len(PLACEHOLDER_CLOSE)]
             self._pending = self._pending[close_at + len(PLACEHOLDER_CLOSE) :]
-            self._stage(self._substitute(raw))
+            figure, unit = self._substitute(raw)
+            self._stage(figure)
+            # Armed AFTER staging the figure, or the guard in ``_stage`` would strip the
+            # unit off the figure itself rather than off the model's repeat of it.
+            self._emitted_unit = unit
 
         for event in self._maybe_flush():
             yield event
@@ -188,8 +223,24 @@ class StreamProcessor:
     # -- internals ------------------------------------------------------
 
     def _stage(self, text: str) -> None:
-        if text:
-            self._outbox += text
+        if not text:
+            return
+        if self._emitted_unit:
+            # A substituted figure already carries its currency, and models write the unit
+            # again anyway: "`{{result.total}}` USD" becomes "16,752.90 USD USD". The prompt
+            # asks them not to; this makes it not matter. Decision D68.
+            stripped = _drop_leading_unit(text, self._emitted_unit)
+            if stripped != text:
+                self._emitted_unit = None
+                text = stripped
+            elif not re.fullmatch(_UNIT_LEAD, text):
+                # Real prose followed, so the model did not repeat itself. Anything that is
+                # only closing markup or whitespace stays armed: a code span's backtick
+                # routinely arrives in one delta and the repeated unit in the next.
+                self._emitted_unit = None
+            if not text:
+                return
+        self._outbox += text
 
     def _emit_outbox(self) -> TokenEvent:
         text = self._outbox
@@ -260,8 +311,12 @@ class StreamProcessor:
         yield CitationEvent.model_validate(payload)
         self._stage(f"[^{number}]")
 
-    def _substitute(self, raw: str) -> str:
-        """Replace ``{{path}}`` with the server-computed value. Decision D46."""
+    def _substitute(self, raw: str) -> tuple[str, str | None]:
+        """Replace ``{{path}}`` with the server-computed value. Decision D46.
+
+        Returns the rendered figure and the unit it already carries, if any, so the caller
+        can suppress the model writing that unit again. See ``_stage`` and decision D68.
+        """
         path = raw[len(PLACEHOLDER_OPEN) : -len(PLACEHOLDER_CLOSE)].strip()
         entry = self.result_paths.get(path)
         if entry is None:
@@ -269,6 +324,7 @@ class StreamProcessor:
             # internals, and inventing a number is the exact thing decision D37 forbids.
             self._unresolved_placeholders += 1
             logger.info("chat.placeholder_unresolved", path=path)
-            return ""
+            return "", None
         value, unit = entry
-        return format_figure(value, unit)
+        figure = format_figure(value, unit)
+        return figure, (unit if unit and figure.endswith(unit) else None)

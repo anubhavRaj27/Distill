@@ -1,0 +1,6 @@
+Supplier,Contact,Email,Country,Payment terms,Currency
+Acme Industrial Supplies Ltd,D. Ferreira,accounts@acme-industrial.example,United States,Net 30,USD
+Globex Corporation,S. Lindqvist,billing@globex.example,Belgium,Net 15,USD
+Initech Systems Inc,P. Aranda,ar@initech-systems.example,United States,Net 45,USD
+Umbrella Logistics LLC,T. Boateng,accounts@umbrella-logistics.example,United States,Due on receipt,USD
+Hooli Print Services,R. Whitfield,hello@hooli-print.example,United States,Paid by card,USD

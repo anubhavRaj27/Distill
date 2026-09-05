@@ -1,0 +1,93 @@
+{
+  "note": "Ground truth for the sample corpus. Not read by the server.",
+  "invoices": [
+    {
+      "file": "acme-invoice-INV-2041.pdf",
+      "vendor": "Acme Industrial Supplies Ltd",
+      "invoice_number": "INV-2041",
+      "invoice_date_as_written": "14 January 2026",
+      "purchase_order": "PO-4471",
+      "subtotal": 4200.0,
+      "tax": 756.0,
+      "total": 4956.0,
+      "currency": "USD",
+      "payment_terms": "Net 30"
+    },
+    {
+      "file": "acme-invoice-INV-2098.pdf",
+      "vendor": "Acme Industrial Supplies Ltd",
+      "invoice_number": "INV-2098",
+      "invoice_date_as_written": "11 February 2026",
+      "purchase_order": "PO-4503",
+      "subtotal": 2600.0,
+      "tax": 468.0,
+      "total": 3068.0,
+      "currency": "USD",
+      "payment_terms": "Net 30"
+    },
+    {
+      "file": "globex-invoice-GX-7781.docx",
+      "vendor": "Globex Corporation",
+      "invoice_number": "GX-7781",
+      "invoice_date_as_written": "2026-02-03",
+      "purchase_order": null,
+      "subtotal": 1000.0,
+      "tax": 200.0,
+      "total": 1200.0,
+      "currency": "USD",
+      "payment_terms": "Net 15"
+    },
+    {
+      "file": "initech-invoice-INT-5567.xlsx",
+      "vendor": "Initech Systems Inc",
+      "invoice_number": "INT-5567",
+      "invoice_date_as_written": "March 5, 2026",
+      "purchase_order": "PO-4610",
+      "subtotal": 6000.0,
+      "tax": 510.0,
+      "total": 6510.0,
+      "currency": "USD",
+      "payment_terms": "Net 45"
+    },
+    {
+      "file": "umbrella-invoice-UL-0442.txt",
+      "vendor": "Umbrella Logistics LLC",
+      "invoice_number": "UL-0442",
+      "invoice_date_as_written": "Mar 18, 2026",
+      "purchase_order": null,
+      "subtotal": 845.0,
+      "tax": 45.5,
+      "total": 890.5,
+      "currency": "USD",
+      "payment_terms": "Due on receipt"
+    },
+    {
+      "file": "hooli-receipt-R-2291.png",
+      "vendor": "Hooli Print Services",
+      "invoice_number": "R-2291",
+      "invoice_date_as_written": "22/03/2026",
+      "purchase_order": null,
+      "subtotal": 120.0,
+      "tax": 8.4,
+      "total": 128.4,
+      "currency": "USD",
+      "payment_terms": "Paid by card"
+    }
+  ],
+  "totals_by_vendor_usd": {
+    "Acme Industrial Supplies Ltd": 8024.0,
+    "Globex Corporation": 1200.0,
+    "Initech Systems Inc": 6510.0,
+    "Umbrella Logistics LLC": 890.5,
+    "Hooli Print Services": 128.4
+  },
+  "grand_total_usd": 16752.9,
+  "invoices_missing_a_purchase_order": [
+    "GX-7781",
+    "UL-0442",
+    "R-2291"
+  ],
+  "contract_payment_terms": "Thirty (30) days from the invoice date; 1.5% per month interest on late amounts; every invoice must quote a purchase order number.",
+  "expense_policy_receipt_threshold_usd": 75.0,
+  "bank_statement_closing_balance_usd": 171951.65
+}

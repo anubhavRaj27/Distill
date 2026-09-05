@@ -237,3 +237,87 @@ def test_only_transient_failures_are_retried(reason: str | None, retryable: bool
     from app.pipeline.worker import _is_retryable
 
     assert _is_retryable(reason) is retryable
+
+
+# ---------------------------------------------------------------------------
+# Background sessions deliver what they stage. Decision D70.
+# ---------------------------------------------------------------------------
+
+
+class _FakeAsyncSession:
+    """Enough of an AsyncSession for ``session_scope``: info, commit, rollback."""
+
+    def __init__(self) -> None:
+        self.info: dict[str, Any] = {}
+        self.committed = False
+        self.rolled_back = False
+
+    async def commit(self) -> None:
+        self.committed = True
+
+    async def rollback(self) -> None:
+        self.rolled_back = True
+
+    async def __aenter__(self) -> _FakeAsyncSession:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+
+def _install_fake_sessionmaker(monkeypatch: Any, session: _FakeAsyncSession) -> None:
+    from app.db import session as session_module
+
+    monkeypatch.setattr(session_module, "get_sessionmaker", lambda: lambda: session)
+
+
+async def test_a_background_session_delivers_the_events_it_staged(
+    monkeypatch: Any,
+) -> None:
+    """Regression, and the one that cost the demo its opening minute.
+
+    Document processing runs entirely in ``session_scope``, which committed without ever
+    flushing the bus. Every pipeline event reached ``workspace_events`` and no live
+    subscriber, so the progress strip showed the upload request's own event and then sat
+    still for the whole run while the work actually finished. A refresh looked fine, because
+    a refresh replays from the table, which is what kept it hidden.
+    """
+    from app.db.session import session_scope
+    from app.events.bus import _SESSION_KEY, bus
+
+    workspace = uuid4()
+    fake = _FakeAsyncSession()
+    _install_fake_sessionmaker(monkeypatch, fake)
+
+    async with bus.subscribe(workspace) as subscriber:
+        async with session_scope() as session:
+            session.info.setdefault(_SESSION_KEY, []).append(
+                (workspace, {"seq": 7, "type": "document.status", "status": "done"})
+            )
+            assert subscriber.queue.empty(), "nothing may be delivered before the commit"
+
+        assert fake.committed
+        assert subscriber.queue.get_nowait()["seq"] == 7
+
+
+async def test_a_background_session_that_fails_delivers_nothing(monkeypatch: Any) -> None:
+    """The other half, and the reason delivery waits for the commit at all: an event about
+    a row that was rolled back is a lie no later message can correct."""
+    from app.db.session import session_scope
+    from app.events.bus import _SESSION_KEY, bus
+
+    workspace = uuid4()
+    fake = _FakeAsyncSession()
+    _install_fake_sessionmaker(monkeypatch, fake)
+
+    async with bus.subscribe(workspace) as subscriber:
+        with pytest.raises(RuntimeError):
+            async with session_scope() as session:
+                session.info.setdefault(_SESSION_KEY, []).append(
+                    (workspace, {"seq": 8, "type": "document.status"})
+                )
+                raise RuntimeError("the transaction failed")
+
+        assert fake.rolled_back
+        assert subscriber.queue.empty()
+        assert not fake.info.get(_SESSION_KEY), "staged events must not survive a rollback"

@@ -76,14 +76,32 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
 async def session_scope() -> AsyncIterator[AsyncSession]:
     """A transactional session, committed on success and rolled back on any exception.
 
-    Used by background work, which has no request to hang a dependency off. Route handlers
-    use the ``Session`` dependency in ``app.deps`` instead, which adds the event-bus and
-    worker-submission flushing that decision D29 requires.
+    Used by background work, which has no request to hang a dependency off.
+
+    It stages and flushes events exactly as the request dependency in ``app.deps`` does, and
+    that is not an optional extra here: **document processing runs entirely in background
+    sessions**, so without the flush every event the pipeline publishes is written to
+    ``workspace_events`` and delivered to nobody. The progress strip then sits on whatever
+    the upload request published and never moves, while a page refresh shows the finished
+    state, because a refresh replays from the table. That was the live behaviour until
+    September 6, 2026. See decision D70.
     """
+    # Imported here, not at module scope: ``app.pipeline.worker`` imports this module for
+    # ``session_scope`` itself, so a top-level import would close the circle.
+    from app.events.bus import bus
+    from app.pipeline.worker import discard_submissions, flush_submissions
+
     async with get_sessionmaker()() as session:
         try:
             yield session
             await session.commit()
         except Exception:
             await session.rollback()
+            bus.discard_staged(session)
+            discard_submissions(session)
             raise
+        else:
+            # After the commit, both, for the reasons given in ``app.deps``: an event about
+            # a rolled-back row is a lie, and a job queued for one is a dropped job.
+            bus.flush_after_commit(session)
+            flush_submissions(session)

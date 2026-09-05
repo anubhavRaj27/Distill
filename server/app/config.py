@@ -70,12 +70,13 @@ class Settings(BaseSettings):
     )
     gemini_api_key: str | None = None
     llm_extract_model: str = Field(
-        default="gemini-3.5-flash",
-        description="Extraction and schema inference. The accuracy-critical calls, so the "
-        "larger of the two models available and the default reasoning effort rather than "
-        "the reduced one: see llm_fast_thinking_level and decision D62. The Pro tier the "
-        "plan of record named is not offered on the current key. Model identifiers are "
-        "configuration, not code. Verified callable on September 5, 2026.",
+        default="gemini-3.5-flash-lite",
+        description="Extraction and schema inference. Lite, and not by preference: every "
+        "non-lite Gemini model this key can reach allows 20 requests PER DAY on the free "
+        "tier, which one pass over a ten-document corpus exhausts. Measured on the sample "
+        "corpus, Lite extracted all six invoices to the letter. Extraction keeps the "
+        "model's default reasoning effort, unlike the interactive calls: see "
+        "llm_fast_thinking_level and decisions D62 and D67.",
     )
     llm_fast_model: str = Field(
         default="gemini-3.5-flash-lite",

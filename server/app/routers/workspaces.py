@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from app.auth import hash_token, mint_token
 from app.db.models import DashboardRow, Document, Record, SchemaVersion, Workspace
 from app.deps import CurrentWorkspace, Session
-from app.domain.document import DocumentStatus
+from app.domain.document import DocumentStatus, SourceFormat
 from app.domain.fields import FieldSpec
 from app.logging import bind_context, get_logger
 
@@ -43,6 +43,14 @@ class DocumentSummary(BaseModel):
     page_count: int | None = None
     size_bytes: int
     created_at: datetime
+    source_format: SourceFormat = Field(
+        default=SourceFormat.PDF,
+        description="What the file was actually parsed AS, decided by sniffing the bytes "
+        "rather than by trusting the extension. The Upload screen shows it per file "
+        "(decision D71), and showing the extension there instead would hide exactly the "
+        "case worth seeing: a .csv that is really a tab-separated export, or a .pdf that "
+        "is a scan.",
+    )
 
 
 class WorkspaceOverview(BaseModel):
@@ -148,6 +156,7 @@ async def get_workspace(workspace: CurrentWorkspace, session: Session) -> Worksp
                 page_count=document.page_count,
                 size_bytes=document.size_bytes,
                 created_at=document.created_at,
+                source_format=document.source_format,
             )
             for document in documents
         ],

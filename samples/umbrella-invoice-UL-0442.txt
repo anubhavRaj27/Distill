@@ -1,0 +1,19 @@
+UMBRELLA LOGISTICS LLC
+2100 Dock Street, Albany, NY 12202
+
+INVOICE UL-0442
+Seller: Umbrella Logistics LLC
+Invoice date: Mar 18, 2026
+Bill to: Northwind Trading Company
+
+Description                                  Qty     Amount
+-----------------------------------------------------------
+Pallet freight, Portsmouth to Albany           5     725.00
+Overnight storage                              4     120.00
+-----------------------------------------------------------
+Subtotal                                             845.00
+Fuel surcharge                                        45.50
+Balance due now (USD)                                890.50
+
+Terms: Due on receipt.
+Questions: accounts@umbrella-logistics.example

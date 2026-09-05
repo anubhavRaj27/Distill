@@ -78,7 +78,61 @@ describe('UploadProgressScreen', () => {
     renderAt();
 
     expect(
-      await screen.findByRole('heading', { name: /your documents are in/i }),
+      await screen.findByRole('heading', { name: /^your documents$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('lists what the workspace already holds, with no upload in flight', async () => {
+    /*
+     * The gap this screen had until decision D71: arriving here with documents indexed
+     * said "this browser is not uploading anything right now" and showed nothing at all.
+     * A person cannot check what is in a workspace by reading a table built out of it.
+     */
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            label: 'Q3 Vendor Contracts',
+            documents: [
+              {
+                id: 'doc-1',
+                filename: 'acme-invoice-2041.pdf',
+                status: 'done',
+                stage_detail: null,
+                failure_reason: null,
+                page_count: 2,
+                size_bytes: 41000,
+                created_at: '2026-09-06T09:00:00Z',
+                source_format: 'pdf',
+              },
+              {
+                id: 'doc-2',
+                filename: 'scan.png',
+                status: 'failed',
+                stage_detail: null,
+                failure_reason: 'No text could be recognised on this page.',
+                page_count: 1,
+                size_bytes: 900000,
+                created_at: '2026-09-06T09:01:00Z',
+                source_format: 'image',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    renderAt();
+
+    expect(await screen.findByText('acme-invoice-2041.pdf')).toBeInTheDocument();
+    expect(screen.getByText('scan.png')).toBeInTheDocument();
+    expect(
+      screen.getByText('No text could be recognised on this page.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('list', { name: /documents in this workspace/i }),
     ).toBeInTheDocument();
   });
 

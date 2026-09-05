@@ -115,7 +115,7 @@ Zamp assignment/
 ├── decisions.md              decision log (required deliverable)
 ├── Makefile                  setup | dev | test | seed          (new)
 ├── docs/                     requirements.md, implementation.md
-├── samples/                  heterogeneous sample documents + manifest.json   (new)
+├── samples/                  10 generated documents, manifest.json, expected.json (D67)
 ├── server/
 │   ├── pyproject.toml, uv.lock, alembic.ini, .env.example
 │   ├── app/
@@ -142,7 +142,7 @@ Zamp assignment/
         │                     add-documents, processing strip host)
         ├── api/              client.ts, schema.d.ts (generated), openapi.json
         ├── features/
-        │   ├── upload/       FirstRunScreen and parts                      (built)
+        │   ├── upload/       FirstRunScreen, UploadProgressScreen, DocumentLibrary (built)
         │   ├── processing/   ProcessingStrip, useWorkspaceEvents           (new)
         │   ├── chat/         ChatScreen, MessageList, AssistantMessage, Citations,
         │   │                 Composer, Suggestions, useChat                (new)
@@ -230,7 +230,7 @@ All routes under `/api/v1`. Workspace token in `Authorization: Bearer <token>`.
 | POST   | `/workspaces`                                        | Create anonymous workspace; returns token once.                                                                                                                                         | built                       |
 | GET    | `/workspaces/{id}`                                   | Cold start: schema, documents, record count, dashboard status.                                                                                                                          | built, add dashboard status |
 | POST   | `/workspaces/{id}/documents`                         | Multipart upload, many files. Async processing.                                                                                                                                         | built                       |
-| POST   | `/workspaces/{id}/documents/seed`                    | Load the sample manifest.                                                                                                                                                               | built, samples pending      |
+| POST   | `/workspaces/{id}/documents/seed`                    | Load the sample manifest.                                                                                                                                                               | built, corpus in `samples/` |
 | GET    | `/workspaces/{id}/documents/{docId}`                 | One document with pages.                                                                                                                                                                | built                       |
 | GET    | `/workspaces/{id}/documents/{docId}/file`            | Original, byte ranges.                                                                                                                                                                  | built                       |
 | GET    | `/workspaces/{id}/documents/{docId}/pages/{n}/image` | Rendered page PNG.                                                                                                                                                                      | built                       |
@@ -800,7 +800,7 @@ correction guarantee through the re-extract route.
 - [x] Embedding thresholds calibrated against a real model: synonym pairs 0.822 to 0.982, unrelated pairs 0.764 to 0.827, so auto-map moves to 0.88 and the novelty ceiling to 0.80. September 5, 2026, decision D66.
 - [x] Response schemas accepted by a real Gemini call, closing review finding 8.7. Two faults found and fixed in the same pass: `maxItems` is rejected outright (D64) and an optional nested model lost its shape in conversion (D65).
 - [ ] `sse-starlette` sends `id:` lines and honours `Last-Event-ID` on the per-message route the same way it does on `/events`; a Vite dev proxy passes `text/event-stream` through unbuffered.
-- [ ] `DataQuery` evaluation on the sample corpus produces the "total by vendor" and "missing purchase order count" results the demo script needs.
-- [ ] Sample corpus contains at least one non-invoice document with prose (a contract or policy) so the retrieval demo has something non-tabular to cite.
+- [x] `DataQuery` evaluation on the sample corpus produces the "total by vendor" and "missing purchase order count" results the demo script needs. Verified September 6, 2026 against `samples/expected.json`: 16,752.90 USD across five vendors, and 3 invoices with no purchase order. The count needed a planner rule first, since it was counting contracts and bank statements too (decision D69).
+- [x] Sample corpus contains at least one non-invoice document with prose (a contract or policy) so the retrieval demo has something non-tabular to cite. It has two, a two-page services agreement and an expense policy, and both answer cited questions (decision D67).
 - [x] pdfplumber coordinate convention asserted against a fixture (decision D17, done).
 - [x] `create-vite` TypeScript version and `openapi-typescript` behaviour (decision D33, done).

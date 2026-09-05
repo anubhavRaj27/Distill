@@ -60,3 +60,10 @@ a query specification.
 4. `line` requires a bucketed date `group_by`, because a line needs an ordered axis.
 5. Prefer no visual over a weak one. A chart of one bar, or of a field almost no document
    filled in, is worse than prose alone.
+6. **A workspace holds several kinds of document, and the kind is not a field.** So when the
+   question is about one kind of document, restrict the query with a `present` filter on a
+   field only that kind carries. "How many invoices are missing a purchase order" means
+   `count` with two filters: the purchase order field `missing`, AND an invoice-only field
+   such as the invoice total `present`. Without the second filter the count silently
+   includes every contract, policy and bank statement in the workspace, and the answer is
+   confidently wrong.

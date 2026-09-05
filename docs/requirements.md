@@ -149,6 +149,12 @@ Route `/`. Already built.
    holds **Continue** until every file has arrived. "Ready" there means received, not
    indexed; parsing, extraction and indexing continue on the server and are narrated by the
    processing strip on Chat and Data. See decision D53.
+3a. `/w/{id}/upload` is also the workspace's **document library**, and that is what it is
+   for once the upload finishes: every file in the workspace with the format it was
+   actually parsed as, its stage or failure reason, its page count and size, and two
+   actions — open it in the source viewer, or delete it (FR-07). The list is live: stages
+   move as the server reports them. Before this the screen had nothing to say once bytes
+   had stopped moving, which left no way to see what a workspace held. See decision D71.
 4. That wait is filled by a slowly turning spiral of the person's **own** documents — real
    thumbnails for images, drawn sheets for every other format, each carrying its filename,
    type and status — over a single line answering "how much longer": documents arrived, of

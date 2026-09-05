@@ -1,0 +1,67 @@
+{
+  "name": "Distill sample corpus",
+  "generated_by": "server/scripts/generate_samples.py",
+  "note": "Every organisation and figure here is fictional. The set is deliberately inconsistent about field naming and date format; see decision D67.",
+  "documents": [
+    {
+      "file": "acme-invoice-INV-2041.pdf",
+      "kind": "invoice",
+      "format": "pdf",
+      "why": "Baseline invoice with a purchase order. Says 'Vendor', 'Total due'."
+    },
+    {
+      "file": "acme-invoice-INV-2098.pdf",
+      "kind": "invoice",
+      "format": "pdf",
+      "why": "Second invoice from the same vendor, so 'total by vendor' has to group."
+    },
+    {
+      "file": "globex-invoice-GX-7781.docx",
+      "kind": "invoice",
+      "format": "docx",
+      "why": "Calls it 'Supplier', 'Invoice No', 'Grand total'. No purchase order."
+    },
+    {
+      "file": "initech-invoice-INT-5567.xlsx",
+      "kind": "invoice",
+      "format": "xlsx",
+      "why": "A third vocabulary: 'Billed by', 'Reference', 'Amount payable'."
+    },
+    {
+      "file": "umbrella-invoice-UL-0442.txt",
+      "kind": "invoice",
+      "format": "txt",
+      "why": "Plain text, no layout to lean on. No purchase order."
+    },
+    {
+      "file": "hooli-receipt-R-2291.png",
+      "kind": "receipt",
+      "format": "image",
+      "why": "Scanned image, so the Optical Character Recognition path runs. No PO."
+    },
+    {
+      "file": "acme-services-agreement.pdf",
+      "kind": "contract",
+      "format": "pdf",
+      "why": "Two pages of prose. Answers 'what does the contract say about payment terms' and explains why a missing purchase order matters."
+    },
+    {
+      "file": "northwind-expense-policy.docx",
+      "kind": "policy",
+      "format": "docx",
+      "why": "Prose that is not about invoices at all, so the schema cannot quietly become an invoice schema."
+    },
+    {
+      "file": "seaboard-statement-march-2026.pdf",
+      "kind": "bank statement",
+      "format": "pdf",
+      "why": "Different fields entirely: account number, closing balance, no vendor."
+    },
+    {
+      "file": "supplier-directory.csv",
+      "kind": "reference table",
+      "format": "csv",
+      "why": "Tabular reference data with no amounts, so it cannot distort the totals."
+    }
+  ]
+}

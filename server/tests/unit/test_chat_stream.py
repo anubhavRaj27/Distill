@@ -334,3 +334,71 @@ async def test_the_reassembled_text_equals_what_the_user_saw() -> None:
         event.text for event in events if isinstance(event, TokenEvent)
     )
     assert streamed == processor.text
+
+
+# ---------------------------------------------------------------------------
+# Units after a substituted figure. Decision D68.
+# ---------------------------------------------------------------------------
+
+
+async def _prose(deltas: list[str], paths: dict[str, tuple[object, str | None]]) -> str:
+    _, events = await _run(deltas, paths)
+    return "".join(event.text for event in events if isinstance(event, TokenEvent))
+
+
+async def test_a_unit_written_after_a_placeholder_is_not_doubled() -> None:
+    """Observed on the first real run of the sample corpus: the answer read "16,752.90 USD
+    USD". The placeholder expands to a formatted figure that already carries its currency,
+    and the model writes the currency again anyway. The prompt now says not to; this makes
+    it not matter, because a prompt is a request and this is a guarantee."""
+    text = await _prose(
+        ["The total is `{{result.total}}` USD for the quarter."],
+        {"result.total": (16752.9, "USD")},
+    )
+    assert text == "The total is `16,752.90 USD` for the quarter."
+
+
+async def test_the_duplicate_is_removed_across_a_delta_boundary() -> None:
+    """The unit routinely arrives in the next delta, not the same one."""
+    text = await _prose(
+        ["Acme accounts for `{{result.rows.0.value}}`", " USD of the total."],
+        {"result.rows.0.value": (8024.0, "USD")},
+    )
+    assert text == "Acme accounts for `8,024 USD` of the total."
+
+
+async def test_a_unit_that_belongs_to_the_prose_survives() -> None:
+    """Only a repeat immediately after the figure is dropped. A later mention is the
+    model's own sentence and removing it would corrupt the answer."""
+    text = await _prose(
+        ["We paid `{{result.total}}`. Every invoice is issued in USD."],
+        {"result.total": (1200.0, "USD")},
+    )
+    assert text == "We paid `1,200 USD`. Every invoice is issued in USD."
+
+
+async def test_a_word_merely_starting_with_the_unit_is_untouched() -> None:
+    text = await _prose(
+        ["`{{result.total}}` USDollars is not a currency code."],
+        {"result.total": (5.0, "USD")},
+    )
+    assert text == "`5 USD` USDollars is not a currency code."
+
+
+async def test_the_duplicate_is_removed_when_it_sits_inside_the_backticks() -> None:
+    """The shape actually observed: "`16,752.90 USD USD`", with the repeat inside the code
+    span rather than after it."""
+    text = await _prose(
+        ["The total is `{{result.total}} USD` for the quarter."],
+        {"result.total": (16752.9, "USD")},
+    )
+    assert text == "The total is `16,752.90 USD` for the quarter."
+
+
+async def test_a_figure_with_no_unit_leaves_following_text_alone() -> None:
+    """A record count has no unit, so nothing is armed and nothing is stripped."""
+    text = await _prose(
+        ["`{{result.record_count}}` USD invoices were counted."],
+        {"result.record_count": (6, None)},
+    )
+    assert text == "`6` USD invoices were counted."

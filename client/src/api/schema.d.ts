@@ -591,6 +591,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * @description What the file was actually parsed AS, decided by sniffing the bytes rather than by trusting the extension. The Upload screen shows it per file (decision D71), and showing the extension there instead would hide exactly the case worth seeing: a .csv that is really a tab-separated export, or a .pdf that is a scan.
+             * @default pdf
+             */
+            source_format: components["schemas"]["SourceFormat"];
         };
         /**
          * FieldSpec

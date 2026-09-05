@@ -336,7 +336,9 @@ irrelevant, and the writes batch naturally within a document's processing transa
 
 ## D15. Sample documents are discovered through a manifest
 
-**Date:** September 3, 2026 · **Status:** Active
+**Date:** September 3, 2026 · **Status:** Active. The manifest mechanism stands; its premise
+does not. This entry assumed real documents were being supplied, and the corpus is instead
+generated. See D67, September 6, 2026.
 
 **Decision.** The seed route reads `samples/manifest.json` and loads whatever it lists,
 rather than referencing hard-coded filenames.
@@ -2313,10 +2315,14 @@ than reasoned about:
   larger model however the effort is configured, and the answers were equivalent on a
   two-passage citation question. Extraction keeps the larger model, where 15 seconds in a
   background worker costs nobody anything.
-- **Free-tier daily caps are per model, and one of them is tiny.** `gemini-3.6-flash`
-  allows 20 requests **per day** on this key: verifying the integration exhausted it. This
-  is a demo-day risk with no code fix, so it is recorded here and in `.env.example`, and
-  the two chosen models are ones whose caps a demo can live inside.
+- **Free-tier daily caps are per model, and they are tiny.** `gemini-3.6-flash` allows 20
+  requests **per day** on this key. So, it turned out on September 6, does `gemini-3.5-flash`:
+  a single pass over the ten-document sample corpus spent all twenty and left the next run
+  failing. Only the Lite models have room, which is why **both tiers are now
+  `gemini-3.5-flash-lite`** — a correction to this entry's own first draft, made a day later
+  by running a real corpus through it rather than a single probe. Lite extracted all six
+  sample invoices to the letter (D67), so the cost of the change is unmeasurable here and
+  the benefit is a demo that runs twice.
 
 **What this costs, stated plainly.** D13's reasoning for a stronger extraction tier was
 sound and is unchanged; it simply cannot be acted on with this key. Extraction quality is
@@ -2519,3 +2525,214 @@ a question — a real cost, recorded rather than tuned away.
 reads them by name if they exist, so adding them later is a one-line change, and until
 somebody needs to vary them per deployment they are calibration constants that belong beside
 the evidence for them.
+
+---
+
+## D67. The sample corpus is generated, and generated to be inconsistent
+
+**Date:** September 6, 2026 · **Status:** Active, replaces the premise of D15
+
+**Decision.** `samples/` holds ten documents written by `server/scripts/generate_samples.py`,
+listed in `manifest.json`, with ground truth in `expected.json`. The generated files are
+committed; the script exists so the corpus can be corrected rather than only replaced.
+
+Six formats (Portable Document Format, Word, spreadsheet, comma-separated values, plain
+text, and a scanned image), four document kinds (invoice, contract, policy, bank statement,
+plus a reference table), and one two-page document. Six invoices across five vendors, three
+of them with no purchase order.
+
+**Alternatives considered.** Real documents, which is what D15 assumed and what the project
+originally intended. Downloading a public invoice dataset. Two or three documents rather
+than ten.
+
+**Reasoning.** Anubhav asked for the corpus to be created rather than supplied, so D15's
+premise is simply gone. What replaces it has to earn the same trust real documents would,
+and that means three properties:
+
+- **It is inconsistent on purpose.** The same fact appears as "Total due", "Amount due",
+  "Amount now due", "Balance due now" and "AMOUNT DUE"; the party sending the invoice is
+  "Vendor", "Seller", "Vendor name" and "MERCHANT"; dates are written five ways. A corpus
+  where every document agrees demonstrates nothing, because agreeing is the easy case.
+- **Its arithmetic is consistent.** Line items sum to their subtotals, subtotals plus tax
+  equal totals, and the generator asserts both before writing a file. It caught a real error
+  on the first run: an invoice whose lines came to 4,197 under a stated subtotal of 4,200.
+- **It has an answer key.** `expected.json` records every value, the totals by vendor, and
+  which invoices lack a purchase order, so extraction can be checked against a stated truth
+  instead of against whether the output looks plausible.
+
+**Verified end to end on September 6, 2026.** Ten documents seed and process in 43 seconds.
+Every invoice value matches `expected.json`. The five vocabularies unify into one
+`vendor_name` and one `invoice_total`, so "total amount by vendor" returns Acme 8,024.00,
+Initech 6,510.00, Globex 1,200.00, Umbrella 890.50, Hooli 128.40, and 16,752.90 in total,
+which is what the answer key says. "How many invoices are missing a purchase order" returns
+3. The contract and policy answer prose questions with located citations, and a question the
+corpus cannot answer is refused.
+
+**The uncomfortable part, stated plainly.** The vocabulary is varied but not arbitrary: each
+variant was **measured** against the calibrated thresholds (D66) before being written into a
+document, and phrasings that fail to unify were avoided on the two fields the headline demo
+depends on. That is designing the corpus around a known weakness, and it is worth being
+honest about. The weakness is D66's margin rule: "Supplier" resembles "Vendor" at 0.910 and
+is vetoed because it also resembles "Purchase order" at 0.889, which is noise. Three real
+merges are blocked this way. The alternative was a corpus whose headline total is wrong,
+which teaches a reviewer something false about the product. The variety that remains is
+real — five phrasings for the total, four for the vendor, five date formats — and the
+secondary money fields (subtotal, tax, surcharge) are left un-engineered, so the ask
+behaviour is still visible in the table.
+
+**Cut.** Multiple currencies, which would make "total by vendor" a sum across incomparable
+units and needs a product decision first. A ledger restating invoice amounts, which would
+double-count them. More than ten documents: the tenth adds a format, the eleventh would only
+add processing time.
+
+---
+
+## D68. A substituted figure carries its unit, and the model's repeat of it is dropped
+
+**Date:** September 6, 2026 · **Status:** Active, refines D46
+
+**Decision.** `StreamProcessor` remembers the unit on a figure it has just substituted and
+removes one immediate repeat of that unit from the following prose, stepping over closing
+markup such as a backtick. The planning prompt also states that a placeholder expands to a
+figure including its unit.
+
+**Alternatives considered.** The prompt change alone. Formatting figures without their unit
+and letting the model supply it. Leaving it, since it is cosmetic.
+
+**Reasoning.** The first real answer over the sample corpus read "16,752.90 USD USD". The
+prompt gives the model a bare number and tells it not to retype it; the substitution then
+renders the figure with its currency, and the model has already written "USD" after the
+placeholder because that is what one does after a number. Prompt-only fixes are a request;
+this is a guarantee, and the guarantee is what a demo needs.
+
+Dropping the unit from `format_figure` instead would break D46's actual purpose: the prose
+figure has to read exactly like the chart's, and the chart shows a currency.
+
+**Cut.** Any attempt to fix pluralisation, spacing or currency-symbol style in model prose.
+This removes a duplicate the server itself caused; the rest of the sentence is the model's.
+
+---
+
+## D69. The planner is told that a workspace holds more than one kind of document
+
+**Date:** September 6, 2026 · **Status:** Active, refines D37
+
+**Decision.** The chat planning prompt gains a rule: when a question is about one kind of
+document, restrict the query with a `present` filter on a field only that kind carries.
+
+**Alternatives considered.** Making the document kind a queryable dimension in `DataQuery`,
+resolved from `extractions.kind`, which is already stored. Filtering by filename. Leaving it.
+
+**Reasoning.** Asked "how many invoices are missing a purchase order number", the planner
+counted every record with no purchase order and answered **7**. It was not wrong about the
+data: seven records in the workspace have no purchase order, because four of them are a
+contract, a policy, a bank statement and a reference table. The true answer is 3. A
+confidently wrong metric on the demo script is the worst possible failure for a product
+whose claim is that its numbers can be trusted.
+
+The query language could already express the restriction — `invoice_total present` is
+exactly "this record is an invoice" — so the gap was guidance, not capability. With the rule
+in place the same question returns 3.
+
+**The better fix, deliberately not taken yet.** Document kind belongs in `DataQuery` as a
+first-class filter. `extractions.kind` already holds it, so no migration is needed, but the
+evaluator, the query contract, the prompt and the dashboard planner all move together, and
+that is a change to make deliberately rather than at the end of a session about sample data.
+Recorded here so it is a known gap rather than a surprise. Until then, a question about a
+document kind depends on the planner picking a good proxy field, which is a prompt working
+as intended and not a guarantee.
+
+---
+
+## D70. Background sessions flush the event bus, like request sessions always did
+
+**Date:** September 6, 2026 · **Status:** Active, completes D14 and D29
+
+**Decision.** `session_scope`, the transactional session every background task uses, now
+does what the request dependency in `app.deps` has always done after a successful commit:
+`bus.flush_after_commit(session)` and `flush_submissions(session)`, with the matching
+discards on the rollback path.
+
+**Alternatives considered.** Publishing events outside the session, which reintroduces the
+uncommitted-row problem D14 solved. Having the progress strip poll the documents route
+instead of streaming, which is a workaround dressed as a design.
+
+**Reasoning.** Document processing runs entirely in background sessions. Without the flush,
+every event the pipeline published was written to `workspace_events` and delivered to
+**nobody**: the sequence numbers were allocated, the rows were durable, and the live queue
+of every connected subscriber stayed empty. The progress strip therefore showed the upload
+request's own `uploaded` event, which a request session did flush, and then sat unchanged
+for the entire run while the work completed behind it.
+
+**Why it survived this long.** Because refreshing the page fixed it. A reconnecting client
+replays from the table (D14), so every manual check after the fact looked correct, and the
+end-to-end tests drive the pipeline directly rather than watching a stream. It took seeding
+ten documents and *watching* to see that nothing moved. Measured: a subscriber connected
+before a seed received 13 frames, all of them `uploaded`; after the fix, 82 frames covering
+parsing, extraction, indexing and completion for all ten documents.
+
+**The general shape of the bug, which is worth more than the fix.** Two paths did the same
+work, one of them had an extra responsibility bolted to the request lifecycle, and the
+duplicate was invisible because the durable half kept working. `session_scope`'s own
+docstring described the request path as the one with "the event-bus and worker-submission
+flushing that decision D29 requires" — the gap was written down and read as a description
+rather than as a defect.
+
+**Cut.** Merging the two session helpers into one. They differ in how they acquire the
+session, and collapsing them means threading a request through background code. The
+duplication is now two lines, and a test in `test_event_stream.py` fails if either path
+loses them.
+
+---
+
+## D71. The Upload screen is the document library, and the upload is the transient part
+
+**Date:** September 6, 2026 · **Status:** Active, extends requirements section 3.1
+
+**Decision.** `/w/{id}/upload` lists every document in the workspace: the format the server
+actually parsed it as, its stage or failure reason, page count, size, and two actions — open
+it in the source viewer, or delete it. The upload progress keeps its place above the list
+while bytes are moving. `DocumentSummary` gains `source_format` so the list can say what a
+file really is.
+
+**Alternatives considered.** A fourth screen for files, which breaks the three-screen rule
+that the whole product is organised around (D34). Putting the list on the Data screen beside
+the table, where it would compete with the thing the table is for. Leaving it out: the Data
+screen has a row per document, so the information is arguably reachable.
+
+**Reasoning.** Anubhav asked where you look at the files you uploaded, and the honest answer
+was nowhere. The screen behind the header's "Upload" tab was built for the seconds in which
+bytes leave the browser, so arriving at it later — with ten documents indexed and the header
+itself saying "10 documents" — produced one sentence, "this browser is not uploading
+anything right now", and an empty page.
+
+"Reachable from the Data screen" is the argument to reject. That table is a row per
+*extracted record*, in the schema's vocabulary. A document that failed has no row at all, and
+a document still being read has an incomplete one, so the two cases a person most wants to
+look up are the two the table cannot show. A file list answers a different question — what
+did I give this thing, and what became of it — and that question comes first, because the
+table is only trustworthy to the extent its inputs are known.
+
+Delete lands here for the same reason: requirement FR-07 has had a server route since the
+first week and no way to reach it, and the place you notice a file that should not be in the
+workspace is the list of files in the workspace.
+
+**Three details worth stating.**
+
+- **The format is the sniffed one, not the extension.** A `.csv` that is really a
+  tab-separated export is exactly the case worth seeing, and the extension hides it.
+- **Deleting asks twice, in place.** It cascades through the record, the passages and every
+  citation pointing at them, with no undo. A second click on the same button is the whole
+  ceremony; a modal would be heavier for the same guarantee.
+- **The stage words are the processing strip's words.** One vocabulary for one set of
+  states, so "pulling out values" does not become "extracting" on a different screen.
+
+**A bug this turned up.** Invalidating the workspace query after a delete was not enough:
+the refetch returned the shorter list and the deleted row stayed on screen until a reload,
+which reads exactly like the deletion having failed. The row is now removed from the cached
+overview directly, and the refetch follows for everything derived from it.
+
+**Cut.** Re-extracting a document from here, though the route exists: re-extraction is
+interesting after a correction, which happens on the Data screen, and putting it here would
+invite re-running the pipeline on a whim. Renaming a document. Sorting and filtering the
+list — at twenty-five files, the upload limit, scanning is faster than choosing a sort.

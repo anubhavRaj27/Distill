@@ -16,17 +16,28 @@ import { logger } from '../../lib/logger';
 import { makeTasks, runBatch, type UploadTask } from '../../lib/upload';
 import { consumeTokenFromFragment, recallToken } from '../../lib/workspace-token';
 import { Spiral } from '../../ui/Spiral';
+import { useDocumentProgress } from '../processing/useDocumentProgress';
+import { SourceViewer, type SourceTarget } from '../viewer/SourceViewer';
 import { DocumentCard } from './components/DocumentCard';
 import { RejectionNotice } from './components/RejectionNotice';
 import { UploadRow } from './components/UploadRow';
+import { DocumentLibrary, type LibraryDocument } from './DocumentLibrary';
 import { usePendingUploads } from './pendingUploads';
+import { useDeleteDocument } from './useDeleteDocument';
 
 /**
- * Screen 1b: the files going up. Route `/w/{id}/upload`.
+ * Screen 1: the workspace's documents, and the files going up. Route `/w/{id}/upload`.
  *
- * This screen covers the **upload** phase only — bytes leaving the browser — and it holds
- * the person here until that is done, because there is genuinely nothing to do with a
- * document the server has not received yet. "Ready" therefore means received, not indexed.
+ * **The library** is every document in this workspace, what became of it, and a way to open
+ * or delete it. It is what this screen is for once a workspace exists, and it was missing:
+ * arriving here with ten documents indexed produced the sentence "this browser is not
+ * uploading anything right now" and nothing else, which answers a question nobody asked.
+ * See decision D71.
+ *
+ * **The upload** is bytes leaving this browser, a transient state drawn above the library
+ * while it lasts. The screen still holds the person here until that finishes, because there
+ * is genuinely nothing to do with a document the server has not received yet. "Ready" there
+ * means received, not indexed.
  *
  * Processing (parse, extract, index) deliberately does **not** hold anyone here. It runs on
  * the server and streams `document.status` events, which the processing strip renders on
@@ -44,12 +55,40 @@ const Page = styled.div`
   background: ${({ theme }) => theme.color.paper};
 `;
 
+/**
+ * The viewer is a panel beside the content, not below it, so this screen splits horizontally
+ * under the header exactly as Chat does. Without it the `aside` becomes the next row of a
+ * column layout and opens somewhere off the bottom of the page.
+ */
+const Split = styled.div`
+  flex: 1;
+  min-height: 0;
+  display: flex;
+`;
+
 const Main = styled.main`
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: ${({ theme }) => theme.space.page};
+`;
+
+const Library = styled.section`
+  display: flex;
+  flex-direction: column;
+  gap: ${({ theme }) => theme.space.md};
+  width: 100%;
+  max-width: 880px;
+  margin-top: ${({ theme }) => theme.space.xl};
+`;
+
+const LibraryHeading = styled.h2`
+  margin: 0;
+  font-family: ${({ theme }) => theme.font.body};
+  font-size: 13px;
+  font-weight: 500;
+  color: ${({ theme }) => theme.color.inkMuted};
 `;
 
 const Headline = styled.h1`
@@ -422,6 +461,78 @@ export function UploadProgressScreen() {
     void navigate(`/w/${workspaceId}/chat`);
   }, [navigate, workspaceId]);
 
+  /*
+   * The library, and the live stages laid over it. Decision D71.
+   *
+   * The overview is the list of what exists; the event stream is what is happening to it.
+   * The hook the processing strip uses is reused rather than a second subscriber written
+   * here, so two views of one pipeline cannot disagree about a document's stage.
+   */
+  const stored = useMemo(() => overview.data?.documents ?? [], [overview.data]);
+  const progress = useDocumentProgress(
+    workspaceId,
+    token,
+    useMemo(
+      () =>
+        stored.map((document) => ({
+          id: document.id,
+          filename: document.filename,
+          status: document.status,
+        })),
+      [stored],
+    ),
+  );
+
+  const library = useMemo<LibraryDocument[]>(() => {
+    const live = new Map(progress.map((entry) => [entry.documentId, entry]));
+    return stored.map((document) => {
+      const entry = live.get(document.id);
+      return {
+        ...document,
+        liveStatus: entry?.status,
+        liveStageDetail: entry?.stageDetail,
+        liveFailureReason: entry?.failureReason,
+      };
+    });
+  }, [progress, stored]);
+
+  /*
+   * A document reaching a terminal stage changes what the overview says about it — the page
+   * count, the failure reason — and the overview is a snapshot taken before any of that
+   * happened. Refetching when the number of settled documents changes keeps the rows honest
+   * without polling: the stream says when there is something new to ask for.
+   */
+  const settledCount = library.filter((document) => {
+    const status = document.liveStatus ?? document.status;
+    return status === 'done' || status === 'failed';
+  }).length;
+  const refetchedAt = useRef(0);
+  useEffect(() => {
+    // Only when the number GROWS, and remembered in a ref rather than in state: the
+    // refetch this triggers is what recomputes `settledCount`, so a condition that can be
+    // met by its own result is a loop waiting to happen.
+    if (settledCount <= refetchedAt.current) return;
+    refetchedAt.current = settledCount;
+    void queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId] });
+  }, [settledCount, queryClient, workspaceId]);
+
+  const removal = useDeleteDocument(workspaceId, token);
+  const [viewing, setViewing] = useState<SourceTarget | null>(null);
+
+  const openDocument = useCallback((document: LibraryDocument) => {
+    /*
+     * No highlight: nothing here is a claim about a value, so the viewer opens the first
+     * page plainly. Boxes are what a citation or a table cell brings with it.
+     */
+    setViewing({
+      documentId: document.id,
+      filename: document.filename,
+      pageIndex: 0,
+      boxes: [],
+      excerpt: '',
+    });
+  }, []);
+
   if (!token) {
     return (
       <Page>
@@ -448,111 +559,136 @@ export function UploadProgressScreen() {
         onAddDocuments={() => addInput.current?.click()}
       />
 
-      <Main>
-        <Headline>{sending ? 'Uploading your documents' : 'Your documents are in'}</Headline>
+      <Split>
+        <Main>
+          <Headline>{sending ? 'Uploading your documents' : 'Your documents'}</Headline>
 
-        {tasks.length > 0 ? (
-          <>
-            <Carousel>
-              <Spiral
-                slides={slides}
-                ariaLabel="The documents being uploaded, turning past one another. Each one is listed with its progress below."
-              />
-            </Carousel>
+          {tasks.length > 0 ? (
+            <>
+              <Carousel>
+                <Spiral
+                  slides={slides}
+                  ariaLabel="The documents being uploaded, turning past one another. Each one is listed with its progress below."
+                />
+              </Carousel>
 
-            <Summary>
-              <SummaryLine>
-                <strong>
-                  {arrived} of {tasks.length}
-                </strong>{' '}
-                {tasks.length === 1 ? 'document' : 'documents'} arrived
-                {totalBytes > 0 && (
-                  <>
-                    {' · '}
-                    {formatBytes(sentBytes)} of {formatBytes(totalBytes)}
-                  </>
-                )}
-              </SummaryLine>
-              <TotalBar
-                value={sentBytes}
-                max={Math.max(totalBytes, 1)}
-                aria-label={`Upload progress: ${arrived} of ${tasks.length} documents arrived`}
-              />
-            </Summary>
+              <Summary>
+                <SummaryLine>
+                  <strong>
+                    {arrived} of {tasks.length}
+                  </strong>{' '}
+                  {tasks.length === 1 ? 'document' : 'documents'} arrived
+                  {totalBytes > 0 && (
+                    <>
+                      {' · '}
+                      {formatBytes(sentBytes)} of {formatBytes(totalBytes)}
+                    </>
+                  )}
+                </SummaryLine>
+                <TotalBar
+                  value={sentBytes}
+                  max={Math.max(totalBytes, 1)}
+                  aria-label={`Upload progress: ${arrived} of ${tasks.length} documents arrived`}
+                />
+              </Summary>
 
-            {/*
-              `open` rather than `defaultOpen`: a failure that happens while the disclosure
-              is shut has to be able to push it open by itself.
-            */}
-            <Details open={detailsOpen} onToggle={handleToggle}>
-              <SummaryToggle data-failed={failed > 0}>
-                <span>
-                  {failed > 0
-                    ? `${failed === 1 ? 'One file' : `${failed} files`} could not be sent — see every file`
-                    : 'See every file'}
-                </span>
-                <span aria-hidden="true">{detailsOpen ? '−' : '+'}</span>
-              </SummaryToggle>
+              {/*
+                `open` rather than `defaultOpen`: a failure that happens while the disclosure
+                is shut has to be able to push it open by itself.
+              */}
+              <Details open={detailsOpen} onToggle={handleToggle}>
+                <SummaryToggle data-failed={failed > 0}>
+                  <span>
+                    {failed > 0
+                      ? `${failed === 1 ? 'One file' : `${failed} files`} could not be sent — see every file`
+                      : 'See every file'}
+                  </span>
+                  <span aria-hidden="true">{detailsOpen ? '−' : '+'}</span>
+                </SummaryToggle>
 
-              <Panel aria-busy={sending}>
-                {tasks.map((task) => (
-                  <UploadRow key={task.key} task={task} />
-                ))}
-              </Panel>
-            </Details>
-          </>
-        ) : (
-          <Note>
-            {overview.isPending
-              ? 'Checking what this workspace already has…'
-              : 'This browser is not uploading anything right now. Add more files, or carry on to the conversation.'}
-          </Note>
+                <Panel aria-busy={sending}>
+                  {tasks.map((task) => (
+                    <UploadRow key={task.key} task={task} />
+                  ))}
+                </Panel>
+              </Details>
+            </>
+          ) : null}
+
+          {rejected.length > 0 && (
+            <div style={{ width: '100%', maxWidth: 880 }}>
+              <RejectionNotice rejected={rejected} />
+            </div>
+          )}
+
+          <Library>
+            <LibraryHeading>
+              {library.length === 1 ? '1 document' : `${library.length} documents`} in this
+              workspace
+            </LibraryHeading>
+            <DocumentLibrary
+              documents={library}
+              isPending={overview.isPending}
+              onOpen={openDocument}
+              onDelete={(document) => removal.mutate(document.id)}
+              deletingId={removal.isPending ? (removal.variables ?? null) : null}
+            />
+            {removal.isError && (
+              <Note role="alert">
+                That document could not be deleted. It is still here, and nothing was removed
+                from the table.
+              </Note>
+            )}
+          </Library>
+
+          <Actions>
+            <SecondaryButton type="button" onClick={() => addInput.current?.click()}>
+              <Plus size={16} aria-hidden="true" />
+              Add more files
+            </SecondaryButton>
+
+            <ContinueButton type="button" disabled={sending} onClick={goToChat}>
+              Continue
+              <ArrowRight size={16} aria-hidden="true" />
+            </ContinueButton>
+          </Actions>
+
+          {/*
+            Said once, here, rather than on every row: "Ready" is about arrival, not about
+            being askable. Reading the documents starts now and its progress is on the next
+            screen, which is exactly why Continue is worth pressing.
+          */}
+          {allSettled && (
+            <Note role="status">
+              {failed > 0
+                ? `${failed === 1 ? 'One file' : `${failed} files`} could not be sent. The rest arrived and are being read now — you can follow that on the next screen.`
+                : 'All files arrived. Reading them starts now, and you can watch it on the next screen.'}
+            </Note>
+          )}
+
+          <HiddenInput
+            ref={addInput}
+            type="file"
+            multiple
+            accept={ACCEPT_ATTRIBUTE}
+            aria-label="Add more documents to this workspace"
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              if (files.length > 0) handleAdd(files);
+              event.target.value = '';
+            }}
+          />
+        </Main>
+
+        {viewing && (
+          <SourceViewer
+            workspaceId={workspaceId}
+            token={token}
+            target={viewing}
+            onClose={() => setViewing(null)}
+          />
         )}
-
-        {rejected.length > 0 && (
-          <div style={{ width: '100%', maxWidth: 880 }}>
-            <RejectionNotice rejected={rejected} />
-          </div>
-        )}
-
-        <Actions>
-          <SecondaryButton type="button" onClick={() => addInput.current?.click()}>
-            <Plus size={16} aria-hidden="true" />
-            Add more files
-          </SecondaryButton>
-
-          <ContinueButton type="button" disabled={sending} onClick={goToChat}>
-            Continue
-            <ArrowRight size={16} aria-hidden="true" />
-          </ContinueButton>
-        </Actions>
-
-        {/*
-          Said once, here, rather than on every row: "Ready" is about arrival, not about
-          being askable. Reading the documents starts now and its progress is on the next
-          screen, which is exactly why Continue is worth pressing.
-        */}
-        {allSettled && (
-          <Note role="status">
-            {failed > 0
-              ? `${failed === 1 ? 'One file' : `${failed} files`} could not be sent. The rest arrived and are being read now — you can follow that on the next screen.`
-              : 'All files arrived. Reading them starts now, and you can watch it on the next screen.'}
-          </Note>
-        )}
-
-        <HiddenInput
-          ref={addInput}
-          type="file"
-          multiple
-          accept={ACCEPT_ATTRIBUTE}
-          aria-label="Add more documents to this workspace"
-          onChange={(event) => {
-            const files = Array.from(event.target.files ?? []);
-            if (files.length > 0) handleAdd(files);
-            event.target.value = '';
-          }}
-        />
-      </Main>
+      </Split>
     </Page>
   );
 }

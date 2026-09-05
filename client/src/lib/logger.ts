@@ -24,7 +24,14 @@ type EventName =
   | 'chat.asked'
   | 'chat.stream_reconnect'
   | 'chat.stream_reattach'
-  | 'chat.stream_failed';
+  | 'chat.stream_failed'
+  /*
+   * The document library on the Upload screen (decision D71). A deletion cascades through
+   * the extracted row, the passages and the citations, so "was it asked for, and did it
+   * work" is worth having when someone reports a document that should still be there.
+   */
+  | 'document.deleted'
+  | 'document.delete_failed';
 
 type Payload = Record<string, unknown>;
 

@@ -83,7 +83,7 @@ cd server && uv sync && uv run alembic upgrade head && cd ../client && npm ci &&
 cd server && uv run pytest -q && cd ../client && npm test && cd ..
 ```
 
-Expect 477 server tests and 100 client tests, all passing, in well under a minute. The server
+Expect 483 server tests and 100 client tests, all passing, in well under a minute. The server
 suite needs the `distill_test` database from step 1; it runs `alembic upgrade head` against
 it itself.
 
@@ -145,9 +145,12 @@ state, not a warning.
 
 ## Using it
 
-1. **Upload.** Drag files onto the first screen, or click to browse. PDF, DOCX, XLSX, CSV,
-   images, and plain text. Up to 20 MB per file and 25 files at once, and the limit is
-   enforced by counting bytes as they stream rather than by trusting the declared size.
+1. **Upload.** Click **"Try with sample documents"** to load the bundled corpus, or drag
+   your own files on. PDF, DOCX, XLSX, CSV, images, and plain text. Up to 20 MB per file and
+   25 files at once, and the limit is enforced by counting bytes as they stream rather than
+   by trusting the declared size. Come back to this screen at any time and it lists
+   everything in the workspace: what each file was parsed as, its stage or failure reason,
+   and buttons to open or delete it.
 2. **Watch the progress screen.** Each document moves through parsing, extraction, grounding,
    and indexing. A value appears in the table and becomes askable at the same moment.
 3. **Chat.** Ask in plain language. The answer streams, cites the passages it used, and may
@@ -165,6 +168,53 @@ side (decision D8). Lose it and the workspace is unreachable: there is no recove
 
 ---
 
+## The sample documents
+
+`samples/` holds ten documents that the "Try with sample documents" button loads in one
+click. They are generated, not real, and every organisation and figure in them is invented.
+
+| File | Kind | Format | What it is there for |
+| --- | --- | --- | --- |
+| `acme-invoice-INV-2041.pdf` | invoice | PDF | Baseline. Says "Vendor", "Total due", has a purchase order. |
+| `acme-invoice-INV-2098.pdf` | invoice | PDF | Same vendor again, so "total by vendor" has to group. |
+| `globex-invoice-GX-7781.docx` | invoice | Word | Says "Seller", "Invoice No", "Amount due". No purchase order. |
+| `initech-invoice-INT-5567.xlsx` | invoice | Spreadsheet | A third vocabulary: "Vendor name", "Document number", "Amount now due". |
+| `umbrella-invoice-UL-0442.txt` | invoice | Plain text | No layout to lean on. No purchase order. |
+| `hooli-receipt-R-2291.png` | receipt | Image | A scan, so Optical Character Recognition runs. No purchase order. |
+| `acme-services-agreement.pdf` | contract | PDF, 2 pages | Prose. Answers "what does the contract say about payment terms". |
+| `northwind-expense-policy.docx` | policy | Word | Prose that is not about invoices at all. |
+| `seaboard-statement-march-2026.pdf` | bank statement | PDF | Different fields entirely: account number, closing balance, no vendor. |
+| `supplier-directory.csv` | reference table | CSV | Tabular reference data, deliberately with no amounts. |
+
+The set is **deliberately inconsistent**: the invoice total is written five different ways,
+the sending party four, and dates in five formats. That is the point of it. `expected.json`
+records the ground truth, including that the invoices total 16,752.90 USD across five
+vendors and that three of them carry no purchase order, so you can check the table against a
+stated answer rather than against whether it looks plausible.
+
+To change the corpus, edit `server/scripts/generate_samples.py` and run it:
+
+```bash
+cd server && uv run python scripts/generate_samples.py
+```
+
+It asserts its own arithmetic before writing anything, so a document whose line items do not
+add up fails the run instead of shipping.
+
+### A demo that takes two minutes
+
+1. Click **"Try with sample documents"** and watch the ten process (about 45 seconds).
+2. Ask **"What is the total amount by vendor?"** A bar chart arrives before the prose. The
+   figures are computed by the server, not written by the model.
+3. Ask **"How many invoices are missing a purchase order number?"** The answer is 3.
+4. Ask **"What does the contract say about payment terms?"** and click a citation to see the
+   clause highlighted on page 1 of the agreement.
+5. Ask something the documents cannot answer, such as **"Who is our largest supplier by
+   headcount?"**, and get an explicit refusal rather than a guess.
+6. Open **Data** and check any cell against `samples/expected.json`.
+
+---
+
 ## Model configuration
 
 Relevant only with `LLM_PROVIDER=gemini`. Every model identifier below was verified callable
@@ -172,7 +222,7 @@ on September 5, 2026 (decision D62).
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `LLM_EXTRACT_MODEL` | `gemini-3.5-flash` | Extraction and schema inference. Accuracy-critical, runs once per document in the background. |
+| `LLM_EXTRACT_MODEL` | `gemini-3.5-flash-lite` | Extraction and schema inference, once per document in the background. |
 | `LLM_FAST_MODEL` | `gemini-3.5-flash-lite` | Chat, dashboard planning, suggestions. Everything you wait on. |
 | `LLM_FAST_THINKING_LEVEL` | `low` | Reasoning effort for that fast path only. Leave blank for a Gemini 2.x model, which has no such setting. |
 | `LLM_EMBED_MODEL` | `gemini-embedding-001` | Retrieval and schema matching. |
@@ -184,8 +234,10 @@ Three things worth knowing before a demo:
   key issued recently, even though they still appear in the model list. The Pro tier is not on
   the free plan at all: it answers 429 with `limit: 0`, which is permanent and reads exactly
   like an ordinary rate limit.
-- **Free-tier daily caps are per model and can be small.** `gemini-3.6-flash` allows 20 requests
-  per day. The two models configured above have more room, but budget your test runs.
+- **Free-tier daily caps are per model, and they are small.** Every non-lite model this key
+  can reach allows **20 requests per day**, which one pass over the ten sample documents
+  spends. That is why both tiers are Lite. With a paid key, point `LLM_EXTRACT_MODEL` at a
+  Pro model.
 - **Latency comes from the reasoning effort, not the model size.** Flash Lite starts a chat
   answer in under a second where the larger Flash model takes about nine, which is why the tier
   you wait on is Lite.
@@ -198,7 +250,7 @@ Run from the directory named.
 
 | Command | Directory | What it does |
 | --- | --- | --- |
-| `uv run pytest -q` | `server` | 477 tests. No network, no key: the fake provider replays recorded fixtures. |
+| `uv run pytest -q` | `server` | 483 tests. No network, no key: the fake provider replays recorded fixtures. |
 | `uv run ruff check app tests` | `server` | Lint. |
 | `uv run mypy app` | `server` | Types. Reports 14 known pre-existing errors, mostly at the boundary with untyped parsing libraries. |
 | `npm test` | `client` | 100 tests, Vitest with jsdom. |
@@ -265,9 +317,6 @@ specification, the server evaluates it, and the result is bound into the interfa
 
 Stated rather than hidden, in the spirit of `decisions.md`.
 
-- **No sample corpus yet.** The "Try with sample documents" link on the upload screen needs
-  `samples/manifest.json`, which does not exist, so the link returns a clear error. Drag your
-  own files in for now.
 - **No Makefile.** `docs/implementation.md` section 10 plans `make setup` and `make dev`; the
   commands above are what those targets would run.
 - **No CSV export** from the Data screen.
