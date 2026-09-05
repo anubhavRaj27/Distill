@@ -105,10 +105,24 @@ async def search(
     embedded = await embed_texts(
         client,
         [question],
-        model_name=settings.llm_embed_model,
+        model_name=settings.embed_space,
+        task="query",
         force_lexical=space == LEXICAL_MODEL,
     )
     query_vector = embedded[0].vector
+
+    if space != LEXICAL_MODEL and space != settings.embed_space:
+        # The workspace was indexed in a different space from the one this question was
+        # just embedded in, which happens when a model or a width is changed after
+        # indexing. Every cosine below will be zero and the chat would answer "not in
+        # these documents" about documents that plainly say it, so say so out loud.
+        logger.warning(
+            "search.space_mismatch",
+            workspace_id=str(workspace_id),
+            indexed_space=space,
+            current_space=settings.embed_space,
+            detail="re-index this workspace, or restore the previous LLM_EMBED_* settings",
+        )
 
     rows = list(
         (

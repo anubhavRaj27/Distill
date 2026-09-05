@@ -154,8 +154,30 @@ class Thresholds:
     """
 
     string_auto_map: float = 0.90
-    embedding_auto_map: float = 0.95
+    embedding_auto_map: float = 0.88
+    """MEASURED against gemini-embedding-001 on September 5, 2026. Was 0.95, a guess made
+    with no key. See decision D66.
+
+    Twelve synonym pairs a person would merge and twelve unrelated pairs a person would not
+    were embedded and scored. The classes separate cleanly, but not where 0.95 assumed:
+    unrelated pairs top out at **0.827** (`Payment Terms` versus `Currency`) and synonyms
+    run from 0.822 (`Bill To` versus `Customer`) to 0.982 (`Invoice Number` versus
+    `Invoice No`). This model's cosines are compressed into a narrow band near the top,
+    which is normal for a modern embedding model and fatal to a threshold picked by
+    intuition: at 0.95 only two of the twelve synonyms mapped, so drift auto-mapping
+    effectively did not exist and a corpus writing "Invoice Total" in one document and
+    "Total Amount" in another produced two columns for one fact.
+
+    0.88 sits above every unrelated pair observed with more than five points of headroom,
+    and catches nine of twelve synonyms. The three it misses are the genuinely arguable
+    ones, and they fall through to asking, which is the direction D24 chose."""
+
     margin: float = 0.05
+    """Kept at D24's value. It is a margin between the best and second-best candidate
+    rather than an absolute score, so the compression of this model's scale does not shift
+    it: in the measured set, a true synonym beat the runner-up by 0.08 or more, except
+    between two total-shaped fields where the ambiguity is real and asking is correct."""
+
     novelty_ceiling_string: float = 0.65
     """Measured against the fixture corpus. See decision D27.
 
@@ -166,14 +188,19 @@ class Thresholds:
     unreachable in practice.
     """
 
-    novelty_ceiling_embedding: float = 0.30
-    """STILL UNMEASURED. Needs a live embedding model, so it is the one number a key unblocks.
+    novelty_ceiling_embedding: float = 0.80
+    """MEASURED September 5, 2026, in the same pass as ``embedding_auto_map``. Was 0.30,
+    the one number the code said a key would unblock. See decision D66.
 
-    Real text embeddings score unrelated business terms at roughly 0.4 to 0.7, so this is
-    likely too strict and auto-add may stay rare until it is calibrated. Erring strict costs
-    extra proposal cards and never a wrong merge, which is the acceptable direction, so it
-    is left at decision D24's value rather than guessed upward.
-    """
+    The prediction attached to 0.30 was right in direction and short by half: unrelated
+    business labels score **0.764 to 0.827** under gemini-embedding-001, not 0.4 to 0.7. So
+    0.30 was not merely strict, it was unreachable — no field's best match ever fell below
+    it, which means "clearly novel" never fired and the auto-add path was dead code that
+    every test passed.
+
+    0.80 sits just under the observed floor for unrelated pairs, so a field whose best match
+    is below it genuinely resembles nothing in the schema. The band between 0.80 and
+    ``embedding_auto_map`` is the ask zone, which is where an honest uncertainty belongs."""
 
     @classmethod
     def from_settings(cls, settings: object) -> Thresholds:

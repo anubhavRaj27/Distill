@@ -11,6 +11,9 @@ from __future__ import annotations
 import json
 
 import pytest
+from app.chat.answer import ChatPlan
+from app.chat.suggestions import SuggestedQuestions
+from app.insights.dashboard import DashboardPlan
 from app.llm.contracts import ExtractedField, GuidedExtraction, OpenExtraction
 from app.llm.jsonschema import (
     MAX_DEPTH,
@@ -20,7 +23,18 @@ from app.llm.jsonschema import (
 )
 from pydantic import BaseModel, Field, create_model
 
-RESPONSE_MODELS = [OpenExtraction, GuidedExtraction, ExtractedField]
+RESPONSE_MODELS = [
+    OpenExtraction,
+    GuidedExtraction,
+    ExtractedField,
+    # The three below were missing until September 5, 2026, and this file called itself
+    # "every response model" without them. Both faults a real key found live in exactly
+    # that gap: DashboardPlan converted eight levels deep against a limit of six, and
+    # ChatPlan's optional Visual collapsed to a shapeless `{"nullable": true}`. See D65.
+    ChatPlan,
+    DashboardPlan,
+    SuggestedQuestions,
+]
 
 
 @pytest.mark.parametrize("model", RESPONSE_MODELS, ids=lambda m: m.__name__)
@@ -49,6 +63,57 @@ def test_converted_schemas_stay_within_the_depth_limit(model: type[BaseModel]) -
         return 0
 
     assert depth(converted) <= MAX_DEPTH * 3
+
+
+def test_an_optional_nested_model_keeps_its_shape() -> None:
+    """Regression. ``Visual | None`` reaches the converter as an ``anyOf`` of a reference
+    and null. Resolving references before collapsing the union means the top level holds no
+    ``$ref`` to resolve, and the field converts to ``{"nullable": true}``: no type, no
+    properties, nothing forbidden. It validates, it is accepted by the provider, and the
+    model then answers `false` where an object was wanted. That is what happened on the
+    first real chat-plan call. See decision D65."""
+
+    class Inner(BaseModel):
+        title: str = Field(description="What to call it")
+
+    class Outer(BaseModel):
+        visual: Inner | None = None
+
+    node = to_provider_schema(Outer.model_json_schema())["properties"]["visual"]
+    assert node["type"] == "object"
+    assert node["nullable"] is True
+    assert "title" in node["properties"]
+
+    # And the contract that actually broke.
+    live = to_provider_schema(ChatPlan.model_json_schema())["properties"]["visual"]
+    assert live["type"] == "object" and live["nullable"] is True
+    assert "query" in live["properties"], "the planner cannot emit a query it cannot see"
+
+
+def test_array_bounds_are_described_rather_than_sent() -> None:
+    """Regression, and the one failure a real key found that no local test predicted.
+
+    ``maxItems`` is in the documented provider subset and is nevertheless answered with
+    400 INVALID_ARGUMENT by gemini-3.6-flash, naming no argument. Every extraction call in
+    this project carries one, from ``max_length=80`` on the fields list, so this was total
+    rather than partial breakage. See decision D64.
+
+    The bound still has to reach the model, or an over-long list fails local validation and
+    costs a retry, so it is restated in the description.
+    """
+
+    class Bounded(BaseModel):
+        items: list[str] = Field(default_factory=list, max_length=80)
+
+    converted = to_provider_schema(Bounded.model_json_schema())
+    node = converted["properties"]["items"]
+    assert "maxItems" not in node and "minItems" not in node
+    assert "at most 80" in node["description"]
+
+    for model in RESPONSE_MODELS:
+        serialised = json.dumps(to_provider_schema(model.model_json_schema()))
+        assert "maxItems" not in serialised, f"{model.__name__} would be rejected"
+        assert "minItems" not in serialised, f"{model.__name__} would be rejected"
 
 
 def test_nullable_fields_become_nullable_rather_than_a_union() -> None:

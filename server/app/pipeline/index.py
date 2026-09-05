@@ -143,7 +143,8 @@ async def index_document(
         embedded = await embed_texts(
             client,
             [chunk.text for chunk in batch],
-            model_name=settings.llm_embed_model,
+            model_name=settings.embed_space,
+            task="document",
             force_lexical=force_lexical,
         )
         for chunk, vector in zip(batch, embedded, strict=True):
@@ -170,6 +171,6 @@ async def index_document(
         document_id=str(document.id),
         chunks=stored,
         has_digest=digest is not None,
-        space=existing_space or settings.llm_embed_model,
+        space=existing_space or settings.embed_space,
     )
     return stored

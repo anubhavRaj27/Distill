@@ -36,7 +36,7 @@ import math
 import re
 from dataclasses import dataclass
 
-from app.llm.base import LLMClient, Vector
+from app.llm.base import EmbedTask, LLMClient, Vector
 from app.logging import get_logger
 
 logger = get_logger(__name__)
@@ -100,13 +100,22 @@ class EmbeddedText:
 
 
 async def embed_texts(
-    client: LLMClient, texts: list[str], *, model_name: str, force_lexical: bool = False
+    client: LLMClient,
+    texts: list[str],
+    *,
+    model_name: str,
+    task: EmbedTask = "similarity",
+    force_lexical: bool = False,
 ) -> list[EmbeddedText]:
     """Embed ``texts``, falling back to lexical vectors for anything the provider skipped.
 
     ``force_lexical`` embeds everything lexically, which is what a caller does once it knows
     a workspace's existing chunks are lexical: consistency with what is already indexed
     matters more than the quality of any single new vector.
+
+    ``task`` says whether these texts are passages or a question, so a real provider can
+    embed each side of the pair appropriately (decision D63). The lexical fallback has no
+    notion of it and needs none: token overlap is symmetric.
     """
     if not texts:
         return []
@@ -117,7 +126,7 @@ async def embed_texts(
             for text in texts
         ]
 
-    vectors = await client.embed(texts)
+    vectors = await client.embed(texts, task=task)
     if len(vectors) != len(texts):
         # The provider broke the positional contract in ``LLMClient.embed``. A misaligned
         # vector is worse than a missing one, so discard the whole batch and go lexical.

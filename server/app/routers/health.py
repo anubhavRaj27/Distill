@@ -75,7 +75,8 @@ async def healthz() -> HealthResponse:
         detail=(
             f"provider={settings.llm_provider}"
             + (
-                f" extract={settings.llm_extract_model} query={settings.llm_query_model}"
+                f" extract={settings.llm_extract_model} fast={settings.llm_fast_model}"
+                f" embed={settings.embed_space}"
                 if settings.llm_configured
                 else " (no API key present, running on recorded fixtures)"
             )

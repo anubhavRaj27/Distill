@@ -36,7 +36,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol, TypeVar
+from typing import Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
@@ -138,6 +138,20 @@ type Vector = list[float]
 """One embedding. Compared with cosine similarity in ``app.schema.drift``."""
 
 
+type EmbedTask = Literal["document", "query", "similarity"]
+"""What an embedding is for, in provider-neutral terms. Decision D63.
+
+Modern embedding models are asymmetric: a passage and the question that should retrieve it
+are embedded differently on purpose, and telling the model which side it is looking at
+measurably improves the ranking. The three values map to the provider's own task names
+inside the provider adapter, because "RETRIEVAL_DOCUMENT" is Gemini's vocabulary and this
+module is the boundary that stays free of it.
+
+``similarity`` is the symmetric case, used for schema drift matching, where neither of the
+two field labels being compared is a query for the other.
+"""
+
+
 class LLMClient(Protocol):
     """What the rest of the application is allowed to know about model access."""
 
@@ -174,8 +188,14 @@ class LLMClient(Protocol):
         """
         ...
 
-    async def embed(self, texts: Sequence[str]) -> list[Vector | None]:
-        """Embed ``texts`` for schema drift matching. Decision D24.
+    async def embed(
+        self, texts: Sequence[str], *, task: EmbedTask = "similarity"
+    ) -> list[Vector | None]:
+        """Embed ``texts`` for retrieval or for schema drift matching. Decisions D24, D63.
+
+        ``task`` says which side of a retrieval pair these texts are, so the provider can
+        embed a passage and a question appropriately. It is a hint, not a mode: every task
+        returns vectors in the same comparable space.
 
         Returns one entry per input, in order. An entry is ``None`` when this provider has
         no vector for that text, which is **not** an error and not a production degradation

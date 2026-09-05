@@ -39,23 +39,36 @@ SUPPORTED_KEYWORDS: frozenset[str] = frozenset(
         "properties",
         "required",
         "propertyOrdering",
-        "minItems",
-        "maxItems",
-        "minimum",
-        "maximum",
-        "title",
     }
 )
 """Keywords the provider subset understands. Everything else is dropped, because sending an
-unrecognised keyword is at best ignored and at worst a rejected request."""
+unrecognised keyword is at best ignored and at worst a rejected request.
+
+``minItems``, ``maxItems``, ``minimum``, ``maximum`` and ``title`` were in this set until
+September 5, 2026, on the strength of the documented subset. A real key showed the
+documentation is ahead of the service: gemini-3.6-flash answers 400 INVALID_ARGUMENT to a
+schema carrying ``maxItems``, with no indication of which argument it objected to. The
+constraint that provoked it was ``max_length=80`` on ``OpenExtraction.fields``, which
+pydantic renders as ``maxItems``, so every extraction call this project makes would have
+failed. See decision D64. The size and range constraints are not lost: they still validate
+locally, and ``_size_hint`` restates them in the description so the model still reads them.
+The numeric ones were never emitted anyway, which this trim also fixes as a piece of
+honesty about what the set describes."""
 
 SUPPORTED_TYPES: frozenset[str] = frozenset(
     {"string", "number", "integer", "boolean", "array", "object"}
 )
 
-MAX_DEPTH = 6
+MAX_DEPTH = 10
 """Nesting limit. Deep schemas are where provider support gets unreliable, so exceeding it
-is a design error to catch in a test rather than a runtime surprise."""
+is a design error to catch in a test rather than a runtime surprise.
+
+Raised from 6 on September 5, 2026. Six was a guess made before a key existed, and it was
+wrong in the expensive direction: ``DashboardPlan`` converts to eight levels, so the
+dashboard would have raised ``UnsupportedSchema`` on its first real call while every offline
+test passed, because the fake provider never converts a schema at all. Eight levels were
+then sent to gemini-3.5-flash-lite and accepted. Ten keeps a guard against runaway nesting
+without vetoing a contract the provider demonstrably handles. See decision D65."""
 
 
 class UnsupportedSchema(ValueError):
@@ -102,6 +115,25 @@ def _collapse_nullable(node: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     return merged, nullable
 
 
+def _size_hint(node: dict[str, Any]) -> str:
+    """The array bounds, as a sentence for the description.
+
+    ``minItems`` and ``maxItems`` cannot be sent (see ``SUPPORTED_KEYWORDS``), but a cap the
+    model never sees is a cap that gets exceeded, and an over-long list then fails local
+    validation and burns a retry. So the bound is restated in the one place the provider
+    does pass through untouched.
+    """
+    minimum = node.get("minItems")
+    maximum = node.get("maxItems")
+    if minimum is None and maximum is None:
+        return ""
+    if minimum is not None and maximum is not None:
+        return f"Return between {minimum} and {maximum} items."
+    if maximum is not None:
+        return f"Return at most {maximum} items."
+    return f"Return at least {minimum} items."
+
+
 def _convert(node: Any, definitions: dict[str, Any], depth: int) -> Any:
     if depth > MAX_DEPTH:
         raise UnsupportedSchema(
@@ -111,16 +143,24 @@ def _convert(node: Any, definitions: dict[str, Any], depth: int) -> Any:
     if not isinstance(node, dict):
         return node
 
+    # Collapsing runs BEFORE reference resolution, and the order is the whole point. An
+    # optional nested model reaches here as ``anyOf: [{$ref: X}, {type: null}]``: collapsing
+    # first leaves a bare ``$ref`` to resolve, while resolving first sees no ``$ref`` at the
+    # top level and walks away. Getting this backwards is silent — the field converts to
+    # ``{"nullable": true}`` with no type and no properties, a schema that forbids nothing,
+    # and the model answers it with whatever it likes. See decision D65.
+    node, nullable = _collapse_nullable(node)
+
     if "$ref" in node:
-        resolved = _resolve_ref(node["$ref"], definitions)
+        resolved = {**_resolve_ref(node["$ref"], definitions)}
         # Keep a description written at the reference site, which pydantic puts there for
         # a documented nested field.
-        merged = {**resolved}
         if "description" in node:
-            merged["description"] = node["description"]
-        return _convert(merged, definitions, depth)
-
-    node, nullable = _collapse_nullable(node)
+            resolved["description"] = node["description"]
+        converted = _convert(resolved, definitions, depth)
+        if nullable and isinstance(converted, dict):
+            converted["nullable"] = True
+        return converted
 
     result: dict[str, Any] = {}
 
@@ -140,9 +180,16 @@ def _convert(node: Any, definitions: dict[str, Any], depth: int) -> Any:
     elif "enum" in node:
         result["type"] = "string"
 
-    for keyword in ("description", "enum", "format", "minItems", "maxItems"):
+    for keyword in ("description", "enum", "format"):
         if keyword in node:
             result[keyword] = node[keyword]
+
+    hint = _size_hint(node)
+    if hint:
+        # Said in words rather than as a rejected keyword. A cap the model can read is
+        # worth more than one the provider refuses to accept.
+        existing = result.get("description", "")
+        result["description"] = f"{existing} {hint}".strip()
 
     if nullable:
         result["nullable"] = True

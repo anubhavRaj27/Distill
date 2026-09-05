@@ -33,7 +33,7 @@ from app.config import Settings
 from app.domain.document import ParsedDocument
 from app.domain.fields import FieldSpec, fold_label_for_similarity
 from app.errors import LLMInvalidOutput, LLMUnavailable
-from app.llm.base import CallKind, LLMRequest, LLMResponse, Usage, Vector
+from app.llm.base import CallKind, EmbedTask, LLMRequest, LLMResponse, Usage, Vector
 from app.llm.contracts import ExtractedField, GuidedExtraction, OpenExtraction
 from app.llm.heuristics import extract_offline
 from app.logging import get_logger
@@ -115,8 +115,14 @@ class FakeClient:
             ),
         )
 
-    async def embed(self, texts: Sequence[str]) -> list[Vector | None]:
+    async def embed(
+        self, texts: Sequence[str], *, task: EmbedTask = "similarity"
+    ) -> list[Vector | None]:
         """Replay recorded vectors. Decision D24.
+
+        ``task`` is accepted to satisfy the protocol and deliberately ignored: a recording
+        is one vector per label, and keying recordings by task as well would multiply the
+        fixture corpus by three to encode a distinction no fixture can honour.
 
         Every recorded label lives in one JSON object at ``{fixture_dir}/embed/labels.json``
         (``{label: [floats]}``) rather than a file per label, because these are keyed by a

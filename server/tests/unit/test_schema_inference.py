@@ -493,9 +493,9 @@ async def test_schema_labels_are_embedded_once_not_once_per_document(
     calls: list[int] = []
     original = client.embed
 
-    async def counting(texts):
+    async def counting(texts, *, task="similarity"):
         calls.append(len(texts))
-        return await original(texts)
+        return await original(texts, task=task)
 
     client.embed = counting  # type: ignore[method-assign]
 

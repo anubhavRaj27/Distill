@@ -70,24 +70,51 @@ class Settings(BaseSettings):
     )
     gemini_api_key: str | None = None
     llm_extract_model: str = Field(
-        default="gemini-2.5-pro",
+        default="gemini-3.5-flash",
         description="Extraction and schema inference. The accuracy-critical calls, so the "
-        "stronger tier. Model identifiers are configuration, not code, because the "
-        "provider is not finalised. Unverified until a key exists.",
+        "larger of the two models available and the default reasoning effort rather than "
+        "the reduced one: see llm_fast_thinking_level and decision D62. The Pro tier the "
+        "plan of record named is not offered on the current key. Model identifiers are "
+        "configuration, not code. Verified callable on September 5, 2026.",
     )
     llm_fast_model: str = Field(
-        default="gemini-2.5-flash",
+        default="gemini-3.5-flash-lite",
         description="The fast tier, used for chat planning, chat answering, dashboard "
         "planning, and suggestions. Renamed from llm_query_model in v2: there is no "
         "natural-language-to-SQL step any more (decision D35), and a name describing a "
         "removed feature is worse than no name. Latency here is felt directly, "
-        "because the user is watching an answer stream.",
+        "because the user is watching an answer stream, and the Lite model is here for "
+        "exactly that reason: measured on September 5, 2026 it began a chat answer in "
+        "about 0.8 seconds against about 9 for gemini-3.5-flash on the same question. "
+        "Decision D62.",
     )
     llm_embed_model: str = Field(
         default="gemini-embedding-001",
-        description="Embedding model for schema drift matching (decision D24). "
-        "Configuration rather than code, like the other model identifiers, and unverified "
-        "until a key exists.",
+        description="Embedding model for retrieval (decision D36) and schema drift "
+        "matching (decision D24). Verified callable on September 5, 2026.",
+    )
+    llm_embed_dimensions: int = Field(
+        default=768,
+        ge=64,
+        description="Output width requested from the embedding model. Decision D63. "
+        "gemini-embedding-001 returns 3072 by default, which is four times the storage "
+        "and four times the per-question arithmetic for a corpus this size, where 768 "
+        "loses very little. Changing this changes the vector space, which is why "
+        "`embed_space` carries it: chunks embedded at one width are not comparable with a "
+        "question embedded at another, and the space label makes that visible instead of "
+        "silent.",
+    )
+    llm_fast_thinking_level: Literal["low", "high"] | None = Field(
+        default="low",
+        description="Reasoning effort for the calls a user waits on: chat planning, chat "
+        "answering, dashboard planning, suggestions. Decision D62. Measured on "
+        "September 5, 2026, a Gemini 3 Flash model answered a structured call in about "
+        "two seconds at `low` and about twenty-five at its default, which is the "
+        "difference between meeting requirement FR-26 and missing it by a factor of "
+        "eight. The "
+        "accuracy-critical extraction calls are unaffected: they never pass a thinking "
+        "level, so they keep the model's own default. None omits the setting entirely, "
+        "which is what a Gemini 2.x model needs, since `thinking_level` is a 3.x field.",
     )
     llm_timeout_seconds: float = Field(default=90.0, gt=0)
     llm_max_attempts: int = Field(
@@ -208,6 +235,18 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def embed_space(self) -> str:
+        """The vector space label recorded on every chunk and label vector.
+
+        Model identifier plus requested width, because two vectors from the same model at
+        different widths cannot be compared and a bare model name would hide that. A
+        workspace indexed before a width change keeps its own label, so retrieval skips
+        those chunks loudly (``search`` logs the mismatch) rather than scoring them at a
+        meaningless zero.
+        """
+        return f"{self.llm_embed_model}@{self.llm_embed_dimensions}"
 
     @property
     def llm_configured(self) -> bool:

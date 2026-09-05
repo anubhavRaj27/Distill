@@ -1,5 +1,12 @@
 -- Distill database bootstrap. Idempotent: safe to run repeatedly.
 --
+-- STILL NEEDED: the `distill` role, which the application connects as.
+-- NO LONGER USED: the `distill_readonly` role and everything below about it. It confined
+-- generated SQL under decision D10, and decision D35 removed SQL generation, so nothing
+-- connects as that role. It is left in place because dropping a role is not idempotent in
+-- a useful way and an unused login role costs nothing; scripts/bootstrap_db_per_database.sql
+-- exists only to grant to it and can be skipped entirely. See README.md.
+--
 -- Creates two login roles with deliberately different power:
 --
 --   distill            owns the schema and every table. The application connects as this.

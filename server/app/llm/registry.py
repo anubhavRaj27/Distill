@@ -36,8 +36,9 @@ def build_client(settings: Settings) -> LLMClient:
             "llm.provider_ready",
             provider=client.name,
             extract_model=settings.llm_extract_model,
-            query_model=settings.llm_query_model,
-            embed_model=settings.llm_embed_model,
+            fast_model=settings.llm_fast_model,
+            fast_thinking_level=settings.llm_fast_thinking_level,
+            embed_space=settings.embed_space,
         )
         return client
 

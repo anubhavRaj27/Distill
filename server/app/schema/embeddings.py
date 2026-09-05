@@ -72,7 +72,9 @@ async def vectors_for(client: LLMClient, texts: list[str]) -> dict[str, Vector |
 
     for start in range(0, len(missing), MAX_EMBED_BATCH):
         batch = missing[start : start + MAX_EMBED_BATCH]
-        vectors = await client.embed(batch)
+        # "similarity", not "document": neither of two field labels being compared is a
+        # query for the other. Decision D63.
+        vectors = await client.embed(batch, task="similarity")
         if len(vectors) != len(batch):
             # A provider that returns a different count has broken the positional contract
             # in ``LLMClient.embed``, and a misaligned vector is worse than a missing one
