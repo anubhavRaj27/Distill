@@ -175,7 +175,7 @@ convention as an executable assertion rather than a comment.
 ### Phase 1: Skeleton and contracts (target: 3 hours)
 
 - Configuration through `pydantic-settings`, one class, every environment variable declared
-  with a type and a default. `LLM_PROVIDER`, `LLM_EXTRACT_MODEL`, `LLM_QUERY_MODEL`,
+  with a type and a default. `LLM_PROVIDER`, `LLM_EXTRACT_MODEL`, `LLM_FAST_MODEL`,
   `GEMINI_API_KEY`, `DATABASE_URL`, `DATABASE_URL_READONLY`, `STORAGE_DIR`, `MAX_UPLOAD_MB`
 - structlog with a correlation identifier middleware. Every log line and every error
   response body carries `request_id`, which the frontend shows in error toasts

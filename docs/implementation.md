@@ -94,7 +94,7 @@ manual demo script; see section 9).
 | Database          | Postgres 16, SQLAlchemy 2 async, Alembic                            | Decision D4 (values half; the per-workspace SQL view is cut).                                                                                                                                                                         |
 | Parsing           | pdfplumber, pypdfium2, Tesseract, python-docx, openpyxl, `filetype` | Decision D3. Every format rendered to page images, decision D18.                                                                                                                                                                      |
 | Grounding         | RapidFuzz                                                           | Quote to word-box matching, section 6.2.                                                                                                                                                                                              |
-| LLM               | Gemini via `google-genai` directly                                  | Decisions D13, D20. Pro tier for extraction and schema, Flash tier for chat planning and prose, dashboard planning, and suggestions. `generate_content_stream` for prose (**new**, decision D44). `gemini-embedding-001` for vectors. |
+| LLM               | Gemini via `google-genai` directly                                  | Decisions D13, D20, **D62**. `gemini-3.5-flash` for extraction and schema; `gemini-3.5-flash-lite` at `thinking_level=low` for chat planning and prose, dashboard planning, and suggestions. The Pro tier is not available on the project's key. `generate_content_stream` for prose (decision D44). `gemini-embedding-001` at 768 dimensions for vectors (**D63**). |
 | Vectors (**new**) | Stored as JSONB float arrays; cosine computed in process            | Decision D36. Upgrade path to pgvector documented there.                                                                                                                                                                              |
 | Jobs              | In-process asyncio worker, one process                              | Decision D9.                                                                                                                                                                                                                          |
 | Events            | Persisted `workspace_events` log plus in-process bus                | Decision D14.                                                                                                                                                                                                                         |
@@ -419,7 +419,10 @@ Runs after persist, as the document's `indexing` stage.
    when the page text uses different words. It carries no boxes and is never cited by
    quote; a citation to a digest chunk resolves to the underlying `field_values` provenance.
 3. **Embedding.** Batches of up to 64 chunk texts through `LLMClient.embed` with
-   `gemini-embedding-001`. `FakeClient` returns recorded vectors for the sample corpus and
+   `gemini-embedding-001`, requested at 768 dimensions and tagged `task="document"`; the
+   question is embedded as `task="query"` (decision D63). A chunk records its space as
+   `model@width`, so a width or model change is visible rather than silently returning
+   zero similarity. `FakeClient` returns recorded vectors for the sample corpus and
    deterministic hashed pseudo-vectors otherwise, so the test suite and a no-key clone
    retrieve something plausible (D13).
 4. Chunks are written in the document's transaction; `document.status` moves to `done` and
@@ -597,40 +600,47 @@ extraction and schema calls.
 
 ## 7. A2UI integration (client)
 
-### 7.1 Installation
+> **Changed September 5, 2026.** This section originally specified `@a2ui/react` and
+> `@a2ui/web_core` as the renderer. What is built renders the catalog itself, with no A2UI
+> dependency. Decision **D60** records the argument, states plainly that it overrules a
+> decision taken deliberately, and describes what switching back would cost — one module
+> behind one component. The safety properties section 7.3 asked for are all kept.
 
-```bash
-npm i @a2ui/react@0.11.0 @a2ui/web_core@0.10.7 recharts @tanstack/react-table
-```
+### 7.1 Dependencies
 
-Exact pins on the two `@a2ui` packages. Zod stays at `3.25.76`. Install with
-`--legacy-peer-deps` as a one-off if npm's solver crashes (decision D33); the lockfile makes
-the result reproducible.
+None. `zod@3.25.76` stays pinned for now because it was pinned for the `@a2ui/react` peer
+range, and unpinning it is a separate change that should not ride along with this one.
 
-### 7.2 Module shape (`client/src/a2ui/`)
+### 7.2 Module shape (`client/src/features/a2ui/`)
 
-- `processor.ts`: creates a `MessageProcessor` with the basic catalog plus the project
-  catalog. One processor per surface; created inside `SurfaceHost`.
-- `SurfaceHost.tsx`: takes a complete `messages: A2UIMessage[]` array (from a chat
-  `visual` event or a dashboard panel), feeds it to a fresh processor, subscribes to surface
-  creation, and renders `A2uiSurface`. A2UI messages are never streamed piecemeal: the
-  answer stream is SSE, but the surface arrives whole in one event (decision D47).
-- `SurfaceBoundary.tsx`: error boundary around every host; on render error, unknown
-  component, or a surface that never appears, renders `Fallback.tsx` and logs
-  `a2ui.fallback`.
-- `Fallback.tsx`: reads `/result` from the data model in the message array and renders rows
-  as a plain table. Always has something to show because the server always sends the data
-  model.
-- `Inspect.tsx`: developer toggle showing the raw message array.
-- `catalog/`: `Metric`, `BarChart`, `LineChart`, `ResultTable`, each as an `.api.ts` (Zod)
-  and a `.tsx` implementation built with the same theme tokens as the rest of the client.
-  `ResultTable` reuses the cell renderers from `features/data/cells/` and opens the viewer
-  through a callback prop supplied by the host.
+- `model.ts`: folds a message array into `{ data, components, rootId }`. `updateDataModel`
+  writes at its path; `updateComponents` collects components, **dropping any name outside
+  the catalog**. `resolvePath` walks `/`-separated paths, indexing arrays on numeric
+  segments, so `/result/rows/0/value` resolves without a special case. `readProperty` is the
+  single place a `{ path }` binding is resolved — the enforcement point for decision D37.
+- `Surface.tsx`: renders `Metric`, `BarChart`, `LineChart`, `ResultTable` plus `Column`,
+  `Row`, `Text`, `Card`, `Divider`, in this project's theme tokens. Total by construction: a
+  missing binding renders an em dash, a chart with no rows renders nothing, recursion is
+  depth-capped against a `children` cycle. `ResultTable` cells carry `record_ids` and open
+  the viewer through a callback, which is what makes provenance work inside generated
+  interface (FR-43).
+- `SurfaceBoundary.tsx`: an error boundary around every surface. On a render error it logs
+  `a2ui.fallback` and renders the rows from `/result` as a plain table — always possible,
+  because the server always writes the data model. Keyed per message by the caller rather
+  than resetting itself.
 
 ### 7.3 Safety
 
-Strings render as text. The host caps components per surface at 100 and string length at
-2,000 characters before the processor sees the messages. The catalog is the allow-list.
+Unchanged in substance. The catalog is the allow-list and is applied at parse time, so an
+unknown component never reaches the renderer. Strings render as text, never as markup. The
+server caps components per surface at 40 and agent-provided strings at 400 characters
+(`server/app/a2ui/catalog.py`); the client adds a depth cap and the boundary above.
+
+### 7.4 Charts
+
+Hand-drawn. A bar chart is a baseline rule with flex columns standing on it; a line chart is
+one `polyline` in an SVG viewBox. Both are single-series by catalog definition. Recharts was
+dropped with the rest of section 7.1.
 
 ---
 
@@ -785,8 +795,10 @@ correction guarantee through the re-extract route.
 - [ ] `@a2ui/react@0.11.0` and `@a2ui/web_core@0.10.7` install with React 19.2.8 and Zod 3.25.76; a `Metric` surface renders from a fixture array under Vitest.
 - [ ] Exact export names for child references and the data-binding `path` shape in `@a2ui/react/v0_9` (changed in 0.11.0).
 - [ ] The v0.9 JSON Schema file vendored into `server/app/a2ui/schema/` and used by tests.
-- [ ] Gemini `gemini-embedding-001` output dimension confirmed with a real key; cosine implementation tested against it.
-- [ ] `generate_content_stream` on the Flash tier yields text deltas at a cadence that makes the 3 s first-token target realistic; measure with a real key on day 3.
+- [x] Gemini `gemini-embedding-001` output dimension confirmed with a real key (native 3072, requested at 768, normalised in the adapter); cosine tested against it. September 5, 2026, decision D63.
+- [x] `generate_content_stream` yields text deltas at a cadence that makes the 3 s first-token target realistic: 0.68 to 0.85 s to first token on `gemini-3.5-flash-lite`, against 8.8 to 9.8 s on `gemini-3.5-flash`, which is why the fast tier is Lite. September 5, 2026, decision D62.
+- [x] Embedding thresholds calibrated against a real model: synonym pairs 0.822 to 0.982, unrelated pairs 0.764 to 0.827, so auto-map moves to 0.88 and the novelty ceiling to 0.80. September 5, 2026, decision D66.
+- [x] Response schemas accepted by a real Gemini call, closing review finding 8.7. Two faults found and fixed in the same pass: `maxItems` is rejected outright (D64) and an optional nested model lost its shape in conversion (D65).
 - [ ] `sse-starlette` sends `id:` lines and honours `Last-Event-ID` on the per-message route the same way it does on `/events`; a Vite dev proxy passes `text/event-stream` through unbuffered.
 - [ ] `DataQuery` evaluation on the sample corpus produces the "total by vendor" and "missing purchase order count" results the demo script needs.
 - [ ] Sample corpus contains at least one non-invoice document with prose (a contract or policy) so the retrieval demo has something non-tabular to cite.

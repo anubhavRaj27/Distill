@@ -141,17 +141,34 @@ the same experience.
 
 Route `/`. Already built.
 
-1. A first-time visitor sees one sentence, a drop zone, "Choose files", and "Try with sample
-   documents".
-2. Dropping files or clicking the sample button creates a workspace, uploads, and navigates
-   to the Chat screen. Processing runs in the background and streams status.
-3. Unsupported types and files over 20 MB are refused inline before upload.
-4. The screen carries the same application header as the other two, showing all three
-   screens with Chat and Data inert until a workspace exists, so the shape of the product is
-   legible before anything is uploaded (decision D51).
-5. Beneath the drop zone, an illustration of six mismatched documents falling through a
-   funnel into one ruled table. It is the argument of the product made before the person has
-   done anything, and it is decorative: its caption carries the same meaning in words.
+1. A first-time visitor sees the product's name, one sentence, a drop zone, "Choose files",
+   and "Try with sample documents", on one screenful with nothing below the fold.
+2. Clicking the sample button creates a workspace and goes straight to Chat: the server
+   loads those documents from its own disk, so nothing is uploading.
+3. Dropping or choosing files creates the workspace and goes to `/w/{id}/upload`, which
+   holds **Continue** until every file has arrived. "Ready" there means received, not
+   indexed; parsing, extraction and indexing continue on the server and are narrated by the
+   processing strip on Chat and Data. See decision D53.
+4. That wait is filled by a slowly turning spiral of the person's **own** documents — real
+   thumbnails for images, drawn sheets for every other format, each carrying its filename,
+   type and status — over a single line answering "how much longer": documents arrived, of
+   how many, and bytes sent of total. The per-file bars are kept behind a disclosure that
+   opens itself when a file fails. The spiral is decorative and hidden from assistive
+   technology; a visitor who has asked for reduced motion gets a static fan of the same
+   cards. No image is fetched from the network. See decision D58.
+5. Unsupported types and files over 20 MB are refused inline before upload. When some of a
+   selection is acceptable, the refusal travels to the upload screen with it, so it is
+   readable rather than flashing on a screen being replaced.
+6. The first-run screen carries **no** application header. Chat and Data lead nowhere until a
+   workspace exists, so the chrome that switches between the three screens begins with the
+   workspace (decision D57, superseding this part of decision D51).
+7. Above the sentence, the name "Distill" drawn as particles that scatter away from the
+   cursor and spring back into the letterforms. It is the argument of the product made
+   before the person has done anything — a scattered pile resolving into something exact —
+   and it replaces the funnel illustration that used to sit below the drop zone. It is
+   decorative: the word is in the document as real text, the canvas is hidden from
+   assistive technology, and a visitor who has asked for reduced motion gets the same word
+   as ordinary type with no canvas at all.
 
 Documents can also be added later from inside the workspace (a small "Add documents" control
 in the workspace header, on both the Chat and Data screens). Added documents run through the
@@ -160,7 +177,12 @@ itself stale until regenerated.
 
 ### 3.2 Screen 2: Chat (the main screen)
 
-Route `/w/{id}` and `/w/{id}/chat`.
+Route `/w/{id}` and `/w/{id}/chat`. Built.
+
+The transport is worth stating here because it constrains the interface: both streams are
+read with `fetch` rather than `EventSource`, since `EventSource` cannot send the bearer
+token every route requires (decision D59). Reconnection and `Last-Event-ID` resumption in
+point 3 are therefore the client's own, and are tested as such.
 
 1. The screen opens on a conversation view with a composer at the bottom and, while the
    first batch is still processing, a compact processing strip at the top showing each
@@ -274,7 +296,7 @@ are new in v2; v1 identifiers are retired.
 | FR-23 | When an answer has a quantitative shape, the agent may attach one visual (metric, bar chart, line chart, or table). The visual's data is a query specification evaluated by the server over the extracted records; the model never supplies the numbers (decision D37). Figures the prose quotes from that result are placeholders substituted by the server (decision D46). | M        |
 | FR-24 | Visuals are rendered through A2UI from the project catalog; a table visual's cells keep provenance links. In chat, the visual arrives as one complete surface before the prose and renders at the top of the message (decision D47).                                                                                                                                         | M        |
 | FR-25 | Three suggested questions, generated from the workspace's actual schema and content, shown when the conversation is empty.                                                                                                                                                                                                                                                   | S        |
-| FR-26 | Answers stream token by token over a per-message SSE stream that also carries stage, sources, the visual, and citations as they become available. The first visible event arrives within 1 s of asking and the first prose token within 3 s on the Flash tier (decision D44).                                                                                                | M        |
+| FR-26 | Answers stream token by token over a per-message SSE stream that also carries stage, sources, the visual, and citations as they become available. The first visible event arrives within 1 s of asking and the first prose token within 3 s on the fast tier, which is `gemini-3.5-flash-lite` for this reason (decisions D44, D62).                                                                                                | M        |
 | FR-27 | An unanswerable question gets an explicit "not in these documents" answer naming what was searched.                                                                                                                                                                                                                                                                          | M        |
 | FR-28 | The last few turns are sent as context so follow-up questions ("now only Q2") work.                                                                                                                                                                                                                                                                                          | S        |
 | FR-29 | A streaming answer can be stopped by the user; a dropped stream resumes from the last event identifier without losing or duplicating text; generation completes on the server even if no client is listening, and the persisted message is what a refresh shows.                                                                                                             | M        |
@@ -312,7 +334,7 @@ are new in v2; v1 identifiers are retired.
 
 | Area            | Requirement                                                                                                                                                                                                                                                                                                                            |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Performance     | First contentful paint under 1.5 s on a mid-range laptop. In chat: first stream event under 1 s, first prose token under 3 s, a typical answer complete in under 12 s on the Gemini Flash tier. Token rendering never blocks input. Dashboard generation under 30 s.                                                                   |
+| Performance     | First contentful paint under 1.5 s on a mid-range laptop. In chat: first stream event under 1 s, first prose token under 3 s, a typical answer complete in under 12 s on the Gemini Flash Lite tier (decision D62). Token rendering never blocks input. Dashboard generation under 30 s.                                                                   |
 | Accessibility   | WCAG 2.1 AA target: keyboard navigation, visible focus, ARIA labels on custom controls, confidence never conveyed by colour alone, minimum 4.5:1 contrast (asserted in tests, decision D32).                                                                                                                                           |
 | Resilience      | All network calls have timeouts and typed error states. Both SSE streams (workspace events and per-message answer streams) reconnect with backoff and resume from the last event identifier. No unhandled promise rejections in normal use.                                                                                            |
 | Observability   | Backend: structured logs with correlation identifier, workspace, document, stage timings, model token counts and latency per call. Frontend: structured events (upload started, answer requested, answer rendered, visual dropped, A2UI fallback) to the console in development. Every error surface shows the correlation identifier. |

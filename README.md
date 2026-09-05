@@ -1,0 +1,275 @@
+# Distill
+
+Drop in a pile of messy documents. Distill reads them, pulls out the values that matter, and
+gives you one table you can search, question in plain language, and trace back to the exact
+region of the page each value came from.
+
+Three screens, nothing else: **Upload**, **Chat**, **Data**.
+
+This file covers running it on your own machine. The reasoning behind every choice lives in
+[`decisions.md`](decisions.md); the specification lives in [`docs/requirements.md`](docs/requirements.md)
+and [`docs/implementation.md`](docs/implementation.md).
+
+---
+
+## What you need
+
+Everything below was verified on macOS (Apple silicon) on September 5, 2026, with the
+versions this project is developed against.
+
+| Tool | Version used | Why |
+| --- | --- | --- |
+| PostgreSQL | 16.15 | The only external service. No Docker anywhere in this setup. |
+| Python | 3.12 (pinned in `server/.python-version`) | Backend. |
+| [uv](https://docs.astral.sh/uv/) | 0.12.9 | Installs Python dependencies and runs commands. |
+| Node.js | 22.16.0 | Frontend. |
+| npm | 10.9.2 | Frontend. |
+| Tesseract | any recent | Optical Character Recognition, for pages with no text layer. Optional; see below. |
+
+On macOS with Homebrew:
+
+```bash
+brew install postgresql@16 uv node tesseract && brew services start postgresql@16
+```
+
+Tesseract is only needed for scanned documents. Without it, set `OCR_ENABLED=false` in
+`server/.env` and a scanned page fails with a clear message instead of being silently
+mis-parsed. Every other format works without it.
+
+---
+
+## First-time setup
+
+Four steps. Run them from the repository root.
+
+### 1. Create the database role and the two databases
+
+```bash
+psql -d postgres -f server/scripts/bootstrap_db.sql && createdb -O distill distill && createdb -O distill distill_test
+```
+
+That creates the `distill` login role (password `distill`, matching the default connection
+string), the application database, and the database the test suite uses.
+
+The script also creates a `distill_readonly` role. It is a leftover: it existed to confine
+generated Structured Query Language (SQL) under decision D10, and v2 generates none
+(decision D35). Nothing connects as it, and
+`server/scripts/bootstrap_db_per_database.sql` exists only to grant privileges to it, so you
+can skip that script entirely.
+
+### 2. Configure the server
+
+```bash
+cp server/.env.example server/.env
+```
+
+The defaults work as they are. The only variable that changes behavior is `LLM_PROVIDER`:
+
+- **`fake`** (the default) runs the entire pipeline against recorded fixtures, with no
+  network and no key. A fresh checkout works immediately. This is a supported way to run the
+  product, not a degraded one (decision D13).
+- **`gemini`** makes real model calls. Set `GEMINI_API_KEY` as well, or the server refuses to
+  start rather than quietly falling back (decision D26).
+
+### 3. Install dependencies and run migrations
+
+```bash
+cd server && uv sync && uv run alembic upgrade head && cd ../client && npm ci && cd ..
+```
+
+### 4. Check it worked
+
+```bash
+cd server && uv run pytest -q && cd ../client && npm test && cd ..
+```
+
+Expect 477 server tests and 100 client tests, all passing, in well under a minute. The server
+suite needs the `distill_test` database from step 1; it runs `alembic upgrade head` against
+it itself.
+
+---
+
+## Running it
+
+Two processes, two terminals.
+
+**Terminal 1, the backend:**
+
+```bash
+cd server && uv run uvicorn app.main:app --port 8000 --workers 1
+```
+
+Port 8000 is not arbitrary: the frontend proxies `/api` and `/healthz` there, so the browser
+talks to a single origin in development exactly as it does in production.
+
+`--workers 1` is not arbitrary either. Document processing runs on an in-process asyncio
+queue (decision D9), and while every event is persisted so a reconnecting client can replay
+it, *live* delivery goes through an in-process bus (decision D14). A second worker would give
+you two independent queues, and a browser connected to one process would never see the live
+events published by the other. The streaming chat answer buffer is in-process for the same
+reason. Avoid `--reload` while a document is processing, since a reload mid-run restarts the
+queue.
+
+**Terminal 2, the frontend:**
+
+```bash
+cd client && npm run dev
+```
+
+Open **http://localhost:5173**. If that port is taken, Vite picks the next free one and
+prints the actual address; the proxy works on any port.
+
+**Confirm the two halves are talking:**
+
+```bash
+curl -s localhost:8000/healthz
+```
+
+```json
+{
+  "status": "ok",
+  "database": { "ok": true },
+  "storage": { "ok": true, "detail": "var/storage" },
+  "llm": {
+    "ok": true,
+    "detail": "provider=gemini extract=gemini-3.5-flash fast=gemini-3.5-flash-lite embed=gemini-embedding-001@768"
+  }
+}
+```
+
+`status: ok` needs the database and the storage directory; the `llm` line reports what is
+configured and never the key. With `LLM_PROVIDER=fake` it says so plainly, which is a healthy
+state, not a warning.
+
+---
+
+## Using it
+
+1. **Upload.** Drag files onto the first screen, or click to browse. PDF, DOCX, XLSX, CSV,
+   images, and plain text. Up to 20 MB per file and 25 files at once, and the limit is
+   enforced by counting bytes as they stream rather than by trusting the declared size.
+2. **Watch the progress screen.** Each document moves through parsing, extraction, grounding,
+   and indexing. A value appears in the table and becomes askable at the same moment.
+3. **Chat.** Ask in plain language. The answer streams, cites the passages it used, and may
+   open with a chart or a metric. Every figure in that visual is computed by the server from
+   a query the model specified, never typed by the model (decision D37).
+4. **Data.** One unified table across every document, plus a dashboard the agent assembles
+   from the fields it found. Click any cell to open the source document with the value
+   highlighted on the page. Edit a cell to correct it; a human correction is never overwritten
+   by a later re-extraction.
+
+There are no accounts. Creating a workspace mints a token once, which the frontend keeps in
+`localStorage` and encodes in a shareable link fragment. That token is the only credential, so
+**anyone with the link has full access** to that workspace, and only its hash is stored server
+side (decision D8). Lose it and the workspace is unreachable: there is no recovery, by design.
+
+---
+
+## Model configuration
+
+Relevant only with `LLM_PROVIDER=gemini`. Every model identifier below was verified callable
+on September 5, 2026 (decision D62).
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `LLM_EXTRACT_MODEL` | `gemini-3.5-flash` | Extraction and schema inference. Accuracy-critical, runs once per document in the background. |
+| `LLM_FAST_MODEL` | `gemini-3.5-flash-lite` | Chat, dashboard planning, suggestions. Everything you wait on. |
+| `LLM_FAST_THINKING_LEVEL` | `low` | Reasoning effort for that fast path only. Leave blank for a Gemini 2.x model, which has no such setting. |
+| `LLM_EMBED_MODEL` | `gemini-embedding-001` | Retrieval and schema matching. |
+| `LLM_EMBED_DIMENSIONS` | `768` | Vector width. Changing it changes the vector space, so re-index afterwards. |
+
+Three things worth knowing before a demo:
+
+- **Gemini 2.5 is closed to new keys.** `gemini-2.5-pro` and `gemini-2.5-flash` return 404 to a
+  key issued recently, even though they still appear in the model list. The Pro tier is not on
+  the free plan at all: it answers 429 with `limit: 0`, which is permanent and reads exactly
+  like an ordinary rate limit.
+- **Free-tier daily caps are per model and can be small.** `gemini-3.6-flash` allows 20 requests
+  per day. The two models configured above have more room, but budget your test runs.
+- **Latency comes from the reasoning effort, not the model size.** Flash Lite starts a chat
+  answer in under a second where the larger Flash model takes about nine, which is why the tier
+  you wait on is Lite.
+
+---
+
+## Checks
+
+Run from the directory named.
+
+| Command | Directory | What it does |
+| --- | --- | --- |
+| `uv run pytest -q` | `server` | 477 tests. No network, no key: the fake provider replays recorded fixtures. |
+| `uv run ruff check app tests` | `server` | Lint. |
+| `uv run mypy app` | `server` | Types. Reports 14 known pre-existing errors, mostly at the boundary with untyped parsing libraries. |
+| `npm test` | `client` | 100 tests, Vitest with jsdom. |
+| `npm run typecheck` | `client` | TypeScript. |
+| `npm run lint` | `client` | oxlint. One known warning in `usePageImage.ts`. |
+
+---
+
+## When something goes wrong
+
+**`LLM_PROVIDER is 'gemini' but GEMINI_API_KEY is not set`** at startup. Deliberate: a server
+that boots with a mistyped key would serve offline heuristics dressed as real extraction.
+Either supply the key or set `LLM_PROVIDER=fake` (decision D26).
+
+**`connection refused` on the database.** Postgres is not running:
+`brew services start postgresql@16`. If it is running, check that step 1 created the role, and
+that `DATABASE_URL` in `server/.env` matches it.
+
+**HTTP 401 on every request after the first screen.** The workspace token is missing or belongs
+to a different workspace. A wrong token and a nonexistent workspace return the same 401 on
+purpose, so neither can be probed for. Start a new workspace from the upload screen.
+
+**"We are being rate limited by the model provider."** A free-tier cap. The adapter obeys the
+delay the provider asks for, so a document may simply take longer. If it says the model is
+*not included in this plan*, retrying will never help: change `LLM_EXTRACT_MODEL` or
+`LLM_FAST_MODEL` to a model the key covers.
+
+**A scanned document fails.** Tesseract is missing or not on the process `PATH`. Install it, or
+set `TESSERACT_CMD` to its full path, or set `OCR_ENABLED=false` to fail those pages loudly.
+
+**Chat answers "not in these documents" about something clearly in them.** The workspace was
+indexed in a different embedding space from the current settings, and the server logs
+`search.space_mismatch` saying so. Restore the previous `LLM_EMBED_*` values, or re-upload the
+documents to re-index them.
+
+**The frontend loads but every call fails.** The backend is not on port 8000, which is what
+`client/vite.config.ts` proxies to.
+
+---
+
+## How it fits together
+
+```
+client/  React 19, TypeScript, Vite          feature folders: upload, processing, chat,
+   |     relative API base + /api proxy       data, viewer, a2ui
+server/  FastAPI, one process
+   |     pipeline/    parse -> extract -> ground -> score -> index
+   |     llm/         provider protocol: gemini | fake, plus the schema converter
+   |     retrieval/   chunking, embedding, cosine search in process
+   |     insights/    query specifications evaluated in Python, never by the model
+   |     a2ui/        Agent-to-User Interface surfaces the agent composes
+PostgreSQL  documents, pages, records, field values, chunks, chat messages, events
+var/storage originals and rendered page images
+```
+
+Two properties are worth stating because they shape everything else. **Every value on screen
+traces to a highlighted region of its source document**, so table cells and chat citations open
+the same viewer. **Every number displayed is computed by the server**: the agent emits a query
+specification, the server evaluates it, and the result is bound into the interface by path.
+
+---
+
+## Known gaps
+
+Stated rather than hidden, in the spirit of `decisions.md`.
+
+- **No sample corpus yet.** The "Try with sample documents" link on the upload screen needs
+  `samples/manifest.json`, which does not exist, so the link returns a clear error. Drag your
+  own files in for now.
+- **No Makefile.** `docs/implementation.md` section 10 plans `make setup` and `make dev`; the
+  commands above are what those targets would run.
+- **No CSV export** from the Data screen.
+- **Deployment is unverified.** There is no container runtime in this environment, so no
+  Dockerfile has been tested. Everything above is the local path only.

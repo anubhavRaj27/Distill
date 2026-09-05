@@ -278,9 +278,12 @@ document specified only that a `pyproject.toml` exists.
 
 ## D13. Gemini behind a provider protocol, with a fake provider as a first-class implementation
 
-**Date:** September 3, 2026 · **Status:** Active, model identifiers unverified. Amended
-September 4, 2026 by D35: the Flash tier now serves chat answers, dashboard planning, and
-suggested questions rather than natural language to SQL, which no longer exists.
+**Date:** September 3, 2026 · **Status:** Active, **the accepted gap below is now closed**.
+Amended September 4, 2026 by D35: the Flash tier now serves chat answers, dashboard
+planning, and suggested questions rather than natural language to SQL, which no longer
+exists. Amended September 5, 2026 by D62: a key exists, the model identifiers named here
+turned out to be uncallable, and the Pro tier is not available at all on this key's plan.
+The protocol and the fake provider are unchanged, which is the point of them.
 
 **Decision.** Gemini is the intended Large Language Model provider: the Pro tier for
 extraction and schema inference, the Flash tier for translating natural language into SQL.
@@ -631,7 +634,9 @@ auto-applies, they should move, not the mechanism.
 
 ## D24. Field similarity is string similarity OR embedding similarity, with a margin rule
 
-**Date:** September 4, 2026 · **Status:** Active
+**Date:** September 4, 2026 · **Status:** Active. Its embedding thresholds were calibrated
+against a real model on September 5, 2026: see D66. The structure of the rule is unchanged;
+two of its four numbers were wrong.
 
 **Decision.** Drift matching scores a candidate field against each existing field with two
 independent signals, and gates D23's auto-apply zones on them as follows.
@@ -800,7 +805,8 @@ entire pipeline with no key and no network, which is what D13 asked for.
 
 ## D27. The novelty ceiling is per signal, and the string value is measured not guessed
 
-**Date:** September 4, 2026 · **Status:** Active, refines decision D24
+**Date:** September 4, 2026 · **Status:** Active, refines decision D24. The embedding
+ceiling this entry left unmeasured was measured on September 5, 2026: see D66.
 
 **Decision.** Decision D24's single novelty test, `max(string, embedding) < 0.30` against
 every existing field, becomes two tests against two separately configured ceilings:
@@ -1732,7 +1738,8 @@ the next person to depend on creation order knows to check.
 
 ## D51. The three-screen switch is application chrome, present before a workspace exists
 
-**Date:** September 5, 2026 · **Status:** Active
+**Date:** September 5, 2026 · **Status:** Active inside a workspace. The first-run half is
+**superseded by decision D57**, which takes the header off screen 1 entirely.
 
 **Decision.** One `AppHeader` serves all three screens: identity on the left, an optional
 workspace chip (label and document count), and a segmented Upload / Chat / Data control on
@@ -1788,3 +1795,727 @@ The wordmark stays hand-drawn, because it is a mark rather than an icon.
 
 **Cut.** Nothing. `lucide-react` installed with `--legacy-peer-deps` as a one-off, for the
 npm reason recorded in D33.
+
+---
+
+## D53. An upload screen that gates on arrival, not on indexing
+
+**Date:** September 5, 2026 · **Status:** Active. Amends requirements section 3.1.
+
+**Decision.** Files chosen on screen 1 are no longer sent from screen 1. The workspace is
+minted, the selection is staged, and the person lands on `/w/{id}/upload`, which owns the
+transfer and shows a bar per file. **Continue** is disabled until every file has settled.
+
+"Ready" means the server has the bytes. It does **not** mean parsed, extracted, or indexed:
+that work continues on the server and its progress belongs to the processing strip on Chat
+and Data (FR-04).
+
+Uploading is done with `XMLHttpRequest`, one request per file.
+
+**Alternatives considered.**
+
+1. _Navigate to Chat immediately_ (v2 as written). Nothing to watch while bytes are still
+   leaving the browser, and a question asked against a document that has not arrived is
+   answered from nothing.
+2. _Hold until every document reaches `done`._ Rejected: that is a 60-second pipeline, and
+   requirements section 8 asks a judge to watch the strip finish **while suggested questions
+   appear**. Holding the door shut for a minute trades a capability for a progress bar.
+3. _Keep one multipart request for the whole batch._ Rejected because it cannot produce the
+   screen. A single body reports one byte counter, so per-file bars would have to move in
+   lockstep — a picture of progress rather than progress.
+4. _Keep using `fetch`._ Not possible. `fetch` reports no upload progress at all, in any
+   shipping browser. This is the only place in the client that does not use the generated
+   `openapi-fetch` client, and the reason is a platform limitation rather than taste.
+
+**Reasoning.** The gate is drawn where the user's own claim actually holds: there is nothing
+worth doing with a document the server has not received, and everything worth doing with one
+it has. Splitting on that line keeps both halves honest — the upload screen blocks on
+something it can measure and finish in seconds, and the processing strip narrates something
+slow without blocking anything.
+
+One request per file also isolates failure: a refused scan no longer takes the other five
+down with it, and each row can carry its own reason.
+
+**Consequences recorded elsewhere.** The Upload tab inside a workspace now points at
+`/w/{id}/upload` rather than `/`, which closes the footgun where it would have landed a
+person on the first-run screen and silently forked a second workspace on drop. Refusals from
+screen 1 travel with the batch, because a notice rendered on a screen being replaced in the
+same tick is indistinguishable from no notice at all (FR-03).
+
+**Cut.** Nothing. The samples path still goes straight to Chat: the server loads those from
+its own disk (D15), so no bytes leave the browser and there is nothing to measure.
+
+**Caught while verifying in the browser, not by the suite:** the screen first selected from
+its store with `workspaceId === id ? files : []`, allocating a new array per call. Zustand
+compares snapshots by reference, so React re-rendered until it threw "Maximum update depth
+exceeded" and the page went blank — while all 40 tests passed, because none of them rendered
+the component. There is now a test that renders it in both the staged and the empty case.
+
+---
+
+## D54. The Data screen separates evidence from interpretation, and only one half is client-computed
+
+**Date:** September 5, 2026 · **Status:** Active
+
+**Decision.** Screen 3 is two columns. Left: the distilled table — every extracted cell with
+its type, its confidence tier, and an inline editor. Right: the agent's dashboard panels.
+
+The **Document summary** (total, high confidence, needs review, conflicts, unverified) is
+computed in the browser. The **dashboard panels** are not, and never will be.
+
+**Alternatives considered.** One column with the dashboard stacked under the table. Computing
+the panels client-side from the records already fetched, which would have made the whole
+screen work today with no new backend.
+
+**Reasoning.** The split is the trust argument of the screen. On the left is what the
+documents said, cell by cell, each traceable to a highlighted region. On the right is what
+the agent concluded. A person can always walk from a number in a panel back to the row that
+produced it; blending the two would lose that.
+
+The line between what may be computed here and what may not is **who chose the question**.
+The summary counts rows by a tier the server derived — nothing planned it, and asking the
+server to count what the client can already see would add a round trip and a second place
+for "needs review" to drift. A dashboard panel is the opposite: the agent decides that spend
+by vendor is worth showing, and product principle 3 with decision D37 require the server to
+evaluate that specification and bind the result. Computing those in the browser would
+technically produce the same numbers today and quietly break the guarantee the moment a
+panel's definition got interesting.
+
+So the panel components ship as frame only — title, one-line rationale, and the states.
+The body stays empty until `GET /dashboard` and the A2UI catalog exist.
+
+**What is not built, and is not stubbed.** `GET /workspaces/{id}/dashboard` and
+`POST /dashboard/generate` are planned in implementation.md section 5 and do not exist:
+`server/app/insights/` has `queryspec.py`, `evaluate.py` and `stats.py`, and no
+`dashboard.py` or router. `useDashboard` calls them anyway and turns the 404 into the
+`absent` state, which is the honest reading — the agent has not generated panels yet — and a
+state the screen has to render properly regardless. The source viewer is likewise left
+unwired rather than faked: a cell that looks clickable and does nothing is worse than one
+that does not yet.
+
+**Cut.** Column rename and "merge into" (requirements section 3.3). They edit the schema
+through `PATCH /schema` and land with that call rather than as menu items that do nothing.
+
+---
+
+## D55. TanStack Table v9's new API, not its v8 compatibility layer
+
+**Date:** September 5, 2026 · **Status:** Active. Confirms the version in implementation.md
+section 2.1.
+
+**Decision.** Build the table on `@tanstack/react-table` 9.2.4 using the v9 API: features and
+row-model factories composed statically through `tableFeatures`, and `useTable` with explicit
+generics.
+
+**Alternatives considered.** The package's own `@tanstack/react-table/legacy` entry point,
+which restores the v8 `useReactTable` / `getCoreRowModel` API. Pinning back to v8.
+
+**Reasoning.** v9 is a rewrite, and the v8 API this project's plan was sketched against does
+not exist in it — `useReactTable` is gone, `ColumnDef` takes the feature set as a type
+parameter, and row models are composed rather than passed as `getXRowModel` options. The
+legacy entry point works, but every symbol in it is marked `@deprecated`: adopting it would
+be taking on migration debt on the first day of writing the table, for a saving of about an
+hour.
+
+The static composition is also a real benefit here. Only sorting is registered, so filtering,
+grouping, pagination, and column visibility never enter the bundle. Column hiding is done by
+filtering the column definitions instead, which is why `row.getAllCells()` is the right
+accessor rather than `getVisibleCells()`.
+
+**Accepted tradeoff.** Less written-down knowledge to lean on: the API had to be read out of
+the shipped type definitions. The two non-obvious findings are recorded here — the option is
+`features`, not `_features`, and `useTable` needs its generics stated explicitly or `TData`
+silently degrades to the library's `RowData` default and every row callback becomes `any`.
+
+**Caught in the browser, not by the suite:** correcting a cell appended instead of replacing
+("Freight" plus "Freight & Logistics" gave "FreightFreight & Logistics"). The cause was not
+focus but ordering: the draft lived in the cell and was filled by an effect, so the input's
+first render was empty, `select()` on focus selected nothing, and the value arrived behind
+the caret. The editor is now its own component, mounted with the right value already in
+state. `ValueCell.test.tsx` pins it.
+
+---
+
+## D56. The dashboard is agent-planned, server-computed, server-vetted, and persisted
+
+**Date:** September 4, 2026 · **Status:** Active, implements decision D40
+
+**Decision.** Four separable choices, recorded together because the value is in the
+combination:
+
+1. **The agent plans.** One structured call gets the schema and per-field statistics and
+   proposes up to six panels, each a title, a visual kind, a `DataQuery`, and a rationale.
+2. **The server computes.** Panels hold query specifications, never numbers. Each is
+   evaluated in Python and the result written into the A2UI data model, with components
+   binding by path. Identical to the chat path, and for the same reason (decision D37).
+3. **The server vets, before anything is shown.** Panels whose query returns nothing,
+   charts of a single row, metrics over fields below a third coverage, and groupings by a
+   field that is really an identifier are dropped.
+4. **It is persisted and marked stale, not regenerated.** Generated when the first batch
+   settles and on explicit request; adding documents, correcting a value, or merging fields
+   sets `stale = true` and the interface offers to refresh.
+
+**Why the agent plans rather than a template.** A fixed dashboard has to assume a schema,
+and this product infers the schema per workspace from whatever was uploaded. A template that
+knows about vendors and totals is useless for research papers or property listings, which
+section 1.4 of the requirements says must get the same experience.
+
+**Why the server vets, which is the half that is easy to skip.** The agent proposes before
+anything is evaluated, so it is guessing at the shape of data it has not seen. An empty
+chart, a single bar, or a metric over a field two documents filled in all read as "this
+product is broken" rather than "this collection is thin", and this is the first screen a
+reviewer sees. Vetting is a handful of in-process evaluations and it is what keeps a first
+impression honest.
+
+The identifier rule is worth naming because it took two attempts. Grouping by an invoice
+number gives one bar per document, and an absolute distinct-count threshold cannot catch it:
+a twenty five document corpus gives an invoice number twenty five distinct values, which
+passes any sane limit while being exactly as useless as a thousand would be. The signal is
+the **ratio**, `distinct == present`. But the ratio alone over-fires: on a five document
+fixture where two documents carry a supplier, "every value is distinct" is what a small
+sample looks like, and the first version of the rule threw away three good panels including
+one grouped by supplier. It now requires a minimum sample of five before the ratio is taken
+as evidence.
+
+**Why stale rather than automatic regeneration.** Regeneration is a model call. Doing one per
+uploaded document spends the user's tokens on a screen they may not be looking at, which is
+not the server's decision to make. This is open question 2 in the requirements, answered as
+the requirements lean.
+
+**Alternatives considered.** A fixed set of panels per field type, which is cheaper and
+deterministic and cannot know that a collection of bank statements wants different panels
+from a collection of invoices. Regenerating on every upload, rejected above. Letting the
+agent return the figures directly, which is decision D37 and is the whole thing this
+architecture exists to prevent.
+
+**Cut.** Panel-level interactivity, and drilling from a bar into the records behind it.
+`record_ids` is carried in every row for exactly that, so the affordance exists when there is
+time for it (requirement A2-07 is a Could).
+
+**A shape note worth keeping.** `Panel.rationale` is deliberately not length-capped on the
+response model. A `max_length` there REJECTS rather than truncates, so one verbose rationale
+would fail validation for the entire plan and lose every panel with it. The rationale is
+decorative; the panel is not. It is truncated when the panel is built.
+
+---
+
+## D57. The first-run screen is a front door, not a workspace: no header, and the name is the illustration
+
+**Date:** September 5, 2026 · **Status:** Active, supersedes the first-run half of decision D51
+
+**Decision.** Three changes to screen 1, which are one change:
+
+1. **No `AppHeader`.** The route `/` renders the name, a sentence, the drop zone, the sample
+   link, and the accepted formats. The three-screen switch begins at `/w/{id}/…`.
+2. **The name is drawn as particles** that scatter away from the cursor and spring back into
+   the letterforms — `ui/ParticleText`, adapted from componentry.dev's cursor-driven particle
+   typography.
+3. **The funnel illustration is deleted**, not moved. `DistillationMark` is gone from the
+   tree rather than left unused.
+
+**Alternatives considered.** Keeping the header with Chat and Data inert, which is what D51
+argued for. Keeping both the particle name and the funnel illustration. Making the wordmark
+in the header the particle effect, so it appears on every screen.
+
+**Reasoning.**
+
+*On the header.* D51's case was that two inert segments teach what happens after you upload
+better than a sentence would. Sitting with the built screen, they do not: they are two grey
+words a person cannot click, above a page whose only real content is a drop zone. The
+sentence beneath the name already says what happens next, in words, and the drop zone is the
+answer to "what do I do". Chrome that switches between screens is worth its space when there
+are screens to switch between, which is the moment a workspace exists. The shape of the
+product being legible from screen 1 was a real goal; the header was the wrong instrument for
+it.
+
+*On the illustration.* Both the funnel and the particle name make the same argument — a
+scattered pile resolving into something exact. Making it twice on one screen is making it
+weakly, and the funnel was 274px tall plus a caption, which put the drop zone and the sample
+link against the fold on a laptop (verified in the browser at 800×450: the funnel was cut in
+half and the sample link sat at the bottom edge). The name earns the space the illustration
+was taking because it is also the thing the page has to say first.
+
+*On not putting the effect in the header wordmark.* At 17px there is nothing to scatter, and
+an animation that runs on the chat screen while a person is reading an answer is noise. The
+effect belongs where a first impression is the job and nothing else is competing.
+
+**What the adaptation changed, and why.** The upstream component is a shadcn registry entry:
+Tailwind utility classes, a `cn` helper, `"use client"`. The physics is kept verbatim —
+120px interaction radius, spring return at 0.08, friction at 0.85. Three things are ours:
+
+- **The loop stops.** Upstream runs `requestAnimationFrame` forever, on a landing page
+  nobody is touching. Here it halts once the pointer has left and every particle has
+  settled, and a pointer moving over the canvas restarts it. Upstream's random jitter near
+  origin was dropped to make a settled state reachable; at 1.5px it was not visible.
+- **`prefers-reduced-motion` is honoured** by not creating the canvas at all and rendering
+  the word as type. `GlobalStyle`'s reduced-motion block zeroes CSS animation durations and
+  cannot reach a canvas, so a component that animates in one has to check for itself.
+- **Size is measured, not guessed.** Upstream caps the font at 15% of the container width,
+  which is really a guess about letter count: it overflows a long word and starves a short
+  one. Measuring with `measureText` against a 86% budget is one extra call and is correct
+  for any word in any face. It is what makes the same component render "Distill" at 176px on
+  a desktop and fit it inside a 375px phone.
+
+The word is always in the DOM as real text with the canvas `aria-hidden`, so the `h1` has an
+accessible name, the page is searchable, and the text is selectable.
+
+**Cut.** The `DistillationMark` illustration, with its six sample filenames — the most
+concrete statement of *heterogeneous input* the product had, and the thing genuinely lost
+here. If screen 1 ever needs it back, the argument for it is in this entry's git history.
+Also cut: the assertion in `FirstRunScreen.test.tsx` that the header renders on `/`,
+replaced by its inverse.
+
+---
+
+## D58. The upload wait is a spiral of the person's own documents, built in CSS rather than WebGL
+
+**Date:** September 5, 2026 · **Status:** Active, refines decision D53
+
+**Decision.** The upload screen (`/w/{id}/upload`) leads with a slowly turning helix of one
+card per file being sent, over a single aggregate line — documents arrived of how many,
+bytes sent of total. The per-file bars stay, folded behind a disclosure that opens itself
+the moment a file fails. Three sub-decisions, each of which was a genuine fork:
+
+1. **The slides are the user's real files, not stock images.**
+2. **The helix is CSS 3D transforms, not `three` + `@react-three/fiber`.**
+3. **The per-file rows are demoted, not deleted.**
+
+**Alternatives considered.** The upstream componentry.dev "spiral 3D slider" as shipped: a
+`three` scene, one textured plane per slide, a shader for the depth blur, filled with
+document photographs fetched from the web. A plain progress bar, which is what the screen
+had. A generic loading animation unrelated to the documents.
+
+**Reasoning.**
+
+*Why the user's own files.* The obvious build is stock pictures of invoices and
+spreadsheets. It would look the same in a screenshot and be wrong in three ways: it puts a
+network fetch between a person and their upload on a product whose setup is meant to be one
+offline command; it shows a stranger's paperwork on the one screen that is entirely about
+yours; and it quietly contradicts the thing the product sells, which is that what you see
+traces back to a document you gave it. The browser is already holding every `File`, so an
+image can be its own thumbnail through a blob URL before a byte has left, and every other
+format gets a drawn sheet — ruled lines for prose, a small grid for a spreadsheet. A sketch
+of the shape, not a facsimile.
+
+*Why not `three`.* `three` plus `@react-three/fiber` is roughly 600 kB on a 399 kB bundle,
+for a screen a person sees once for as long as their upload takes. The geometry is not the
+expensive part: the placement maths in `ui/Spiral.tsx` is the upstream `useFrame` body,
+angle step, yaw and falloff constants included, and it drives `translate3d`/`rotateY`/
+`blur()` on ordinary DOM nodes instead of meshes. Two things fall out of that which the
+shader version cannot have. A slide is **real markup**, so it can carry a filename, a format
+badge, a status stamp and a live thumbnail — none of which a WebGL texture can be without
+first being rendered to an image. And there is no WebGL context to lose, so the error
+boundary and the "interactive content is unavailable on this device" fallback that ship with
+the upstream component are not needed at all.
+
+*Why the rows survive.* They are the truth of what happened to each file, they carry the
+accessible progress semantics on native `<progress>` elements, and a failure has to be
+readable. But eight near-identical bars is not what this wait should look like, and the
+aggregate line answers the only question a person waiting actually has. So they are folded
+away and pushed back open by failure. A failed file's bytes are also excluded from the
+aggregate, because a bar filling to 100% beside a report that a file was lost is the kind of
+small lie people notice.
+
+**Two things the adaptation adds.** The helix measures its own stage and narrows on a narrow
+one, rather than trusting a constant radius and being clipped down the sides — measured on
+resize, never per frame, since `clientWidth` forces layout. And the loop stops when the tab
+is hidden; this is precisely the screen people switch away from while they wait, and a
+backgrounded `requestAnimationFrame` is throttled rather than stopped.
+
+**Accessibility.** The stage is `aria-hidden`: a screen reader walking ten repeated cards
+would learn nothing the list below does not already say, at ten times the length. Under
+`prefers-reduced-motion` the spiral is not the moving version with its animation switched
+off — that leaves a stack of cards at odd angles with no explanation — but a static
+overlapping fan of the same cards. `GlobalStyle`'s reduced-motion block zeroes CSS
+durations and cannot reach a `requestAnimationFrame` loop, so `ui/usePrefersReducedMotion`
+was extracted from `ParticleText` (decision D57) and both components now ask for themselves.
+
+**Cut.** Scroll-driven control of the spiral, which upstream has and which is meaningless
+here: this is a wait, not a gallery, and nobody should have to drive it. Per-card upload
+percentages — the card carries arrived-or-not, the row carries the fraction.
+
+**A test-environment note.** jsdom implements neither `ResizeObserver` nor a 2D canvas
+context, and both are now constructed by components under test. `test/setup.ts` stubs them
+rather than each test working around them; the stubs are honest, since jsdom has no layout
+to report and nothing to rasterise.
+
+---
+
+## D59. Server-Sent Events are read with `fetch`, not `EventSource`
+
+**Date:** September 5, 2026 · **Status:** Active, implements decisions D7 and D44
+
+**Decision.** `client/src/lib/sse.ts` is a hand-written SSE client over `fetch` and
+`ReadableStream`, with its own frame parser, its own reconnect loop, and its own
+`Last-Event-ID` handling. Both streams use it: the per-answer stream and the workspace event
+stream.
+
+**Alternatives considered.** The browser's `EventSource`, which is the obvious choice and
+does reconnection and resumption for free. A token in the query string, so `EventSource`
+could be used. WebSockets, already rejected in D7.
+
+**Reasoning.** `EventSource` sends no request headers. Every route in this API authorises
+with `Authorization: Bearer <workspace token>` (decision D8), and there is no query-parameter
+fallback — deliberately, because the token is the *only* credential this product has, and a
+credential in a URL ends up in server logs, browser history, and `Referer` headers. Adding
+one to make a browser API convenient would trade the security property for the convenience.
+
+So the transport is ours, and two things follow that are requirements rather than
+consolation prizes. **Reconnection is implementable to spec**: requirement FR-29 asks the
+client to resume from the last event it saw, and both server routes number their events with
+a resumable sequence for exactly that. **Cancellation is an `AbortSignal`**, which composes
+with React effect cleanup and with controller chaining, where `EventSource.close()` composes
+with nothing.
+
+**What the parser has to get right.** The two failure modes are silent, which is why they
+are pinned by tests rather than left to inspection:
+
+- A frame split across network chunks. The server flushes per token and the network
+  coalesces however it likes, so the split routinely lands mid-JSON. A parser that dispatched
+  the partial frame would hand `JSON.parse` a truncated object and drop a token — visible as
+  a missing word, not as an error.
+- A comment line. `sse-starlette` sends its keep-alive as one every fifteen seconds, and a
+  parser that dispatched it would deliver an empty event on a timer.
+
+**Cut.** `retry:` field support, since neither route sets one and the backoff is ours. A
+generic event-type registry: both consumers switch on the `type` inside the payload, which
+is what the server derives the SSE event name from anyway.
+
+---
+
+## D60. The A2UI catalog is rendered by a hand-written renderer, not `@a2ui/react`
+
+**Date:** September 5, 2026 · **Status:** Active, **diverges from implementation.md section
+7 as written**. Reversible; see "What it would take to switch" below.
+
+**Decision.** `client/src/features/a2ui/` renders a surface itself: `model.ts` folds the
+message array into a data model plus a component map and resolves path bindings; `Surface.tsx`
+renders the four custom components and the five basic layout and text ones with this
+project's own styled components; `SurfaceBoundary.tsx` catches a render error and falls back
+to a plain table of the same rows. No `@a2ui/react`, no `@a2ui/web_core`, no Recharts.
+
+**Alternatives considered.** `@a2ui/react` 0.11.0 with `@a2ui/web_core` 0.10.7 and Recharts,
+which is what implementation.md section 7 specifies and what D39 assumed.
+
+**Reasoning.** D39's own argument is the reason this is defensible: *"the value of the
+protocol here is not the renderer, it is the data model"*. The path-binding contract is what
+mechanically enforces D37, and it is enforced here — `readProperty` resolves
+`{path: "/result/rows/0/value"}` against the model the server wrote, and `model.test.ts`
+holds that a component may not carry a figure inline. The safety argument survives the
+renderer choice intact.
+
+What the official package would have added on top of that is a message processor and the
+basic catalog's layout components. The four components that matter — `Metric`, `BarChart`,
+`LineChart`, `ResultTable` — have to be written as project React components either way,
+because that is what a catalog *is*; section 7.2 already scheduled writing all four. So the
+package's contribution is the processor and five layout primitives, against a dependency
+that also pins Zod to `3.25.76` project-wide and pulls Recharts in for two chart shapes of
+one series each.
+
+**This is the part to be sceptical of.** The above is a real argument and it is also the
+argument someone makes after building the thing. The plan of record said use the package,
+the pin for it is already in `package.json`, and "I wrote it myself and it works" is not by
+itself a reason to overrule a decision taken deliberately. Recorded here in those terms
+rather than as a settled matter.
+
+**What it would take to switch.** The renderer is one module behind one component:
+`AnswerBlock` and, later, the dashboard render `<Surface messages={…}>` and nothing else
+touches A2UI. Swapping the internals for `MessageProcessor` and `A2uiSurface` changes
+`Surface.tsx` and `model.ts` and leaves the four catalog components, the boundary, the
+fallback and every call site as they are.
+
+**What is kept from section 7 regardless.** The error boundary and the fallback (section
+7.3), the closed catalog as the allow-list — an unknown component name is dropped at parse
+time — the `a2ui.fallback` log line, and strings rendering as text and never as markup.
+
+**Cut for now.** The `Inspect.tsx` developer toggle, and Zod schemas per component: the
+catalog is closed at parse time and every property read is total, so a malformed property
+renders an em dash rather than throwing. Recharts, whose two chart shapes here are a
+baseline with columns on it and a polyline.
+
+---
+
+## D61. The chat screen holds one live answer beside a cached history
+
+**Date:** September 5, 2026 · **Status:** Active, implements requirements section 3.2
+
+**Decision.** `useConversation` keeps two separate stores. History is a React Query cache of
+persisted messages; the answer currently streaming is local component state, folded from
+events by a pure reducer. They meet once, at `done`, when the event's persisted message
+replaces the live one in the cache.
+
+**Alternatives considered.** Writing every token into the query cache, so there is one list.
+Keeping the whole conversation in local state and treating the server as write-only.
+
+**Reasoning.** A token event arrives several times a second and an answer produces hundreds
+of them. Writing each into the query cache means invalidating and re-rendering the entire
+conversation per token; keeping the whole thread in local state throws away caching, sharing
+between screens, and the refetch that recovers from a dropped stream. The split puts the
+churn where it is cheap and leaves the durable half alone.
+
+The join is clean because the server made it so: `done` carries the whole persisted message
+and its docstring calls it authoritative, so a client that reconnected late replaces its
+local state wholesale rather than reconciling a partial buffer against a full one.
+
+**Two things this makes possible, both requirements.** A refresh mid-answer reattaches: a
+persisted row saying `streaming` is found in history on load and its stream is tailed, since
+generation continues server-side whether or not anyone is listening (D44). And **stop does
+not abort the socket** — it posts to the stop route and lets the server publish `stopped`
+and then `done` through the normal path, which is what keeps the partial answer that
+requirement FR-30 promises to keep. Aborting the stream would drop that final state.
+
+**A correctness note that cost a test.** `citation` is the one event that is not idempotent
+under replay. `Last-Event-ID` resumes from the last frame the client *saw*, and a frame in
+flight when a socket dropped was seen by nobody, so the server can legitimately redeliver an
+event already applied. Appending citations would double the footnote list; the reducer
+replaces by number instead.
+
+**Cut.** Asking a second question while one is streaming — the composer is shut for the
+duration, because a second question would abandon a stream the server is still paying to
+generate. Editing or retrying a question. Conversation-level scroll restoration beyond
+sticking to the bottom when the reader is already there.
+
+---
+
+## D62. Flash for extraction, Flash Lite for anything a user waits on
+
+**Date:** September 5, 2026 · **Status:** Active, supersedes the tier half of D13
+
+**Decision.** `LLM_EXTRACT_MODEL=gemini-3.5-flash` and
+`LLM_FAST_MODEL=gemini-3.5-flash-lite`, with `LLM_FAST_THINKING_LEVEL=low` applied to the
+calls a user waits on (chat planning, chat answering, dashboard planning, suggested
+questions) and never to extraction or schema inference, which keep the model's own default
+effort.
+
+**Alternatives considered.** Keeping `gemini-2.5-pro` and `gemini-2.5-flash`, which is what
+D13 chose and what the plan and `.env.example` said until today. `gemini-pro-latest` for
+extraction. `gemini-3.6-flash` for both tiers, which is what this entry said in its first
+draft an hour earlier. `gemini-3.5-flash` for both. Two models with no thinking
+configuration at all.
+
+**Reasoning.** Three facts, all measured against the real key on September 5, 2026 rather
+than reasoned about:
+
+- **The 2.5 identifiers are dead for this key.** Both answer 404 with "no longer available
+  to new users". They still appear in `models.list`, which is why listing models is not a
+  test and a real call is.
+- **The Pro tier is not on the plan.** `gemini-pro-latest` and `gemini-3.1-pro-preview`
+  answer 429 with `limit: 0` — a quota of zero requests, not a spike. So the stronger-tier
+  half of D13 is not a choice available to make.
+- **Thinking level is worth more than the model choice here.** The same structured
+  extraction call on a Gemini 3 Flash model took about 25 seconds at the default effort and
+  about 2 at `low`. Requirement FR-26 asks for a first prose token within three seconds, so
+  the fast path needs `low`; extraction is a background worker call whose errors are baked
+  into the table, so it keeps the default.
+- **Lite is not a cost choice, it is the latency choice.** On the same question with the
+  same passages, `gemini-3.5-flash-lite` produced its first token in 0.68 to 0.85 seconds
+  and `gemini-3.5-flash` in 8.8 to 9.8. FR-26's three seconds is not reachable on the
+  larger model however the effort is configured, and the answers were equivalent on a
+  two-passage citation question. Extraction keeps the larger model, where 15 seconds in a
+  background worker costs nobody anything.
+- **Free-tier daily caps are per model, and one of them is tiny.** `gemini-3.6-flash`
+  allows 20 requests **per day** on this key: verifying the integration exhausted it. This
+  is a demo-day risk with no code fix, so it is recorded here and in `.env.example`, and
+  the two chosen models are ones whose caps a demo can live inside.
+
+**What this costs, stated plainly.** D13's reasoning for a stronger extraction tier was
+sound and is unchanged; it simply cannot be acted on with this key. Extraction quality is
+therefore whatever `gemini-3.5-flash` at default effort gives — on the invoice probe, nine
+fields with verbatim quotes that all located in the source, which is the behaviour the
+grounding stage needs. A paid key would want `LLM_EXTRACT_MODEL` pointed back at a Pro
+model, which is a one-line change because model identifiers were kept as configuration.
+
+**Cut.** Any automatic fallback from one model to another. A model that 404s or is not on
+the plan is a configuration error the operator must see, and D26 already settled that a
+provider that cannot be constructed fails loudly rather than degrading into heuristics.
+
+---
+
+## D63. Embeddings are 768 wide, task-tagged, and the space is labelled
+
+**Date:** September 5, 2026 · **Status:** Active, refines D24 and D36
+
+**Decision.** Three changes to how vectors are produced, all inside the Gemini adapter and
+its two callers:
+
+1. **Width.** `LLM_EMBED_DIMENSIONS=768`, rather than `gemini-embedding-001`'s native 3072.
+   Vectors below the native width come back un-normalised, so the adapter normalises them.
+2. **Task.** `LLMClient.embed` takes a provider-neutral `task`: passages are embedded as
+   `document`, a chat question as `query`, and two field labels being compared for drift as
+   `similarity`. The adapter maps those to the provider's own task names.
+3. **Space label.** A chunk's `embedding_model` now records `model@width`, and `search`
+   logs a warning when a workspace's recorded space is not the configured one.
+
+**Alternatives considered.** Leaving the native 3072 and changing nothing. Truncating 3072
+vectors locally. Ignoring task types, which is what the code did until today. Recording the
+bare model name, as before.
+
+**Reasoning.** 3072 floats per chunk is four times the JSONB storage and four times the
+per-question arithmetic, for a corpus of at most a few thousand passages where retrieval is
+a Python loop by deliberate choice (D36). 768 is a supported width from the same model
+rather than a truncation, so the quality loss is small and the constant factor saved is real.
+
+Task types matter more than the width does. Retrieval is asymmetric: the passage and the
+question that should find it are not the same kind of text, and the model has been trained
+to embed them differently when told which is which. Not saying was leaving quality on the
+table for one keyword.
+
+The space label is the safety net for the other two. A width change silently makes old
+chunks incomparable with a new question, and the symptom is the worst kind: a chat that
+answers "not in these documents" about a document that plainly says it. `cosine` already
+returns zero on a dimension mismatch, so nothing crashes; the label plus the warning is
+what makes it visible instead of merely survivable.
+
+**Cut.** Re-indexing existing workspaces automatically on a width change. It is a
+destructive-ish background job triggered by a configuration edit, and the warning tells an
+operator to do it deliberately. Recording per-task vectors in the fake provider's fixtures,
+which would triple the fixture corpus to encode a distinction no recording can honour.
+
+---
+
+## D64. Provider constraints are learned from the provider: `maxItems` is described, not sent, and its retry hint is obeyed
+
+**Date:** September 5, 2026 · **Status:** Active, closes review finding 8.7 and refines D20
+
+**Decision.** Three corrections to the Gemini adapter and the schema converter, each one
+prompted by a real failure rather than a reading of the documentation:
+
+1. **`minItems` and `maxItems` are no longer sent.** They are removed from the supported
+   subset in `app/llm/jsonschema.py` and restated in the schema's `description` instead
+   ("Return at most 80 items."). `minimum`, `maximum` and `title` are removed from the
+   documented set too, since they were never emitted.
+2. **A 429 carrying `limit: 0` is terminal, not retryable**, and says so: "not included in
+   this API key's plan, so retrying will not help".
+3. **The provider's own retry delay is obeyed.** When an error says "Please retry in 29.8s"
+   or carries a `retryDelay`, the adapter waits that long, capped at 45 seconds, instead of
+   its exponential schedule.
+
+**Alternatives considered.** For (1): dropping `max_length` from the response contracts
+altogether, which loses local validation as well; or keeping `maxItems` and catching the
+failure at runtime. For (3): raising `LLM_MAX_ATTEMPTS`, or lengthening the exponential
+schedule for everything.
+
+**Reasoning.** `maxItems` is in the documented provider subset, and `gemini-3.6-flash`
+answers a schema containing it with `400 INVALID_ARGUMENT` naming no argument. It reached
+the schema from `max_length=80` on `OpenExtraction.fields`, which is on the extraction path,
+so **every extraction call this project makes would have failed** — a total outage that the
+existing offline test suite could not have predicted, because the suite asserts the
+documented subset and the documented subset is wrong. That is precisely review finding
+8.7's risk, arriving as predicted and now closed by a test rather than a hope. The bound
+still reaches the model as a sentence and still validates locally, so nothing is lost but
+the rejected keyword.
+
+The two retry corrections are the same lesson in a smaller register. A 429 that will clear
+in thirty seconds and a 429 that will never clear are spelled identically apart from
+`limit: 0`; treating both as transient means three attempts inside a closed window and then
+a message telling the user to try again shortly about something permanent. Obeying the
+stated delay costs one slow document; ignoring it costs a failed one.
+
+**Cut.** Sending `response_json_schema` (the newer full-JSON-Schema field) instead of
+`response_schema`, which would make the hand-written converter redundant but is a larger
+change than one keyword warrants and would reopen the question D20 settled. Per-model
+capability probing at startup: it spends quota on every boot to learn something a test
+already encodes.
+
+---
+
+## D65. The schema converter's own two bugs, found by the first real calls
+
+**Date:** September 5, 2026 · **Status:** Active, refines D20 and the mitigation in D64
+
+**Decision.** Two fixes in `app/llm/jsonschema.py`, and one honest correction to the test
+that was supposed to prevent both:
+
+1. **Nullable unions are collapsed before references are resolved, not after.** An optional
+   nested model arrives as `anyOf: [{$ref: X}, {type: null}]`, and resolving first sees no
+   `$ref` at the top level and walks away with it.
+2. **`MAX_DEPTH` is raised from 6 to 10.**
+3. **`RESPONSE_MODELS` in `tests/unit/test_jsonschema.py` now lists all six response
+   models.** It listed three and called itself "every response model".
+
+**Alternatives considered.** For (1): special-casing `$ref` inside `_collapse_nullable`,
+which spreads reference knowledge across two functions. For (2): flattening `DashboardPlan`
+to fit the existing limit, which is a contract change to satisfy a number that was a guess.
+
+**Reasoning.** Both bugs were invisible offline and total in production, and for the same
+underlying reason: the fake provider never converts a schema, so no offline test exercises
+the converter against the contracts that use it, and the one test that did exercise it was
+parametrised over the half of the contracts that happened to be written first.
+
+The nullable-reference bug is the worse of the two, because it fails *quietly*.
+`ChatPlan.visual` converted to `{"nullable": true}` — no type, no properties, a schema that
+forbids nothing and describes nothing. The provider accepts it. The model, asked for a
+field it has been told nothing about, answered `false`, and the whole chat visual feature
+(D47, requirement A2-02) would have failed validation on every call while the schema looked
+fine in a debugger. The depth limit at least failed loudly.
+
+Six levels was a reasonable guess with no key to check it against; `DashboardPlan` needs
+eight, and eight was sent to the provider and accepted. Ten keeps a guard against runaway
+nesting without vetoing a contract that demonstrably works.
+
+**The lesson worth keeping, and it is not about JSON Schema.** A mitigation is only as good
+as its coverage, and a test parametrised over a hand-written list silently stops covering
+the thing it was written for the moment someone adds a seventh contract. The list is now
+the six models; the check for whether it is still all of them is a human one, which is
+stated here rather than pretended away.
+
+**Cut.** Deriving `RESPONSE_MODELS` automatically by walking the codebase for every model
+passed as a `response_model`. It would keep the list honest without anyone remembering to,
+and it is real reflection machinery in a test whose value is being obvious.
+
+---
+
+## D66. The embedding thresholds, measured instead of guessed
+
+**Date:** September 5, 2026 · **Status:** Active, calibrates D24 and D27
+
+**Decision.** `embedding_auto_map` moves from 0.95 to **0.88** and
+`novelty_ceiling_embedding` from 0.30 to **0.80**. `margin` stays at 0.05.
+`tests/unit/test_similarity_calibration.py` encodes the measurements that justify all
+three, using two-dimensional unit vectors placed at exact angles so the calibration is
+checkable with no key.
+
+**How they were measured.** Twelve pairs of field labels a person would merge (`Vendor` and
+`Supplier`, `Invoice Number` and `Invoice No`, `Tax Amount` and `VAT`, ...) and twelve pairs
+a person would not (`Payment Terms` and `Currency`, `Vendor` and `Invoice Number`, ...) were
+embedded with `gemini-embedding-001` and scored with the project's own `cosine`.
+
+| class | min | median | max |
+| --- | --- | --- | --- |
+| should merge | 0.822 | 0.898 | 0.982 |
+| should not merge | 0.764 | 0.811 | 0.827 |
+
+**Alternatives considered.** Leaving D24's numbers, which the code itself flagged as the one
+thing a key would settle. Normalising the scores by subtracting a corpus mean, so the
+thresholds could stay where they were. Dropping the embedding signal and relying on string
+similarity alone.
+
+**Reasoning.** This model's cosines are compressed into a narrow band near the top, which is
+normal for a modern embedding model and fatal to thresholds chosen by intuition. Both old
+numbers were not merely wrong, they were **unreachable**, and each failed silently in a
+different direction:
+
+- At 0.95, two of twelve synonyms mapped. Drift auto-mapping effectively did not exist, and
+  the live run showed the consequence: two invoices phrasing the same fact as "Total due"
+  and "Grand total" produced `total_amount` and `invoice_total`, two columns for one thing.
+- At 0.30, no field's best match ever fell below the ceiling, so "clearly novel" never fired
+  and the auto-add branch was dead code that the whole suite passed over.
+
+0.88 sits above every unrelated pair observed, with five points of headroom, and catches
+nine of the twelve synonyms. 0.80 sits just under the unrelated floor. The band between
+them is the ask zone, where honest uncertainty belongs.
+
+**What is deliberately NOT fixed.** The two classes overlap: the lowest synonym (0.822,
+`Bill To` versus `Customer`) is below the highest unrelated pair (0.827, `Payment Terms`
+versus `Currency`). No threshold separates every case, and the calibration test asserts the
+overlap so nobody tunes a number until the examples behave. In the same spirit, the live run
+still keeps `total_amount` and `invoice_total` apart, because `Grand total` scored 0.926
+against `Total due` and 0.901 against `Subtotal` and the margin rule refuses to guess between
+them. Folding a grand total into a subtotal is precisely the silent corruption D24 exists to
+prevent, and with the review loop cut (D34, D42) an ask surfaces as two columns rather than
+a question — a real cost, recorded rather than tuned away.
+
+**Cut.** Making these four numbers environment variables. `Thresholds.from_settings` already
+reads them by name if they exist, so adding them later is a one-line change, and until
+somebody needs to vary them per deployment they are calibration constants that belong beside
+the evidence for them.
