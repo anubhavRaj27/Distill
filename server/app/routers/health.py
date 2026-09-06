@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from typing import Literal
 
+from anyio import to_thread
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -22,6 +23,7 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.db.session import get_engine
 from app.logging import get_logger
+from app.storage.factory import make_storage
 
 router = APIRouter(tags=["health"])
 logger = get_logger(__name__)
@@ -58,11 +60,15 @@ async def healthz() -> HealthResponse:
         database = CheckResult(ok=False, detail=type(exc).__name__)
 
     try:
-        settings.storage_dir.mkdir(parents=True, exist_ok=True)
-        probe = settings.storage_dir / ".healthz"
-        probe.write_bytes(b"ok")
-        probe.unlink()
-        storage = CheckResult(ok=True, detail=str(settings.storage_dir))
+        # Through the configured store rather than at the directory it may or may not have.
+        # The check is a real write and a real delete, because "the directory exists" and
+        # "this deployment can store a document" are different claims, and the second one
+        # is what an operator is asking.
+        store = make_storage(settings)
+        probe = "healthz/probe.bin"
+        await to_thread.run_sync(lambda: store.put_bytes(probe, b"ok"))
+        await to_thread.run_sync(lambda: store.delete(probe))
+        storage = CheckResult(ok=True, detail=settings.storage_backend)
     except Exception as exc:
         logger.warning("health.storage_failed", error=str(exc))
         storage = CheckResult(ok=False, detail=type(exc).__name__)

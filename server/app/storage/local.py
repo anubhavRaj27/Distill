@@ -67,6 +67,12 @@ class LocalStorage(Storage):
     def local_path(self, key: str) -> Path | None:
         return self._path(key)
 
+    def read_range(self, key: str, start: int, end: int) -> bytes:
+        """Bytes ``start`` to ``end`` inclusive, by seeking. See ``base.stream_range``."""
+        with self._path(key).open("rb") as handle:
+            handle.seek(start)
+            return handle.read(max(0, end - start + 1))
+
     def delete_prefix(self, prefix: str) -> None:
         """Remove everything under a key prefix. Used when a document is deleted."""
         path = self._path(prefix)

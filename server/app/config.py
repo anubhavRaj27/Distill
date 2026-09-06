@@ -50,9 +50,17 @@ class Settings(BaseSettings):
     db_pool_size: int = Field(default=10, ge=1)
 
     # -- Storage ------------------------------------------------------------
+    storage_backend: Literal["local", "postgres"] = Field(
+        default="local",
+        description="Where originals and rendered page images live. `local` is a directory "
+        "and is what development uses. `postgres` puts the bytes in the `blobs` table, "
+        "which is what a deployment on a free tier needs: those containers have no disk "
+        "that survives a restart, so a local store would empty itself on every redeploy "
+        "and take the source viewer with it. Decision D86.",
+    )
     storage_dir: Path = Field(
         default=Path("./var/storage"),
-        description="Originals and rendered page images. A local volume in the container.",
+        description="Where the `local` backend keeps its files. Ignored by `postgres`.",
     )
     max_upload_mb: int = Field(
         default=20,
@@ -212,8 +220,69 @@ class Settings(BaseSettings):
     # -- Samples ------------------------------------------------------------
     samples_dir: Path = Field(
         default=Path("../samples"),
-        description="Read by the seed route through samples/manifest.json. See D15.",
+        description="Read by the seed route through samples/manifest.json. See D15. In a "
+        "container the samples are copied in alongside the application, so this is set "
+        "explicitly there rather than being relative to the checkout layout.",
     )
+
+    client_dist_dir: Path = Field(
+        default=Path("../client/dist"),
+        description="The built interface, served by this process so that development and "
+        "production are the same single-origin configuration (implementation.md section "
+        "10). Absent in a checkout that has not run `npm run build`, in which case nothing "
+        "is mounted and the API serves itself alone.",
+    )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalise_database_url(cls, value: object) -> object:
+        """Accept the connection string a hosting provider hands out, unedited.
+
+        Railway, Neon, Render and every other managed Postgres publish a URL for the
+        standard synchronous client: ``postgres://`` or ``postgresql://``, often with
+        ``?sslmode=require`` on the end. This application talks asyncpg, which needs the
+        ``postgresql+asyncpg://`` scheme and rejects ``sslmode`` outright as an unknown
+        keyword.
+
+        Rewriting it here rather than asking a person to do it by hand removes what would
+        otherwise be the single most likely deployment failure, and the one with the worst
+        diagnostics: it surfaces on the first connection, inside a container, as a driver
+        error with nothing pointing at the paste that caused it. ``DATABASE_URL`` can now be
+        wired straight from the provider's own variable.
+
+        The TLS intent is preserved rather than dropped. ``sslmode=require`` becomes
+        asyncpg's ``ssl=require``, so a provider that insists on TLS still gets it, and a
+        deployment does not silently downgrade to plaintext because a parameter was in the
+        wrong dialect.
+        """
+        if not isinstance(value, str) or not value:
+            return value
+
+        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+        parts = urlsplit(value)
+        scheme = parts.scheme
+        if scheme in ("postgres", "postgresql"):
+            scheme = "postgresql+asyncpg"
+        elif "+" in scheme and not scheme.endswith("+asyncpg"):
+            # A URL naming a different driver is left alone: someone asking for psycopg
+            # means it, and quietly swapping their driver is worse than failing.
+            return value
+
+        query = []
+        for key, item in parse_qsl(parts.query, keep_blank_values=True):
+            if key == "sslmode":
+                # verify-ca and verify-full both need a certificate store this application
+                # does not configure, so they become plain `require`: encrypted, unverified,
+                # which is what the driver would do with `require` anyway.
+                query.append(("ssl", "require" if item != "disable" else "disable"))
+            elif key == "channel_binding":
+                # Neon adds it; asyncpg has no such keyword.
+                continue
+            else:
+                query.append((key, item))
+
+        return urlunsplit((scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -255,12 +324,10 @@ class Settings(BaseSettings):
         return self.llm_provider != "fake" and bool(self.gemini_api_key)
 
     def sync_database_url(self) -> str:
-        """The same connection as a synchronous URL, which Alembic requires."""
-        return (
-            str(self.database_url)
-            .replace("+asyncpg", "+psycopg2")
-            .replace("postgresql+psycopg2", "postgresql")
-        )
+        """The same connection for a synchronous driver. See ``app.db.urls``."""
+        from app.db.urls import to_sync
+
+        return to_sync(str(self.database_url))
 
 
 @lru_cache(maxsize=1)

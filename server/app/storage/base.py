@@ -59,9 +59,21 @@ class Storage(Protocol):
         """Yield the object in chunks, for streaming a response."""
         ...
 
+    def put_file(self, key: str, source: Path, *, move: bool = False) -> str:
+        """Store a file that is already on disk. ``move`` consumes the source.
+
+        An upload arrives as a temporary file, so this exists to avoid holding a 20 MB
+        document in memory purely to hand it to the store.
+        """
+        ...
+
     def exists(self, key: str) -> bool: ...
 
     def delete(self, key: str) -> None: ...
+
+    def delete_prefix(self, prefix: str) -> None:
+        """Remove everything under a key prefix. Deleting a document is a prefix delete."""
+        ...
 
     def size(self, key: str) -> int: ...
 
@@ -82,7 +94,23 @@ async def stream_range(
 
     Byte ranges exist for the document viewer: pdf.js fetches a PDF in ranges so it can
     render page one of a large document without downloading all of it.
+
+    A backend that can seek says so by offering ``read_range``, and is asked for the bytes
+    directly. The walk below is the fallback, and for a range near the end of a large object
+    it reads everything before it to get there, which is free on a local file and emphatically
+    not free over a network.
     """
+    reader = getattr(storage, "read_range", None)
+    if reader is not None:
+        position = start
+        while position <= end:
+            piece = reader(key, position, min(position + chunk_size - 1, end))
+            if not piece:
+                return
+            position += len(piece)
+            yield piece
+        return
+
     remaining = end - start + 1
     position = 0
     for chunk in storage.open_stream(key):

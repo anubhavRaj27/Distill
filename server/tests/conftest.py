@@ -53,6 +53,10 @@ def settings() -> Iterator[Settings]:
             f"postgresql+asyncpg://distill_readonly:distill_readonly@localhost:5432/{TEST_DATABASE}"
         ),
         "STORAGE_DIR": str(SERVER_ROOT / "var" / "test-storage"),
+        # Nothing built, on purpose. A checkout with a client build lying around would
+        # otherwise mount it and turn every "unknown path" assertion in the API suite into
+        # an assertion about an HTML shell. `test_web.py` covers the mount deliberately.
+        "CLIENT_DIST_DIR": str(SERVER_ROOT / "var" / "no-client-build"),
         "LLM_PROVIDER": "fake",
         "SCHEMA_PROPOSAL_DEBOUNCE_SECONDS": "0",
     }

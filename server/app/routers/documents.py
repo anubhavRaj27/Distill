@@ -49,7 +49,9 @@ from app.logging import get_logger
 from app.pipeline.process import content_hash
 from app.pipeline.sniff import HEAD_BYTES, SUPPORTED_EXTENSIONS, sniff
 from app.pipeline.worker import submit_after_commit
-from app.storage.local import LocalStorage, original_key
+from app.storage.base import Storage
+from app.storage.factory import make_storage
+from app.storage.local import original_key
 from app.types import DocumentId, WorkspaceId
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/documents", tags=["documents"])
@@ -96,8 +98,9 @@ class UploadResponse(BaseModel):
     rejected: list[RejectedUpload] = Field(default_factory=list)
 
 
-def _storage(settings: Settings) -> LocalStorage:
-    return LocalStorage(settings.storage_dir)
+def _storage(settings: Settings) -> Storage:
+    """The configured store. Which one it is lives in `app.storage.factory`, not here."""
+    return make_storage(settings)
 
 
 async def _remove(path: Path) -> None:

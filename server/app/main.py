@@ -47,7 +47,8 @@ from app.routers import (
     schema,
     workspaces,
 )
-from app.storage.local import LocalStorage
+from app.storage.factory import make_storage, reset_storage_cache
+from app.web import mount_client
 
 logger = get_logger(__name__)
 
@@ -76,10 +77,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         llm_configured=settings.llm_configured,
     )
     init_engines(settings)
-    settings.storage_dir.mkdir(parents=True, exist_ok=True)
 
     client = init_client(settings)
-    storage = LocalStorage(settings.storage_dir)
+    storage = make_storage(settings)
     worker = init_worker(settings=settings, client=client, storage=storage)
     await worker.start()
 
@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("app.stopping")
         await worker.stop()
         await dispose_engines()
+        reset_storage_cache()
         reset_worker()
         reset_client()
 
@@ -132,6 +133,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     for module in (workspaces, documents, records, schema, events, chat, dashboard):
         app.include_router(module.router, prefix=settings.api_prefix)
+
+    # Last, so that every route above wins the match. See `mount_client`.
+    mount_client(app, settings)
 
     return app
 

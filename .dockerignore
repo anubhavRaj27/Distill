@@ -1,0 +1,30 @@
+# What never belongs in the image.
+#
+# The two big ones are node_modules and .venv: both are rebuilt inside the image for the
+# right platform, and copying a macOS arm64 virtual environment into a Linux container
+# produces a build that appears to work until something loads a compiled wheel.
+
+.git
+.gitignore
+.DS_Store
+**/.DS_Store
+
+client/node_modules
+client/dist
+
+server/.venv
+server/var
+server/.env
+server/.env.*
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/htmlcov
+**/.coverage
+
+.claude
+docs
+*.md
+!README.md

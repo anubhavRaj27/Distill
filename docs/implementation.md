@@ -761,9 +761,11 @@ submission. Playwright is cut for this round.
 `/api` proxy. Environment: `GEMINI_API_KEY` is the only required variable with
 `LLM_PROVIDER=gemini`; `LLM_PROVIDER=fake` runs everything offline against recorded fixtures.
 
-**Deployment**: out of scope to verify without a container runtime. A `Dockerfile` and
-`docker-compose.yml` may be authored as a Could; the README states plainly whether they were
-tested.
+**Deployment** (`docs/deployment.md`, decision D86): one Docker image holding the API, the
+built interface and the sample corpus, on Koyeb's free tier, with a free Neon Postgres
+holding the rows and the file bytes both. The API serves the interface itself, which is what
+this section always assumed and `app/web.py` now implements. The image is written and
+unbuilt: there is no container runtime here, so the first build happens on the platform.
 
 **Observability**: structlog JSON with `request_id`, `workspace_id`, `document_id`, stage
 timings, and per-call model, tokens, latency. Chat and dashboard calls log the retrieved

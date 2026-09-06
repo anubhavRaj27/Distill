@@ -3294,3 +3294,111 @@ show a drop zone for a workspace the person is already standing in.
 **Cut.** A separate home icon, which would be a second control for a job the mark already
 does.
 
+---
+
+## D86. The MVP deployment: one container, one Postgres, nothing else
+
+**Date:** September 6, 2026 · **Status:** Active, except the platform, which D87 changed
+from Koyeb to Railway. Closes the gap left by implementation.md section 10
+
+**Decision.** Deploy as a single Docker image on Koyeb's free tier, with a free Neon
+Postgres behind it and no third service. Four pieces of work make that possible, all in this
+change:
+
+1. **The API serves the built interface** (`app/web.py`). One origin, no CORS, one thing to
+   deploy. Requests under the API prefix stay API requests; everything else returns the
+   single-page shell so a reload of `/w/{id}/data` works. Hashed assets are cached for a
+   year, `index.html` never.
+2. **Blobs live in Postgres** (`app/storage/postgres.py`, `blobs` table), selected by
+   `STORAGE_BACKEND=postgres`. Local development keeps the directory. The store is built
+   once per process rather than per request: a directory does not care, but a connection
+   pool per request would exhaust a free tier's connection limit inside one page of the
+   document viewer.
+3. **A `Dockerfile`** at the repository root: Node builds the client, Python runs the
+   application, Tesseract comes from apt, `samples/` is copied in, migrations run on start,
+   one uvicorn worker.
+4. **A `Makefile`**, which also closes the "no Makefile" gap the README has carried since
+   the beginning.
+
+**Alternatives considered.** Render, which sleeps after 15 minutes. Fly.io, which no longer
+has a free tier. Cloud Run, which throttles the processor between requests. Object storage
+on Cloudflare R2 instead of the database. Keeping `LocalStorage` and accepting an ephemeral
+container disk.
+
+**Reasoning.** The constraint that decides everything is D9 and D14: the document queue and
+the event bus are in-process, so this deploys as exactly one instance of one process. That
+removes every platform whose free tier is built around scaling to zero or scaling out, and
+it makes "always on" worth more than raw speed. Koyeb's free instance is one service that
+does not sleep, without a credit card.
+
+**Blobs in the database is the interesting one**, because it is the choice a scaling plan
+would not make. On a free tier the container's disk does not survive a redeploy, and
+`LocalStorage` there would mean the originals and the page images disappearing while their
+rows stayed behind: the table would keep showing values, and every attempt to trace one back
+to its page would fail. That is the fourth non-negotiable in `CLAUDE.md` breaking silently,
+which is worse than it breaking loudly. Putting the bytes in Postgres makes the container
+stateless and leaves exactly one thing holding state. R2 is the better answer for a real
+corpus and needs a third account and an S3 client; for an MVP measured in megabytes it is
+ceremony.
+
+The storage protocol was written for this in the first place: "one new class rather than a
+search for every `open()` in the codebase". It took one class, one table, and one setting.
+
+**What it costs, accepted knowingly.** 0.1 vCPU and 512 MB, so processing is slow and OCR
+is the memory risk. 0.5 GB of database, page images included. No backups. All named in
+`docs/deployment.md` section 6 rather than discovered.
+
+**Cut.** Object storage. A separate worker process, which is the only one of these that is
+not just money: it would mean moving the queue and the bus out of the process, and the
+single-instance constraint is what pays to avoid that. Any autoscaling. A staging
+environment.
+
+---
+
+## D87. Railway, and a connection string that does not need editing
+
+**Date:** September 6, 2026 · **Status:** Active, supersedes the platform half of D86
+
+**Decision.** Deploy to Railway: one service built from the repository's `Dockerfile`, one
+Railway Postgres beside it in the same project, `DATABASE_URL` wired as
+`${{Postgres.DATABASE_URL}}`. Three things came with it:
+
+1. **`railway.json`**, so the builder, the health check path and the restart policy are in
+   the repository rather than in a dashboard nobody can diff.
+2. **`docker-entrypoint.sh`**, which retries the migration for about thirty seconds before
+   giving up loudly.
+3. **`DATABASE_URL` is normalised on the way in** (`app/config.py`): `postgres://` and
+   `postgresql://` become `postgresql+asyncpg://`, `sslmode` becomes asyncpg's `ssl`, and
+   `channel_binding` is dropped. `app/db/urls.py` translates back for the synchronous
+   driver that blob storage uses.
+
+**Alternatives considered.** Koyeb, which D86 chose. Instructing the reader to rewrite the
+URL by hand, which is what the previous version of `docs/deployment.md` did. Using Railway's
+public database URL to sidestep the private network's timing.
+
+**Reasoning.** Koyeb is simply not available to us, and Railway is already connected to the
+repository. It has no permanent free tier, which was Koyeb's whole appeal, but a trial credit
+covers a demo period and the application is unchanged either way: the same image, the same
+two variables.
+
+**The URL rewrite is the part worth defending.** Every managed Postgres publishes a
+connection string for the standard synchronous client, and this application talks asyncpg,
+which needs a different scheme and rejects `sslmode` outright. Asking a person to edit a
+pasted secret is asking for the single most likely deployment failure, and the one with the
+worst diagnostics: it appears on the first connection, inside a container, as a driver error
+with nothing pointing back at the paste. Doing it in a validator means `DATABASE_URL` can be
+wired straight from the provider's own variable and the step cannot be got wrong.
+
+TLS intent is translated rather than dropped, which is the detail that would otherwise bite:
+deleting `sslmode=require` because asyncpg dislikes the spelling would silently stop
+encrypting a connection the provider requires to be encrypted.
+
+**The retry is not superstition either.** Railway's private network comes up shortly after
+the container, and on a first deploy the database may still be starting, so the first
+connection this process makes is the one most likely to fail for reasons unrelated to the
+application. It gives up rather than starting anyway: a server running against an unmigrated
+schema fails later, further from the cause, and looks like a bug in the product.
+
+**Cut.** A staging environment. Any use of Railway's public database URL, which costs egress
+for no benefit once the retry exists.
+

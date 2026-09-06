@@ -93,6 +93,9 @@ it itself.
 
 Two processes, two terminals.
 
+There is a `Makefile` for all of this: `make setup` once, then `make api` and `make web` in
+two terminals. `make help` lists the rest. The commands below are what those targets run.
+
 **Terminal 1, the backend:**
 
 ```bash
@@ -317,8 +320,8 @@ specification, the server evaluates it, and the result is bound into the interfa
 
 Stated rather than hidden, in the spirit of `decisions.md`.
 
-- **No Makefile.** `docs/implementation.md` section 10 plans `make setup` and `make dev`; the
-  commands above are what those targets would run.
 - **No CSV export** from the Data screen.
-- **Deployment is unverified.** There is no container runtime in this environment, so no
-  Dockerfile has been tested. Everything above is the local path only.
+- **The image has never been built.** There is no container runtime in this environment, so
+  the `Dockerfile` is written and unbuilt: the first build will happen on the platform.
+  `make preflight` checks the five things that can be checked without one. See
+  `docs/deployment.md`.

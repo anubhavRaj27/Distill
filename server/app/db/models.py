@@ -29,6 +29,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -553,3 +554,32 @@ class DashboardRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
+
+
+# ---------------------------------------------------------------------------
+# Blobs
+# ---------------------------------------------------------------------------
+
+
+class Blob(Base):
+    """An original document or a rendered page image, when storage is the database.
+
+    Only written by ``app.storage.postgres``, which is one of two implementations of the
+    storage boundary and the one a free deployment uses, because the container it runs in
+    has no disk that survives a restart. See decision D86.
+
+    No foreign key to a document. Keys are hierarchical strings built by
+    ``app.storage.local``, deletion is a prefix delete, and the storage layer deliberately
+    knows nothing about what a key refers to; a column pointing at ``documents`` would put
+    that knowledge in the schema and make the store answerable to a model it does not use.
+    """
+
+    __tablename__ = "blobs"
+
+    key: Mapped[str] = mapped_column(String(1024), primary_key=True)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
