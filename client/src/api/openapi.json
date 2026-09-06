@@ -69,6 +69,74 @@
       }
     },
     "/api/v1/workspaces/{workspace_id}": {
+      "patch": {
+        "tags": [
+          "workspaces"
+        ],
+        "summary": "Rename a workspace",
+        "description": "Set the workspace's name. Requirement FR-01, decision D77.\n\nThe name is generated once, from the first batch of documents, and is never regenerated\nafterwards \u2014 so this write is final in the sense that matters: nothing else will\noverwrite it.",
+        "operationId": "rename_workspace_api_v1_workspaces__workspace_id__patch",
+        "parameters": [
+          {
+            "name": "workspace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Workspace Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameWorkspaceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceOverview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "workspaces"
@@ -2514,6 +2582,22 @@
           "to"
         ],
         "title": "RenameOperation"
+      },
+      "RenameWorkspaceRequest": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "description": "What to call this collection. Trimmed; must not be empty, because an empty name is indistinguishable from never having named it, and this route is the only way a person can say what it is called."
+          }
+        },
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "RenameWorkspaceRequest"
       },
       "SchemaResponse": {
         "properties": {

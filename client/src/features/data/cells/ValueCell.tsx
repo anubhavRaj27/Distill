@@ -38,7 +38,14 @@ const Text = styled.span<{ $mono?: boolean; $muted?: boolean }>`
   font-size: ${({ $mono }) => ($mono ? '11px' : '12px')};
   line-height: 1.4;
   color: ${({ $muted, theme }) => ($muted ? theme.color.inkMuted : theme.color.ink)};
-  overflow-wrap: anywhere;
+  /*
+   * break-word, not anywhere. They differ in one place that matters here: anywhere
+   * counts the break opportunities when the browser works out a cell's minimum width, so a
+   * column of company names could be squeezed to one character and every word in it split
+   * down the middle. break-word breaks a word only when the word itself will not fit,
+   * which is the case it is actually for.
+   */
+  overflow-wrap: break-word;
 `;
 
 const Chips = styled.div`

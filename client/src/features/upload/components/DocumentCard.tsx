@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { extensionOf } from '../../../lib/files';
-import type { UploadTask } from '../../../lib/upload';
 
 /**
  * One document as a sheet of paper, for the spiral on the upload screen.
@@ -23,7 +22,22 @@ import type { UploadTask } from '../../../lib/upload';
  *
  * Status rides on the card the same way it rides on `UploadRow`: never colour alone, always
  * a mark as well.
+ *
+ * The card takes a small descriptor rather than an `UploadTask`, because the spiral is no
+ * longer only for files leaving this browser. The sample documents never leave anywhere —
+ * the server already has them — and watching ten sheets turn while they are read is the
+ * same wait and deserves the same screen. A `File` is optional for exactly that reason: it
+ * is what makes an image its own thumbnail, and there is none to be had for a document that
+ * arrived on the server's own disk. See decision D79.
  */
+
+/** What the spiral needs to know about one document. */
+export interface CardDocument {
+  filename: string;
+  /** Present only when this browser holds the bytes, which is what a thumbnail needs. */
+  file?: File;
+  phase: 'waiting' | 'sending' | 'ready' | 'failed';
+}
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg']);
 const SHEET_EXTENSIONS = new Set(['csv', 'xlsx']);
@@ -176,13 +190,13 @@ const Stamp = styled.span`
  * Returns null for anything that is not an image, and for an image the browser refuses to
  * decode — a `.png` that is really something else, which the server would reject anyway.
  */
-function useThumbnail(file: File, enabled: boolean): string | null {
+function useThumbnail(file: File | undefined, enabled: boolean): string | null {
   // Derived rather than held in state: a `useState` filled from an effect would render the
   // card once without its picture and once with, for a value that is a pure function of
   // the file. The effect exists only to hand the URL back when the card goes away.
   const url = useMemo(
     () =>
-      enabled && typeof URL.createObjectURL === 'function'
+      file && enabled && typeof URL.createObjectURL === 'function'
         ? URL.createObjectURL(file)
         : null,
     [enabled, file],
@@ -196,14 +210,14 @@ function useThumbnail(file: File, enabled: boolean): string | null {
   return url;
 }
 
-export function DocumentCard({ task }: { task: UploadTask }) {
-  const extension = extensionOf(task.file.name);
+export function DocumentCard({ document }: { document: CardDocument }) {
+  const extension = extensionOf(document.filename);
   const preview = previewFor(extension);
-  const thumbnail = useThumbnail(task.file, preview === 'image');
+  const thumbnail = useThumbnail(document.file, preview === 'image');
   const [broken, setBroken] = useState(false);
 
   return (
-    <Sheet data-phase={task.phase}>
+    <Sheet data-phase={document.phase}>
       <Body>
         {preview === 'image' && thumbnail && !broken && (
           <Thumbnail src={thumbnail} alt="" onError={() => setBroken(true)} />
@@ -228,16 +242,16 @@ export function DocumentCard({ task }: { task: UploadTask }) {
             <Line key={index} data-title={index === 0} style={{ width }} />
           ))}
 
-        {(task.phase === 'ready' || task.phase === 'failed') && (
-          <Stamp data-phase={task.phase}>
-            {task.phase === 'failed' ? <AlertCircle size={12} /> : <Check size={12} />}
+        {(document.phase === 'ready' || document.phase === 'failed') && (
+          <Stamp data-phase={document.phase}>
+            {document.phase === 'failed' ? <AlertCircle size={12} /> : <Check size={12} />}
           </Stamp>
         )}
       </Body>
 
       <Footer>
         <Badge>{extension.toUpperCase()}</Badge>
-        <Name>{task.file.name}</Name>
+        <Name>{document.filename}</Name>
       </Footer>
     </Sheet>
   );

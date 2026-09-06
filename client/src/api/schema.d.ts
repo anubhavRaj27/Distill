@@ -52,7 +52,15 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename a workspace
+         * @description Set the workspace's name. Requirement FR-01, decision D77.
+         *
+         *     The name is generated once, from the first batch of documents, and is never regenerated
+         *     afterwards — so this write is final in the sense that matters: nothing else will
+         *     overwrite it.
+         */
+        patch: operations["rename_workspace_api_v1_workspaces__workspace_id__patch"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_id}/documents": {
@@ -919,6 +927,14 @@ export interface components {
              */
             label?: string | null;
         };
+        /** RenameWorkspaceRequest */
+        RenameWorkspaceRequest: {
+            /**
+             * Label
+             * @description What to call this collection. Trimmed; must not be empty, because an empty name is indistinguishable from never having named it, and this route is the only way a person can say what it is called.
+             */
+            label: string;
+        };
         /** SchemaResponse */
         SchemaResponse: {
             /** Version */
@@ -1158,6 +1174,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceOverview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_workspace_api_v1_workspaces__workspace_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameWorkspaceRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

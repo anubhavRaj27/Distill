@@ -1,6 +1,7 @@
 import { AlertCircle, Check, Loader } from 'lucide-react';
 import styled from 'styled-components';
 
+import { STAGE_WORDS } from './stageWords';
 import type { DocumentProgress } from './useDocumentProgress';
 
 /**
@@ -85,15 +86,6 @@ const Stage = styled.span`
   font-variant: small-caps;
   letter-spacing: 0.02em;
 `;
-
-const STAGE_WORDS: Record<string, string> = {
-  uploaded: 'queued',
-  parsing: 'reading the file',
-  extracting: 'pulling out values',
-  indexing: 'making it searchable',
-  done: 'ready',
-  failed: 'failed',
-};
 
 export interface ProcessingStripProps {
   documents: DocumentProgress[];

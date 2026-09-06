@@ -4,6 +4,7 @@ import styled from 'styled-components';
 
 import type { components } from '../../api/schema';
 import { formatBytes } from '../../lib/files';
+import { STAGE_WORDS } from '../processing/stageWords';
 import type { DocumentProgress } from '../processing/useDocumentProgress';
 
 /**
@@ -29,8 +30,19 @@ import type { DocumentProgress } from '../processing/useDocumentProgress';
 
 type DocumentSummary = components['schemas']['DocumentSummary'];
 
-/** A document as this list needs it: the stored row, with any live stage laid over it. */
-export interface LibraryDocument extends DocumentSummary {
+/**
+ * A document as this list needs it: the stored row, with any live stage laid over it.
+ *
+ * The size, format and page count are optional because a document can be known to the event
+ * stream before the overview has described it — which is the normal case for the first few
+ * seconds after an upload. A row with a name and a stage is worth showing; waiting for its
+ * byte count would mean showing nothing at all while the interesting part happens.
+ */
+export interface LibraryDocument
+  extends Omit<DocumentSummary, 'size_bytes' | 'source_format' | 'created_at'> {
+  size_bytes?: number;
+  source_format?: DocumentSummary['source_format'];
+  created_at?: string;
   liveStatus?: DocumentProgress['status'];
   liveStageDetail?: string | null;
   liveFailureReason?: string | null;
@@ -179,20 +191,6 @@ const Empty = styled.p`
   border-radius: ${({ theme }) => theme.radius.md};
 `;
 
-/**
- * The same words the processing strip uses. One vocabulary for one set of states: a person
- * who read "pulling out values" above their conversation should not meet "extracting" here
- * and have to work out that they are the same thing.
- */
-const STAGE_WORDS: Record<string, string> = {
-  uploaded: 'queued',
-  parsing: 'reading the file',
-  extracting: 'pulling out values',
-  indexing: 'making it searchable',
-  done: 'ready',
-  failed: 'failed',
-};
-
 const FORMAT_WORDS: Record<string, string> = {
   pdf: 'PDF',
   docx: 'DOCX',
@@ -258,7 +256,7 @@ export function DocumentLibrary({
         const detail = failed
           ? (document.liveFailureReason ?? document.failure_reason)
           : (document.liveStageDetail ?? document.stage_detail);
-        const Icon = glyphFor(document.source_format);
+        const Icon = glyphFor(document.source_format ?? '');
         const isConfirming = confirming === document.id;
         const isDeleting = deletingId === document.id;
 
@@ -282,7 +280,9 @@ export function DocumentLibrary({
                   {STAGE_WORDS[status] ?? status}
                 </Stage>
                 {pagesLabel(document.page_count) && <span>{pagesLabel(document.page_count)}</span>}
-                <span>{formatBytes(document.size_bytes)}</span>
+                {document.size_bytes !== undefined && (
+                  <span>{formatBytes(document.size_bytes)}</span>
+                )}
                 {/*
                   The stage detail is the server's own sentence — "scanned image detected,
                   running text recognition", or why a file failed. It is the difference

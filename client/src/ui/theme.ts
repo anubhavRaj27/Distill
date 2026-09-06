@@ -105,6 +105,12 @@ export const theme = {
     /** Paper lifting off paper. Barely there on purpose. */
     card: '0 1px 2px rgba(26, 34, 56, 0.06)',
     raised: '0 2px 8px rgba(26, 34, 56, 0.08)',
+    /**
+     * Off the page entirely, for the one element that floats over everything: the toast
+     * stack (decision D73). Heavier than `raised` because it has to read as being in front
+     * of the page rather than part of it, and it sits on ink rather than paper.
+     */
+    lifted: '0 6px 24px rgba(26, 34, 56, 0.18)',
   },
 
   /** Widths the layout is built around. Desktop-first, per the requirements. */

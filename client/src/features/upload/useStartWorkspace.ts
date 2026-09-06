@@ -17,8 +17,11 @@ import { usePendingUploads } from './pendingUploads';
  *   owns the transfer and shows a bar per file. Uploading here instead would mean a screen
  *   that cannot report progress holding a screen that exists to report it.
  * - **Samples.** The server loads them from its own disk (decision D15). There is nothing
- *   for a progress bar to measure, so this goes straight to Chat, where the processing
- *   strip picks the story up.
+ *   for a progress bar to measure, and this used to go straight to Chat for that reason —
+ *   which meant the sample path, the one a reviewer takes, skipped the screen that narrates
+ *   the reading of the documents entirely. It now lands on the same upload screen, where
+ *   there is a great deal to watch even with no bytes moving: parsing, extraction and
+ *   indexing, per document. See decision D76.
  */
 
 export type StartIntent =
@@ -60,6 +63,14 @@ export function useStartWorkspace() {
       }
 
       logger.event('samples.start', {});
+      /*
+       * Nothing to stage, and staged anyway: an entry for this workspace is how the upload
+       * screen knows a person arrived through the front door rather than by clicking the
+       * Upload tab, which is what decides whether the reading is worth confirming and
+       * whether Continue waits for it (decisions D76, D81). The screen clears the entry on
+       * mount, so it says "this arrival", not "this workspace".
+       */
+      stage(workspaceId, [], []);
       const { error, response } = await api.POST(
         '/api/v1/workspaces/{workspace_id}/documents/seed',
         { params: { path: { workspace_id: workspaceId }, header: authHeader(token) } },
@@ -68,10 +79,11 @@ export function useStartWorkspace() {
 
       return { workspaceId, token, intent: 'samples' };
     },
-    onSuccess: ({ workspaceId, intent }) => {
-      // The token is already in storage, so in-app navigation does not carry it. The
-      // fragment form exists for links a person shares (decision D31).
-      void navigate(intent === 'files' ? `/w/${workspaceId}/upload` : `/w/${workspaceId}/chat`);
+    onSuccess: ({ workspaceId }) => {
+      // Both ways in land on the same screen. The token is already in storage, so in-app
+      // navigation does not carry it; the fragment form exists for links a person shares
+      // (decision D31).
+      void navigate(`/w/${workspaceId}/upload`);
     },
     onError: (failure) => {
       logger.event('workspace.start.failed', {

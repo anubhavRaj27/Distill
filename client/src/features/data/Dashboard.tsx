@@ -1,19 +1,24 @@
 import { RefreshCw } from 'lucide-react';
 import styled from 'styled-components';
 
+import { Surface } from '../a2ui/Surface';
+import { SurfaceBoundary } from '../a2ui/SurfaceBoundary';
 import type { DashboardState } from './useDashboard';
 
 /**
  * The agent-generated dashboard: panels it judged worth showing given the fields, their
  * coverage, and their value distributions (requirements section 3.3).
  *
- * These components are the frame only — title, one-line rationale, states, and the controls
- * around them. The **body of a panel is deliberately not drawn here.** Each panel is an
- * A2UI surface bound to server-computed data (decision D39, product principle 5): the agent
- * emits a query specification, the server evaluates it against `field_values`, and the
- * result is bound into the surface by path. A chart drawn in the client from numbers the
- * client added up would be a different product with a weaker promise, so the slot stays
- * empty until `GET /dashboard` and the A2UI catalog exist.
+ * A panel's body is an **A2UI surface**, rendered by the same component that renders a
+ * chat visual (decision D39, product principle 5): the agent emits a query specification,
+ * the server evaluates it against `field_values`, and the result is bound into the surface
+ * by path. A chart drawn in the client from numbers the client added up would be a
+ * different product with a weaker promise.
+ *
+ * That slot sat empty until September 6, 2026 — the panels arrived with their surfaces
+ * attached and this file rendered the rationale and dropped them, so the product had a
+ * dashboard with no charts in it (decision D75). It is one line of rendering, and the
+ * comment that used to be here said it was waiting for a catalog that already existed.
  *
  * What is real today: the states. Not generated, generating, ready, stale, and failed are
  * exactly the situations requirements section 3.5 asks the dashboard area to survive
@@ -27,11 +32,37 @@ const Column = styled.aside`
   gap: ${({ theme }) => theme.space.md};
 `;
 
+/**
+ * The column's own heading, and the two controls that belong to it.
+ *
+ * It matches the shape of the table's heading on the other side — a name and a line saying
+ * what you are looking at — for a plain layout reason as well as a reading one: the two
+ * columns of this screen are a grid row, and a bare 32px strip of buttons on one side
+ * against a 38px heading on the other started the panels and the table at different
+ * heights, which reads as a mistake rather than as a column.
+ */
+const Head = styled.div`
+  margin-right: auto;
+  min-width: 0;
+
+  h2 {
+    font-family: ${({ theme }) => theme.font.display};
+    font-weight: 400;
+    font-size: 15px;
+    color: ${({ theme }) => theme.color.ink};
+  }
+  p {
+    font-size: 11px;
+    line-height: 1.45;
+    color: ${({ theme }) => theme.color.inkMuted};
+  }
+`;
+
 const Controls = styled.div`
   display: flex;
   align-items: center;
   gap: ${({ theme }) => theme.space.sm};
-  min-height: 32px;
+  min-height: 38px;
 `;
 
 const RegenerateButton = styled.button`
@@ -39,7 +70,7 @@ const RegenerateButton = styled.button`
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
+  flex-shrink: 0;
   padding: 4px 10px;
 
   font-family: inherit;
@@ -136,15 +167,19 @@ export function Dashboard({ state, onRegenerate }: DashboardProps) {
   return (
     <Column aria-label="Dashboard">
       <Controls>
-        <RegenerateButton type="button" disabled={generating} onClick={onRegenerate}>
-          <RefreshCw size={12} data-spinning={generating} aria-hidden="true" />
-          {generating ? 'Generating…' : 'Regenerate'}
-        </RegenerateButton>
+        <Head>
+          <h2>Dashboard</h2>
+          <p>Panels the agent chose from what the documents actually contain</p>
+        </Head>
         {state.stale && (
           <StaleBadge role="status">
             Stale — {state.newDocuments === 1 ? '1 new document' : `${state.newDocuments} new documents`} added
           </StaleBadge>
         )}
+        <RegenerateButton type="button" disabled={generating} onClick={onRegenerate}>
+          <RefreshCw size={12} data-spinning={generating} aria-hidden="true" />
+          {generating ? 'Generating…' : 'Regenerate'}
+        </RegenerateButton>
       </Controls>
 
       {state.status === 'failed' && (
@@ -177,13 +212,19 @@ export function Dashboard({ state, onRegenerate }: DashboardProps) {
       )}
 
       {state.status === 'ready' &&
-        state.panels.map((panel) => (
-          <Panel key={panel.id}>
+        state.panels.map((panel, index) => (
+          /*
+           * Keyed by position, deliberately. A panel has no identifier of its own: the set
+           * is regenerated wholesale, so "the second panel" is as stable as it gets and a
+           * missing `id` would otherwise key every panel `undefined`.
+           */
+          <Panel key={`${panel.title}-${index}`}>
             <PanelTitle>{panel.title}</PanelTitle>
-            {/*
-              The A2UI surface renders here once the catalog exists. Until then the panel
-              shows its rationale, which is real content rather than a placeholder.
-            */}
+            {Array.isArray(panel.surface) && panel.surface.length > 0 && (
+              <SurfaceBoundary messages={panel.surface}>
+                <Surface messages={panel.surface} />
+              </SurfaceBoundary>
+            )}
             {panel.rationale && <Rationale>{panel.rationale}</Rationale>}
           </Panel>
         ))}

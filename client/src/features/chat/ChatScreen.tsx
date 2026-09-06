@@ -5,6 +5,7 @@ import styled from 'styled-components';
 
 import { api, authHeader, toFailure } from '../../api/client';
 import { AppHeader } from '../../app/AppHeader';
+import { useRenameWorkspace } from '../../app/useRenameWorkspace';
 import { logger } from '../../lib/logger';
 import { consumeTokenFromFragment, recallToken } from '../../lib/workspace-token';
 import { ProcessingStrip } from '../processing/ProcessingStrip';
@@ -130,6 +131,26 @@ export function ChatScreen() {
     })),
   );
 
+  /*
+   * The overview is a snapshot, and on this screen it is routinely taken before the
+   * documents exist: arriving here straight from an upload (decision D81) means it was
+   * fetched while the workspace was still empty, so the header said "0 documents" over a
+   * conversation about one. Refetching when the live stream reports another document
+   * settled is what keeps the chrome honest, and it is a refetch rather than an
+   * invalidation for the reason recorded in decision D72.
+   */
+  const settledCount = progress.filter(
+    (document) => document.status === 'done' || document.status === 'failed',
+  ).length;
+  const refetchedAt = useRef(0);
+  const refetchOverview = overview.refetch;
+  useEffect(() => {
+    if (settledCount <= refetchedAt.current) return;
+    refetchedAt.current = settledCount;
+    void refetchOverview();
+  }, [settledCount, refetchOverview]);
+
+  const rename = useRenameWorkspace(workspaceId, token);
   const conversation = useConversation(workspaceId, token);
   const anyReady = progress.some((document) => document.status === 'done');
   const suggestions = useSuggestions(workspaceId, token, anyReady);
@@ -217,6 +238,7 @@ export function ChatScreen() {
           documentCount: documents.length,
         }}
         onAddDocuments={() => logger.event('upload.start', { from: 'workspace-header' })}
+        onRename={(label) => rename.mutate(label)}
       />
 
       <Split>

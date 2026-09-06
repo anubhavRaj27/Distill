@@ -204,18 +204,28 @@ const Td = styled.td`
 const ABSENT = '—';
 
 /**
- * A figure with its unit.
+ * A figure with its unit, formatted **exactly** as the server formats the same figure in
+ * prose (`chat/stream.format_figure`).
  *
- * Grouped thousands and no forced decimals: these are aggregates, and "184,200" reads as a
- * total where "184,200.00" reads as a ledger line. The unit is appended rather than turned
- * into a symbol, for the reason `formatValue` gives — a workspace can hold more than one
- * currency and "$" would silently merge them.
+ * Grouped thousands; a whole number keeps no decimals, because "184,200" reads as a total
+ * where "184,200.00" reads as a ledger line; anything else takes two, because "890.5 USD"
+ * is not how money is written. That second half was missing, and it showed the moment the
+ * charts appeared: a bar labelled "890.5 USD" sat directly above prose citing "890.50 USD"
+ * for the same number. Decision D46 asks for one number to read one way, and two formatters
+ * with different rules cannot promise that.
+ *
+ * The unit is appended rather than turned into a symbol, for the reason `formatValue`
+ * gives: a workspace can hold more than one currency and "$" would silently merge them.
  */
 function formatFigure(value: unknown, unit?: string): string {
   const numeric = readNumber(value);
   if (numeric === null) return typeof value === 'string' ? value : ABSENT;
 
-  const text = numeric.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const digits = Number.isInteger(numeric) ? 0 : 2;
+  const text = numeric.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
   return unit ? `${text} ${unit}` : text;
 }
 

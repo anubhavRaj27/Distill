@@ -14,11 +14,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
  */
 
 export interface DashboardPanel {
-  id: string;
+  /** Absent from the server's response: panels are regenerated as a set, not addressed. */
+  id?: string;
   title: string;
   rationale?: string;
-  /** The A2UI surface messages, once the catalog exists. Untouched here. */
-  surface?: unknown;
+  /**
+   * The A2UI message array for this panel's body, carrying its data in an
+   * `updateDataModel` message. Passed through untouched: this hook must not read the
+   * numbers, only hand them to the renderer (decision D37).
+   */
+  surface?: unknown[];
 }
 
 export type DashboardState =

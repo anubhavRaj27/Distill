@@ -3,6 +3,7 @@ import { useParams } from 'react-router';
 import styled from 'styled-components';
 
 import { AppHeader } from '../../app/AppHeader';
+import { useRenameWorkspace } from '../../app/useRenameWorkspace';
 import { consumeTokenFromFragment, recallToken } from '../../lib/workspace-token';
 import { Dashboard } from './Dashboard';
 import { DocumentSummary } from './DocumentSummary';
@@ -54,13 +55,23 @@ const Columns = styled.div`
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 62% 38%;
+  /*
+   * Fractions, not percentages, and the difference was the whole bug.
+   *
+   * 62% 38% resolves against the container's content box and knows nothing about the
+   * gap, so the tracks summed to 100% of the width PLUS 24px. The dashboard column hung
+   * exactly one gap over the right edge of the page — past the padding, flush against the
+   * window — while the table column kept its share. fr is the unit that divides what is
+   * left after the gap, which is what was meant. minmax(0, ...) on both tracks stops a wide
+   * table or a long panel title from pushing its track past its share.
+   */
+  grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
   gap: ${({ theme }) => theme.space.xl};
   padding: ${({ theme }) => theme.space.lg} 0 ${({ theme }) => theme.space.xl};
 
   /* Below this the two columns stop being readable side by side and stack instead. */
   @media (max-width: 1100px) {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 `;
 
@@ -105,6 +116,7 @@ export function DataScreen() {
   const [hiddenFields, setHiddenFields] = useState<ReadonlySet<string>>(new Set());
 
   const workspace = useWorkspace(workspaceId, token);
+  const rename = useRenameWorkspace(workspaceId, token);
   const records = useRecords(workspaceId, token);
   const correction = useCorrection(workspaceId, token);
   const dashboard = useDashboard(workspaceId, token);
@@ -158,11 +170,17 @@ export function DataScreen() {
           documentCount: workspace.data?.documents?.length ?? 0,
         }}
         onAddDocuments={() => {}}
+        onRename={(label) => rename.mutate(label)}
       />
 
       <Main>
         <TitleBar>
-          <h1>Dashboard</h1>
+          {/*
+            "Data", because that is the screen. It said "Dashboard" over a page that is
+            62% table, with a second thing also called Dashboard beside it — two headings
+            with one name and neither of them the page.
+          */}
+          <h1>Data</h1>
         </TitleBar>
 
         <Columns>
