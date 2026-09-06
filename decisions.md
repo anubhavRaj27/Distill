@@ -3270,3 +3270,27 @@ avoid.
 
 **Cut.** Nothing. The title is still in the data model for anything that reads the result.
 
+---
+
+## D85. The wordmark is a link home, and home is Upload
+
+**Date:** September 6, 2026 · **Status:** Active, extends D57
+
+**Decision.** The wordmark in the application header is a link. Inside a workspace it goes to
+that workspace's Upload screen; with no workspace it goes to the front door. Its accessible
+name stays the visible one, "Distill".
+
+**Alternatives considered.** Linking to Chat, which is the main screen (D34). Linking to the
+front door in every case. Leaving it inert.
+
+**Reasoning.** Anubhav asked for it, and a logo in the top left is a home link everywhere
+else — leaving it inert spends a convention people already have. Upload rather than Chat
+because Upload is where the documents are, and it is the one screen of the three that is also
+the way to add more.
+
+Inside a workspace it must not go to the bare front door: that screen mints nothing and would
+show a drop zone for a workspace the person is already standing in.
+
+**Cut.** A separate home icon, which would be a second control for a job the mark already
+does.
+

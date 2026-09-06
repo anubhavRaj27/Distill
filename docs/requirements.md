@@ -182,6 +182,9 @@ D72. Already built.
    nowhere until a workspace exists, so the chrome that switches between the three screens
    begins with the workspace (decision D57, superseding this part of decision D51). The
    header appears in the workspace state, where those tabs lead somewhere.
+6b. In that header the wordmark is a link home, and home is this screen: it goes to the
+   current workspace's Upload screen, or to the front door when there is no workspace. See
+   decision D85.
 7. Above the sentence, the name "Distill" drawn as particles that scatter away from the
    cursor and spring back into the letterforms. It is the argument of the product made
    before the person has done anything — a scattered pile resolving into something exact —
