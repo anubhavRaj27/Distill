@@ -1,7 +1,7 @@
 """The fake provider: replay a recorded response, or synthesise one offline.
 
 See ``app.llm.base`` for why this is a first-class implementation rather than a test double,
-and decision D13 for the reasoning. In short: no key exists yet, the end-to-end test has to
+and decision D11 for the reasoning. In short: no key exists yet, the end-to-end test has to
 be deterministic, and a reviewer with no key should still see the product work.
 
 Resolution order for every call:
@@ -119,7 +119,7 @@ class FakeClient:
     async def embed(
         self, texts: Sequence[str], *, task: EmbedTask = "similarity"
     ) -> list[Vector | None]:
-        """Replay recorded vectors. Decision D24.
+        """Replay recorded vectors. Decision D18.
 
         ``task`` is accepted to satisfy the protocol and deliberately ignored: a recording
         is one vector per label, and keying recordings by task as well would multiply the
@@ -164,7 +164,7 @@ class FakeClient:
                 self._embeddings = {}
         return self._embeddings
 
-    # -- streamed text (decision D44) -----------------------------------
+    # -- streamed text (decision D32) -----------------------------------
 
     STREAM_FIXTURE_DIR = "chat_answer"
     WORDS_PER_PIECE = 3
@@ -343,7 +343,7 @@ def _synthesise_guided_extraction(request: LLMRequest) -> GuidedExtraction:
 
 
 def _synthesise_answer(request: LLMRequest) -> str:
-    """Compose a plausible offline answer from the retrieved passages. Decision D13.
+    """Compose a plausible offline answer from the retrieved passages. Decision D11.
 
     Not a stub string. It deliberately produces the two constructs the real answer format
     uses, because they are the ones the pipeline has to get right:
@@ -353,7 +353,7 @@ def _synthesise_answer(request: LLMRequest) -> str:
       at real word spans
     * ``{{result.<path>}}`` placeholders when a visual was evaluated, so the substitution
       path runs and the number the user sees is the server's, not this function's
-      (decision D46)
+      (decision D34)
 
     The prose itself is quoted from the passages rather than invented, which keeps the
     offline mode honest: every claim it makes is genuinely in the documents, and every
@@ -393,7 +393,7 @@ def _synthesise_answer(request: LLMRequest) -> str:
         rows = result.get("rows") or []
         if isinstance(rows, list) and rows:
             # Reference the computed value by PATH, never by retyping it. This is the whole
-            # point of decision D46, and the offline provider has to honour it too or the
+            # point of decision D34, and the offline provider has to honour it too or the
             # substitution path would never run outside a live call.
             figure = " The chart above puts the leading figure at {{result.rows.0.value}}."
         elif result.get("total") is not None:
@@ -412,10 +412,10 @@ _MISSING_HINTS = ("missing", "without", "no ", "lack", "absent")
 
 
 def _synthesise_chat_plan(request: LLMRequest) -> BaseModel:
-    """Decide answerability and a visual with no model call. Decision D13.
+    """Decide answerability and a visual with no model call. Decision D11.
 
     Crude by design, and it does the one thing that matters: it emits a **query
-    specification** rather than numbers, so the whole decision D37 path (evaluate, build a
+    specification** rather than numbers, so the whole decision D26 path (evaluate, build a
     surface, bind by path, substitute placeholders in prose) runs offline exactly as it does
     with a key. A stub that returned no visual would leave that path untested and
     undemonstrable.
@@ -527,7 +527,7 @@ def _article(word: str) -> str:
 
 
 def _synthesise_dashboard(request: LLMRequest) -> BaseModel:
-    """Propose dashboard panels from the statistics, with no model call. Decision D13.
+    """Propose dashboard panels from the statistics, with no model call. Decision D11.
 
     Deliberately proposes a VARIED set rather than repeating one shape, because the point
     of the offline path is to exercise the real one: a plan of six metrics would never
@@ -759,7 +759,7 @@ def fixture_key_for_document(
 
 
 def _synthesise_workspace_name(request: LLMRequest) -> BaseModel:
-    """A workspace name with no model call. Decision D77.
+    """A workspace name with no model call.
 
     Built from the common prefix of the filenames, which is how these collections are
     usually named in practice ("acme-invoice-2041", "acme-invoice-2098" is the Acme

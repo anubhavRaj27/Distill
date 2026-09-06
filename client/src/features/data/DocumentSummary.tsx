@@ -9,7 +9,7 @@ type RecordRow = components['schemas']['Record'];
  * A count of how much of this table can be trusted.
  *
  * Computed in the browser, and that is deliberate rather than a shortcut. Product principle
- * 3 and decision D37 say displayed numbers must be computed by the server, never typed by
+ * 3 and decision D26 say displayed numbers must be computed by the server, never typed by
  * the model — the target of that rule is the **agent**, which plans aggregates and could
  * hallucinate a total. These five numbers are not planned by anything: they are a tally of
  * rows already on screen, by a tier the server derived. Counting them again on the server

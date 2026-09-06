@@ -28,7 +28,7 @@ import { useSuggestions } from './useSuggestions';
  * every citation opens.
  *
  * It is deliberately usable while documents are still being read. The upload screen hands
- * over as soon as bytes have arrived (decision D53), so the processing strip narrates the
+ * over as soon as bytes have arrived (decision D36), so the processing strip narrates the
  * rest here rather than a spinner standing between a person and the documents that are
  * already indexed.
  */
@@ -99,7 +99,7 @@ export function ChatScreen() {
   const { workspaceId = '' } = useParams();
 
   // A shared link carries the token in its fragment; it is moved into storage and stripped
-  // from the address bar before anything renders (decision D31).
+  // from the address bar before anything renders (decision D21).
   const [token] = useState(
     () => consumeTokenFromFragment(workspaceId) ?? recallToken(workspaceId),
   );
@@ -133,11 +133,11 @@ export function ChatScreen() {
 
   /*
    * The overview is a snapshot, and on this screen it is routinely taken before the
-   * documents exist: arriving here straight from an upload (decision D81) means it was
+   * documents exist: arriving here straight from an upload (decision D36) means it was
    * fetched while the workspace was still empty, so the header said "0 documents" over a
    * conversation about one. Refetching when the live stream reports another document
    * settled is what keeps the chrome honest, and it is a refetch rather than an
-   * invalidation for the reason recorded in decision D72.
+   * invalidation.
    */
   const settledCount = progress.filter(
     (document) => document.status === 'done' || document.status === 'failed',

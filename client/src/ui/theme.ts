@@ -4,12 +4,12 @@
  * The visual language is "distillation": crude, mixed input narrowing into something pure
  * and legible. Structurally that shows up as warm paper stock (documents) resolving into
  * ink on a ruled grid (the table). It is deliberately not the default AI-dashboard look —
- * no indigo-on-white, no card grid. See decision D32.
+ * no indigo-on-white, no card grid. See decision D22.
  *
  * Dark mode is the same idea turned over rather than a second design: the ink becomes the
  * ground and the paper becomes the mark. That is why the dark palette is a deep navy
  * charcoal rather than a neutral black — it is the light theme's ink colour, grown into a
- * page. See decision D88.
+ * page.
  *
  * Every token lives here and is emitted as a CSS custom property by `GlobalStyle`. Nothing
  * outside this file hard-codes a colour. That matters three times over now: it is what
@@ -128,7 +128,7 @@ interface Palette {
     raised: string;
     /**
      * Off the page entirely, for the one element that floats over everything: the toast
-     * stack (decision D73). Heavier than `raised` because it has to read as being in front
+     * stack. Heavier than `raised` because it has to read as being in front
      * of the page rather than part of it.
      */
     lifted: string;
@@ -285,7 +285,7 @@ const structure = {
      * Display face, for headlines only. A transitional serif carries the "considered
      * instrument" register the creative direction asks for, and separates the product's
      * voice from its data. System faces only, so a cold start renders correct type with no
-     * network round-trip and the one-command setup stays one command. See decision D32.
+     * network round-trip and the one-command setup stays one command. See decision D22.
      */
     display:
       "'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif",

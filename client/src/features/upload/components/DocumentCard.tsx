@@ -28,7 +28,7 @@ import { extensionOf } from '../../../lib/files';
  * the server already has them — and watching ten sheets turn while they are read is the
  * same wait and deserves the same screen. A `File` is optional for exactly that reason: it
  * is what makes an image its own thumbnail, and there is none to be had for a document that
- * arrived on the server's own disk. See decision D79.
+ * arrived on the server's own disk. See decision D36.
  */
 
 /** What the spiral needs to know about one document. */

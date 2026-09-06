@@ -1,6 +1,6 @@
 """How alike are two fields, and is the answer obvious enough to act on unasked.
 
-This module implements **decision D24**. Decision D23 owns the *policy* (when the user is
+This module implements **decision D18**. Decision D27 owns the *policy* (when the user is
 interrupted); this owns the *signal* (how similarity is measured and when it is
 unambiguous).
 
@@ -35,9 +35,9 @@ the user decides.
 This is also why a **missing** embedding blocks auto-add rather than being ignored. String
 similarity alone cannot support a claim of novelty: a semantic rename scores about 0.2 on
 string, so with no vector it would look "clearly novel" and be auto-added as a duplicate
-column, which is exactly the silent wrong outcome decision D25 says to avoid. With no
+column, which is exactly the silent wrong outcome decision D27 says to avoid. With no
 vector the field goes to a card. Recorded fixtures are what keep the offline path behaving
-like the online one (decision D13).
+like the online one (decision D11).
 """
 
 from __future__ import annotations
@@ -88,10 +88,10 @@ def string_similarity(left: str, right: str) -> float:
     at 1.00 this function would clear the 0.90 auto-map bar and silently merge a company
     name into an identifier column. Those are different fields.
 
-    That pair is, almost word for word, decision D24's own example of a case that must go to
+    That pair is, almost word for word, decision D18's own example of a case that must go to
     a human. With the case-and-separator fold it scores 0.84, lands below the bar, and asks.
 
-    The division of labour this restores is exactly the one D24 describes: string
+    The division of labour this restores is exactly the one D18 describes: string
     similarity catches **formatting and typo** variants, and embeddings catch **meaning**.
     ``Invoice No`` against ``invoice_number`` scores 0.75 here and is therefore a card
     unless the embedding signal recognises it, which is the correct route for a difference
@@ -115,7 +115,7 @@ def types_compatible(incoming: FieldType, target: FieldSpec) -> bool:
     Deliberately strict, because this gates auto-mapping and the cost of being wrong is
     asymmetric: refusing produces a proposal card the user resolves in one click, while
     accepting wrongly commingles two fields' values under one column and unpicking that
-    means knowing which source key produced each value (decision D25).
+    means knowing which source key produced each value (decision D27).
 
     So only two things are compatible:
 
@@ -146,7 +146,7 @@ def types_compatible(incoming: FieldType, target: FieldSpec) -> bool:
 
 @dataclass(frozen=True)
 class Thresholds:
-    """Decision D24's four numbers.
+    """Decision D18's four numbers.
 
     A dataclass rather than reading ``Settings`` directly, so this module stays pure and
     unit-testable at any threshold without touching the environment. Callers build one from
@@ -156,7 +156,7 @@ class Thresholds:
     string_auto_map: float = 0.90
     embedding_auto_map: float = 0.88
     """MEASURED against gemini-embedding-001 on September 5, 2026. Was 0.95, a guess made
-    with no key. See decision D66.
+    with no key.
 
     Twelve synonym pairs a person would merge and twelve unrelated pairs a person would not
     were embedded and scored. The classes separate cleanly, but not where 0.95 assumed:
@@ -170,27 +170,27 @@ class Thresholds:
 
     0.88 sits above every unrelated pair observed with more than five points of headroom,
     and catches nine of twelve synonyms. The three it misses are the genuinely arguable
-    ones, and they fall through to asking, which is the direction D24 chose."""
+    ones, and they fall through to asking, which is the direction D18 chose."""
 
     margin: float = 0.05
-    """Kept at D24's value. It is a margin between the best and second-best candidate
+    """Kept at D18's value. It is a margin between the best and second-best candidate
     rather than an absolute score, so the compression of this model's scale does not shift
     it: in the measured set, a true synonym beat the runner-up by 0.08 or more, except
     between two total-shaped fields where the ambiguity is real and asking is correct."""
 
     novelty_ceiling_string: float = 0.65
-    """Measured against the fixture corpus. See decision D27.
+    """Measured against the fixture corpus. See decision D18.
 
     The highest string similarity between two genuinely DIFFERENT field labels in the
     corpus is 0.59 (``Currency`` versus ``Reference``), so 0.65 sits just above the observed
-    noise floor. Decision D24's original 0.30 made this test unpassable: unrelated pairs
+    noise floor. Decision D18's original 0.30 made this test unpassable: unrelated pairs
     routinely exceed it, so no field was ever "clearly novel" and the auto-add zone was
     unreachable in practice.
     """
 
     novelty_ceiling_embedding: float = 0.80
     """MEASURED September 5, 2026, in the same pass as ``embedding_auto_map``. Was 0.30,
-    the one number the code said a key would unblock. See decision D66.
+    the one number the code said a key would unblock.
 
     The prediction attached to 0.30 was right in direction and short by half: unrelated
     business labels score **0.764 to 0.827** under gemini-embedding-001, not 0.4 to 0.7. So
@@ -323,7 +323,7 @@ def score_pair(
 
 
 class Outcome(StrEnum):
-    """What decision D23's policy says to do with an incoming field."""
+    """What decision D27's policy says to do with an incoming field."""
 
     AUTO_MAP = "auto_map"
     AUTO_ADD = "auto_add"
@@ -340,7 +340,7 @@ class AskReason(StrEnum):
     they are the best of a bad lot, and asking about them is worse than useless.
 
     * ``COMPETING_CANDIDATES`` two fields are both plausible. A genuine judgment call, and
-      the case decision D24's margin rule exists for.
+      the case decision D18's margin rule exists for.
     * ``BORDERLINE`` one candidate resembles the field, but not enough to act on.
     * ``TYPE_MISMATCH`` the names line up but the types do not.
     * ``UNCONFIRMED_NOVELTY`` nothing resembles it, but with no embedding we cannot be sure
@@ -417,7 +417,7 @@ def classify(
 ) -> Verdict:
     """Decide whether an incoming field auto-maps, auto-adds, or needs the user.
 
-    Implements decision D24's gates on top of decision D23's three zones. Never raises: an
+    Implements decision D18's gates on top of decision D27's three zones. Never raises: an
     undecidable case is an ``ASK``, which is always a safe answer.
     """
     thresholds = thresholds or Thresholds()
@@ -496,7 +496,7 @@ def classify(
     # Each signal is tested against ITS OWN ceiling. Comparing a character ratio and a
     # cosine to one shared number treats them as the same scale, which they are not:
     # measured on the fixture corpus, unrelated label pairs reach 0.59 on the string
-    # signal, so a single 0.30 ceiling made this branch unreachable. See decision D27.
+    # signal, so a single 0.30 ceiling made this branch unreachable. See decision D18.
     below_ceiling = all(
         signals.string_score < thresholds.novelty_ceiling_string
         and (signals.embedding_score or 0.0) < thresholds.novelty_ceiling_embedding

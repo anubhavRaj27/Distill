@@ -7,7 +7,7 @@ import { api, authHeader, toFailure } from '../../api/client';
  * The document behind a citation: its page dimensions, and one rendered page as an image.
  *
  * **Why the image is fetched rather than put in a `src`.** Every route authorises with a
- * bearer token (decision D8) and `<img>` sends no headers, so the browser's own request
+ * bearer token (decision D7) and `<img>` sends no headers, so the browser's own request
  * would arrive unauthenticated and 401. The bytes are fetched with the header and handed to
  * the element as a blob URL instead. The alternative — a token in the query string — puts
  * the only credential this product has into history, logs and referrer headers.

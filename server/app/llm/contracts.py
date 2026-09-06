@@ -1,6 +1,6 @@
 """The response shapes a model is asked to produce.
 
-DELIBERATE DEVIATION FROM implementation.md SECTION 6.2 (decision D19)
+DELIBERATE DEVIATION FROM implementation.md SECTION 6.2 (decision D15)
 -----------------------------------------------------------------------
 The implementation document proposed building the schema-guided response model at runtime
 with ``pydantic.create_model``, one typed attribute per schema field. Distill instead uses a
@@ -141,7 +141,7 @@ class GuidedExtraction(BaseModel):
 
 
 class WorkspaceName(BaseModel):
-    """A short title for a collection of documents. Decision D77."""
+    """A short title for a collection of documents."""
 
     name: str = Field(
         default="",

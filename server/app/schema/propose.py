@@ -1,14 +1,14 @@
-"""Inferring the first schema from a batch of documents. Decisions D25 and D38.
+"""Inferring the first schema from a batch of documents. Decision D27.
 
 The first batch does not conflict with an existing schema, but it conflicts with **itself**.
 Eight documents can yield ``vendor_name`` from five, ``Supplier`` from two, and ``Vendor``
 from one, and deciding those are one field is a judgment call.
 
-v2 resolves that call without asking (decision D38):
+v2 resolves that call without asking (decision D27):
 
 1. **The initial schema applies immediately and never blocks.** The 60-second first run in
    the acceptance criteria depends on it.
-2. **Unification within the batch is gated by decision D24's rule.** Source keys that unify
+2. **Unification within the batch is gated by decision D18's rule.** Source keys that unify
    confidently merge into one canonical field, which is the common case and the demo path.
 3. **Source keys the rule finds uncertain stay as separate fields**, and the reason is
    recorded in the schema change summary. In v1 this queued a proposal card; v2 removed the
@@ -97,7 +97,7 @@ class Observation:
 class KeptSeparate:
     """Two fields the rule could not confidently unify, so both were kept.
 
-    Not a question (decision D38). Both fields are already in the schema; this records the
+    Not a question (decision D27). Both fields are already in the schema; this records the
     near-miss so the change summary can explain it and the interface can hint at a merge.
     """
 
@@ -252,7 +252,7 @@ async def propose_initial(
             continue
 
         # AUTO_ADD and ASK both create a field. The difference is that ASK also records a
-        # question, because decision D25 leaves uncertain unification SPLIT and asks.
+        # question, because decision D27 leaves uncertain unification SPLIT and asks.
         spec = FieldSpec(
             key=observation.key,
             label=observation.label,

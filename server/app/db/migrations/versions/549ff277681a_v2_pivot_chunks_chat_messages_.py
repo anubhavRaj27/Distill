@@ -1,13 +1,13 @@
 """v2 pivot: chunks, chat messages, dashboards; drop proposals and queries
 
-Adds the three tables the v2 product needs (decision D34):
+Adds the three tables the v2 product needs (decision D23):
 
-* ``chunks``        retrievable passages with word spans and vectors (D35, D36, D45)
-* ``chat_messages`` the persisted conversation (D44)
-* ``dashboards``    the agent-generated panels (D40)
+* ``chunks``        retrievable passages with word spans and vectors (D24, D25, D33)
+* ``chat_messages`` the persisted conversation (D32)
+* ``dashboards``    the agent-generated panels (D29)
 
 Drops the two that went with the features they served: ``proposals`` (the schema review
-loop, D38) and ``queries`` (the natural-language-to-SQL log, D35).
+loop, D27) and ``queries`` (the natural-language-to-SQL log, D24).
 
 Also widens the ``document_status`` CHECK, because the pipeline gained a ``parsing`` and an
 ``indexing`` stage and lost ``parsed``. Existing rows are migrated before the constraint is

@@ -6,7 +6,7 @@ import styled from 'styled-components';
  *
  * The server rewrites the model's `[^chunk:<uuid>]` markers into `[^n]` before the token
  * leaves it, and guarantees the matching `citation` event has already been sent
- * (decision D45). So a marker found here always has a citation behind it, and this
+ * (decision D33). So a marker found here always has a citation behind it, and this
  * component never has to render an unresolved footnote and then rewrite it — which is the
  * flicker that ordering rule exists to prevent.
  *

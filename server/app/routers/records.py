@@ -158,7 +158,7 @@ async def correct_field(
 
     From this point the value is immune to re-extraction: the write path filters
     human-owned rows, and a later model answer that disagrees is stored beside it rather
-    than over it (decision D16).
+    than over it (decision D13).
     """
     record = (
         await session.execute(
@@ -192,7 +192,7 @@ async def correct_field(
     await dashboard_module.mark_stale(session, workspace.id, reason="value corrected")
     return updated
 
-# The review queue and its keyboard flow were removed in v2 (decision D42). A second screen
+# The review queue and its keyboard flow were removed in v2 (decision D30). A second screen
 # dedicated to checking cells competes with the chat for the user's attention, and the
 # confidence tier is already visible on every cell in the table (requirement FR-14), which
 # is where a person is actually looking. The scoring function it used, `score.impact`,

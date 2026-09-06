@@ -16,7 +16,7 @@ import { StreamHeader } from './StreamHeader';
  * a reloaded one looking different.
  *
  * The order inside the card is the order the server sends things, and that is not a
- * coincidence: visual first, then prose, then citations (decision D47). A card that
+ * coincidence: visual first, then prose, then citations. A card that
  * appeared after the prose had already been written would push the text a person was
  * reading down the page.
  */

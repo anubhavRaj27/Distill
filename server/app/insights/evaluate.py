@@ -1,4 +1,4 @@
-"""Evaluating a query specification over the extracted records. Decision D37.
+"""Evaluating a query specification over the extracted records. Decision D26.
 
 Every number the product displays is produced here. Nothing in this module comes from a
 model: it receives a validated ``DataQuery``, reads the workspace's own ``field_values``,
@@ -6,7 +6,7 @@ and computes an answer in Python.
 
 WHY PYTHON AND NOT SQL
 ----------------------
-Decision D35's reasoning, restated because it is easy to forget once the code exists: a
+Decision D24's reasoning, restated because it is easy to forget once the code exists: a
 workspace holds tens of documents, so a full scan is trivial, and an evaluator written in
 Python is far easier to test exhaustively than generated SQL. There is also no SQL surface
 for a model to reach, which removes an entire class of risk rather than sandboxing it.
@@ -295,7 +295,7 @@ class _LoadedRecord:
 async def load_records(
     session: AsyncSession, workspace_id: UUID
 ) -> list[_LoadedRecord]:
-    """Every record with its values, in one pass. The workspace is small (decision D35)."""
+    """Every record with its values, in one pass. The workspace is small (decision D24)."""
     rows = list(
         (
             await session.execute(

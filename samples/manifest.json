@@ -1,7 +1,7 @@
 {
   "name": "Distill sample corpus",
   "generated_by": "server/scripts/generate_samples.py",
-  "note": "Every organisation and figure here is fictional. The set is deliberately inconsistent about field naming and date format; see decision D67.",
+  "note": "Every organisation and figure here is fictional. The set is deliberately inconsistent about field naming and date format; see decision D43.",
   "documents": [
     {
       "file": "acme-invoice-INV-2041.pdf",

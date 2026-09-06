@@ -3,7 +3,7 @@
 Everything here was learned from a real key on September 5, 2026, and every case is one
 that a plausible-looking implementation gets wrong in a way nobody notices until a demo:
 a permanent failure retried three times, or a per-minute quota retried three times inside
-the same minute. See decisions D62 and D64.
+the same minute. See decision D42.
 """
 
 from __future__ import annotations

@@ -2,14 +2,14 @@
 
 **Plan** is structured and cheap: it decides whether the documents can answer the question
 at all, and whether a visual would help. It returns a query specification, never numbers
-(decision D37).
+(decision D26).
 
 **Answer** is streamed text: it writes the prose, citing passages with markers and referring
 to computed figures by placeholder. Both run on the fast tier, because the user is watching
 (requirement FR-26 asks for a first prose token within three seconds).
 
 Between the two, the server evaluates the plan's query and builds the A2UI surface, so the
-chart is on screen before the prose starts arriving beneath it (decision D47).
+chart is on screen before the prose starts arriving beneath it.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def render_history(turns: list[tuple[str, str]]) -> str:
 def render_result(result: QueryResult | None, visual: Visual | None) -> str:
     """The evaluated result, with the paths the prose may quote from.
 
-    Shown as paths rather than only as a table because decision D46 requires the model to
+    Shown as paths rather than only as a table because decision D34 requires the model to
     refer to figures by placeholder. Listing the exact paths it may use is what makes that
     instruction followable rather than aspirational.
     """

@@ -85,7 +85,7 @@ const PageImage = styled.img`
  *
  * The one colour in the app that does not invert with the palette, and for a reason worth
  * stating: what it sits on is not the page ground but a raster of the document, which is a
- * photograph of white paper whichever mode the reader is in. Decision D88.
+ * photograph of white paper whichever mode the reader is in.
  */
 const Highlight = styled.div`
   position: absolute;

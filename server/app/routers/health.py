@@ -4,7 +4,7 @@ Reports what an operator needs in order to tell a broken deployment from a worki
 whether the database answers, whether storage is writable, and whether a Large Language
 Model key is present. **Never the key itself**, and never any part of it.
 
-``process_id`` is here because of decision D9. The worker queue and the event bus are both
+``process_id`` is here because of decision D8. The worker queue and the event bus are both
 in-process, so the API must run with exactly one worker process. Reporting the process
 identifier turns "two workers are running and half the events vanish" from a mystifying
 intermittent bug into something visible in one request.
@@ -40,7 +40,7 @@ class HealthResponse(BaseModel):
     process_id: int = Field(
         description="Operating system process identifier. The in-process worker queue and "
         "event bus require exactly one API process, so seeing this value change between "
-        "requests means the deployment is misconfigured. See decision D9."
+        "requests means the deployment is misconfigured. See decision D8."
     )
     database: CheckResult
     storage: CheckResult
@@ -75,7 +75,7 @@ async def healthz() -> HealthResponse:
 
     # A `fake` provider is a fully supported configuration, not a degraded one: the whole
     # pipeline runs against recorded fixtures. So this check reports what is configured
-    # without calling it a failure. See decision D13.
+    # without calling it a failure. See decision D11.
     llm = CheckResult(
         ok=True,
         detail=(

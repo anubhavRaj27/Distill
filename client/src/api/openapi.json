@@ -74,7 +74,7 @@
           "workspaces"
         ],
         "summary": "Rename a workspace",
-        "description": "Set the workspace's name. Requirement FR-01, decision D77.\n\nThe name is generated once, from the first batch of documents, and is never regenerated\nafterwards \u2014 so this write is final in the sense that matters: nothing else will\noverwrite it.",
+        "description": "Set the workspace's name. Requirement FR-01.\n\nThe name is generated once, from the first batch of documents, and is never regenerated\nafterwards \u2014 so this write is final in the sense that matters: nothing else will\noverwrite it.",
         "operationId": "rename_workspace_api_v1_workspaces__workspace_id__patch",
         "parameters": [
           {
@@ -270,7 +270,7 @@
           "documents"
         ],
         "summary": "Load the sample documents",
-        "description": "Load the curated sample set. Requirement FR-05, decision D15.\n\nReads ``samples/manifest.json`` rather than hard-coding filenames, so dropping files\ninto ``samples/`` is the only step needed to change the demo corpus.",
+        "description": "Load the curated sample set. Requirement FR-05.\n\nReads ``samples/manifest.json`` rather than hard-coding filenames, so dropping files\ninto ``samples/`` is the only step needed to change the demo corpus.",
         "operationId": "seed_api_v1_workspaces__workspace_id__documents_seed_post",
         "parameters": [
           {
@@ -611,7 +611,7 @@
           "documents"
         ],
         "summary": "Re-run extraction, preserving human corrections",
-        "description": "Re-run the pipeline for one document. Requirement FR-34.\n\nHuman-verified values survive by construction: the write path filters them out and a\ndisagreeing model answer is recorded beside the human's rather than over it. See\n``app.pipeline.persist`` and decision D16.",
+        "description": "Re-run the pipeline for one document. Requirement FR-34.\n\nHuman-verified values survive by construction: the write path filters them out and a\ndisagreeing model answer is recorded beside the human's rather than over it. See\n``app.pipeline.persist`` and decision D13.",
         "operationId": "reextract_api_v1_workspaces__workspace_id__documents__document_id__reextract_post",
         "parameters": [
           {
@@ -772,7 +772,7 @@
           "records"
         ],
         "summary": "Correct one value",
-        "description": "Record a human decision about one value. Requirements FR-23 and FR-34.\n\nFrom this point the value is immune to re-extraction: the write path filters\nhuman-owned rows, and a later model answer that disagrees is stored beside it rather\nthan over it (decision D16).",
+        "description": "Record a human decision about one value. Requirements FR-23 and FR-34.\n\nFrom this point the value is immune to re-extraction: the write path filters\nhuman-owned rows, and a later model answer that disagrees is stored beside it rather\nthan over it (decision D13).",
         "operationId": "correct_field_api_v1_workspaces__workspace_id__records__record_id__fields__field_key__patch",
         "parameters": [
           {
@@ -1683,7 +1683,7 @@
           "token": {
             "type": "string",
             "title": "Token",
-            "description": "Bearer token for every subsequent request. Returned ONCE and never recoverable: only its hash is stored. Anyone holding it has full access to this workspace, which is the accepted tradeoff of having no accounts (decision D8)."
+            "description": "Bearer token for every subsequent request. Returned ONCE and never recoverable: only its hash is stored. Anyone holding it has full access to this workspace, which is the accepted tradeoff of having no accounts (decision D7)."
           },
           "created_at": {
             "type": "string",
@@ -1912,7 +1912,7 @@
           },
           "source_format": {
             "$ref": "#/components/schemas/SourceFormat",
-            "description": "What the file was actually parsed AS, decided by sniffing the bytes rather than by trusting the extension. The Upload screen shows it per file (decision D71), and showing the extension there instead would hide exactly the case worth seeing: a .csv that is really a tab-separated export, or a .pdf that is a scan.",
+            "description": "What the file was actually parsed AS, decided by sniffing the bytes rather than by trusting the extension. The Upload screen shows it per file (decision D44), and showing the extension there instead would hide exactly the case worth seeing: a .csv that is really a tab-separated export, or a .pdf that is a scan.",
             "default": "pdf"
           }
         },
@@ -2135,7 +2135,7 @@
           "process_id": {
             "type": "integer",
             "title": "Process Id",
-            "description": "Operating system process identifier. The in-process worker queue and event bus require exactly one API process, so seeing this value change between requests means the deployment is misconfigured. See decision D9."
+            "description": "Operating system process identifier. The in-process worker queue and event bus require exactly one API process, so seeing this value change between requests means the deployment is misconfigured. See decision D8."
           },
           "database": {
             "$ref": "#/components/schemas/CheckResult"
@@ -2326,7 +2326,7 @@
             },
             "type": "array",
             "title": "Surface",
-            "description": "A complete A2UI message array. The numbers live in its updateDataModel message and were computed by the server (decision D37)."
+            "description": "A complete A2UI message array. The numbers live in its updateDataModel message and were computed by the server (decision D26)."
           }
         },
         "type": "object",

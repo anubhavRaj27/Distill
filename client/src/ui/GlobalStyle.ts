@@ -12,7 +12,7 @@ import { createGlobalStyle } from 'styled-components';
  * The whole block is a function of `theme`, so switching palettes is one re-render of one
  * component: the variables change value in place and every rule that reads them follows,
  * including the ones inside components that never re-rendered. That is why dark mode did
- * not need a second stylesheet. See decision D88.
+ * not need a second stylesheet.
  */
 export const GlobalStyle = createGlobalStyle`
   :root {

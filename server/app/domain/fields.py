@@ -102,7 +102,7 @@ class FieldType(StrEnum):
 
 
 def inferred_type(declared: FieldType) -> FieldType:
-    """The type a schema may safely take from a model's answer. Decision D80.
+    """The type a schema may safely take from a model's answer.
 
     One rule, and it is about `enum`. A model reading ten documents that all say "USD"
     reasonably calls the currency column an enumeration, and it has no way to tell us what
@@ -152,7 +152,7 @@ def fold_label(text: str) -> str:
 
     ``"Vendor Name"``, ``"vendor_name"``, and ``"VENDOR-NAME"`` all fold to ``vendor_name``.
 
-    This is the **exact-match** fold, used by decision D24's first auto-map signal in
+    This is the **exact-match** fold, used by decision D18's first auto-map signal in
     ``app.schema.similarity``: two labels that differ only in casing or separators are the
     same label, and that costs no embedding call to establish.
 
@@ -192,7 +192,7 @@ def fold_label_for_similarity(text: str) -> str:
     """Fold a label for FUZZY comparison: case, punctuation, and filler words removed.
 
     The counterpart to ``fold_label``, and the difference matters. Use this one for
-    *scoring* how alike two labels are (decision D24's string similarity signal). Use
+    *scoring* how alike two labels are (decision D18's string similarity signal). Use
     ``fold_label`` for deciding whether two labels are *the same* label, where discarding
     filler words would make genuinely different fields compare equal.
 
@@ -201,10 +201,10 @@ def fold_label_for_similarity(text: str) -> str:
 
     NOT SAFE FOR GATING AN AUTOMATIC DECISION. This fold is lossy on purpose, and the loss
     is not always harmless: it scores ``Supplier`` against ``Supplier ID`` at 1.00, because
-    both fold to "supplier". Used to gate decision D24's auto-map, that would silently merge
+    both fold to "supplier". Used to gate decision D18's auto-map, that would silently merge
     a company name into an identifier column. Its only caller is the offline provider's
     loose field matching in ``app.llm.fake``, where a wrong match shows up as a visible,
-    correctable value in a cell rather than as a schema change. Decision D24's string signal
+    correctable value in a cell rather than as a schema change. Decision D18's string signal
     uses ``fold_label`` instead.
     """
     lowered = "".join(character if character.isalnum() else " " for character in text.lower())
@@ -213,7 +213,7 @@ def fold_label_for_similarity(text: str) -> str:
 
 
 class SchemaChangeAuthor(StrEnum):
-    """Who applied a schema version. Decisions D23 and D24.
+    """Who applied a schema version. Decisions D18 and D27.
 
     Load-bearing rather than decorative: this is what the history view reads to mark an
     entry "applied automatically", and it is the audit trail that makes confidence-gated
@@ -221,7 +221,7 @@ class SchemaChangeAuthor(StrEnum):
     afterwards as one the user made deliberately, so both are the same kind of row and this
     column is the only thing distinguishing them.
 
-    Never the workspace token itself. Only its hash is ever stored (decision D8).
+    Never the workspace token itself. Only its hash is ever stored (decision D7).
     """
 
     MODEL_AUTO = "model_auto"  # confident match or clearly novel field, applied unprompted
@@ -332,7 +332,7 @@ class FieldValue(BaseModel):
     status: ValueStatus = ValueStatus.MODEL
     provenance: Provenance | None = None
 
-    # Decision D16: when re-extraction disagrees with a human-verified value, the human
+    # Decision D13: when re-extraction disagrees with a human-verified value, the human
     # value stays in `value` and the model's answer is retained here, so the interface can
     # show both candidates and let the user decide. A boolean flag alone would tell the
     # user a disagreement exists without telling them what it is, which is unactionable.

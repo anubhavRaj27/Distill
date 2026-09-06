@@ -1,4 +1,4 @@
-"""The in-memory answer buffer. Decision D44.
+"""The in-memory answer buffer. Decision D32.
 
 THE PROBLEM THIS SOLVES
 -----------------------
@@ -8,7 +8,7 @@ will come back and expect their answer to be there. Equally, a client that recon
 should resume from where it dropped rather than from the beginning or not at all.
 
 So the generating task writes events into a buffer and never learns whether a stream is
-attached. The route tails the buffer. Those are the two halves of decision D44, and keeping
+attached. The route tails the buffer. Those are the two halves of decision D32, and keeping
 them ignorant of each other is what makes both properties fall out for free.
 
 Events carry a monotonic sequence number starting at 1, which becomes the Server-Sent
@@ -115,7 +115,7 @@ class AnswerBuffer:
 class BufferRegistry:
     """Every in-flight and recently finished answer buffer.
 
-    In-process, consistent with the single-process constraint decision D9 already imposes.
+    In-process, consistent with the single-process constraint decision D8 already imposes.
     A second API process would not see another's buffers, which is why the worker count is
     pinned to one and ``/healthz`` reports the process identifier.
     """

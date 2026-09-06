@@ -19,7 +19,7 @@ class ChatStatus(StrEnum):
     """The lifecycle of an assistant message.
 
     ``STREAMING`` is a persisted state, not just an in-memory one, and that is deliberate
-    (decision D44): generation continues on the server whether or not a client is
+    (decision D32): generation continues on the server whether or not a client is
     listening, so a refresh mid-answer has to find a row that says "this is still being
     written" rather than nothing at all.
     """

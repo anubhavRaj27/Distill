@@ -10,7 +10,7 @@ import { UploadScreen } from './UploadScreen';
 import { usePendingUploads } from './pendingUploads';
 
 /**
- * One screen, two modes (decision D72), so one suite with two halves.
+ * One screen, two modes, so one suite with two halves.
  *
  * **First run** has one job: a person who has never seen this product understands it and
  * can start in one action. The tests hold that job in place — the promise in the headline,
@@ -137,7 +137,7 @@ function respondAlways(body: unknown) {
  * That is the real sequence — the screen refetches when the bytes land and again as
  * documents settle — and it is the only way to reach the behaviour that matters here: the
  * confirmation and the hand-off fire when the documents are READ, not when they arrive
- * (decision D76).
+ * (decision D36).
  */
 function respondWithPipeline(finalStatus: 'done' | 'failed' = 'done') {
   let call = 0;
@@ -240,7 +240,7 @@ describe('UploadScreen, first run', () => {
   it('shows no application chrome, because there is nothing yet to navigate to', () => {
     renderFirstRun();
 
-    // Decision D57: the header is workspace chrome. Before an upload, Chat and Data lead
+    // Decision D39: the header is workspace chrome. Before an upload, Chat and Data lead
     // nowhere, so the screen is the product's front door and nothing else.
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
@@ -359,7 +359,7 @@ describe('UploadScreen, inside a workspace', () => {
 
   it('lists what the workspace already holds, with no upload in flight', async () => {
     /*
-     * The gap this screen had until decision D71: arriving here with documents indexed
+     * The gap this screen had until decision D44: arriving here with documents indexed
      * said "this browser is not uploading anything right now" and showed nothing at all.
      * A person cannot check what is in a workspace by reading a table built out of it.
      */
@@ -439,7 +439,7 @@ it('turns the spiral for documents being read, with nothing being uploaded', asy
     /*
      * The sample-documents path. Nothing leaves this browser — the server already has the
      * files — and cutting the animation there left the one route a reviewer is most likely
-     * to take with a list and a progress bar. Decision D79.
+     * to take with a list and a progress bar. Decision D36.
      */
     respondWithPipeline('done');
     renderWorkspace();
@@ -468,7 +468,7 @@ it('turns the spiral for documents being read, with nothing being uploaded', asy
 describe('UploadScreen, when a batch lands', () => {
   it('waits for the documents to be READ, then confirms and opens the way forward', async () => {
     /*
-     * Decisions D76 and D80. "Arrived" is the wrong moment to celebrate: bytes on a disk
+     * Decision D36. "Arrived" is the wrong moment to celebrate: bytes on a disk
      * cannot be asked about, so the screen waits for the pipeline. What it does NOT do any
      * more is walk the person to the conversation itself — it says the documents are ready
      * and lets go of Continue, which leaves the choice where it belongs.
@@ -528,7 +528,7 @@ describe('UploadScreen, when a batch lands', () => {
 
   it('opens Continue as soon as the FIRST document is ready, not the last', async () => {
     /*
-     * Decision D82. The next screen is a conversation over whatever has been indexed, so
+     * Decision D36. The next screen is a conversation over whatever has been indexed, so
      * one read document is enough to hold one. Waiting for the last file of a batch let the
      * slowest document decide when anybody could start.
      */
@@ -574,7 +574,7 @@ describe('UploadScreen, when a batch lands', () => {
 
   it('says nothing and holds nothing when the Upload tab is simply reopened', async () => {
     /*
-     * The bug this exists to keep out (decision D80). The event stream is resumable from a
+     * The bug this exists to keep out. The event stream is resumable from a
      * persisted log, so reopening the Upload tab on a finished workspace can replay a
      * document moving through the pipeline. That once read as a fresh batch landing: the
      * confirmation fired again and the screen walked the person to the conversation they

@@ -1,4 +1,4 @@
-"""Serving the built interface from the API process. Decision D86, and the half of
+"""Serving the built interface from the API process. Decision D45, and the half of
 implementation.md section 10 that had never been written.
 
 The single-page application needs two things from a server that a static host gives for

@@ -2,7 +2,7 @@
 
 This suite matters more than its subject sounds. The offline mode is how the pipeline, the
 confidence tiers, the review queue, and the provenance viewer are all developed and
-demonstrated before a Gemini key exists (decision D13), so if it stops producing realistic
+demonstrated before a Gemini key exists (decision D11), so if it stops producing realistic
 output, everything downstream stops being verifiable.
 """
 

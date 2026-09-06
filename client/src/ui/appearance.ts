@@ -15,7 +15,7 @@ import type { ThemeMode } from './theme';
  * it worth speaking of: the vocabulary, the two pure functions that decide everything, and
  * the hook to read the answer.
  *
- * See decision D88.
+ *
  */
 
 export type ThemePreference = ThemeMode | 'system';

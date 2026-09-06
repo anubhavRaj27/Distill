@@ -62,7 +62,7 @@ def test_every_parser_produces_pages_words_and_an_image_per_page(
 def test_every_word_box_is_inside_its_page(
     factory: object, source_format: SourceFormat, parse_settings: Settings
 ) -> None:
-    """The single coordinate convention, asserted for every format. Decision D18."""
+    """The single coordinate convention, asserted for every format. Decision D14."""
     document, _images = parse(factory(), source_format, parse_settings)  # type: ignore[operator]
     for page in document.pages:
         for word in page.words:

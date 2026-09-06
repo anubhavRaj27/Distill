@@ -1,13 +1,13 @@
 """The user's field schema: reading it, renaming a field, merging two fields.
 
 v2 removed the schema history view, one-click revert, and the proposal routes with the
-review loop they belonged to (decisions D34 and D38). ``schema_versions`` rows are still
+review loop they belonged to (decisions D23 and D27). ``schema_versions`` rows are still
 written on every change and are still immutable, because they remain the store of the
 current schema and a real audit trail in the database. They are simply not a screen.
 
 What is left is the two operations a user actually wants, and one of them carries weight
 beyond its size: **merge** is the resolution path for every uncertain split that decision
-D38 produces. "When unsure, keep the fields apart" is only a reasonable default because
+D27 produces. "When unsure, keep the fields apart" is only a reasonable default because
 undoing it is one action that loses nothing, and this is that action.
 """
 

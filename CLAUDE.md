@@ -24,12 +24,12 @@ and spec drift silently.
 2. **Clean file structure**, feature-folder based, especially on the client.
 3. **Three screens, nothing else: Upload, Chat, Data.** Chat is the main screen and works
    by retrieval over the documents. Data is one unified table plus an agent-generated
-   dashboard. There is no schema review loop, no proposal card, no SQL. Decision D34.
+   dashboard. There is no schema review loop, no proposal card, no SQL. Decision D23.
 4. **Every value on screen traces to a highlighted region of its source document.** Table
    cells and chat citations open the same viewer.
 5. **Displayed numbers are computed by the server, never typed by the model.** The agent
    emits a query specification; the server evaluates it and binds the result into A2UI by
-   path. Decision D37.
+   path. Decision D26.
 6. **Never lose a human correction.** Re-extraction and schema changes preserve
    human-verified values.
 7. **Domain-agnostic core.** Finance documents are the demo corpus, not an assumption.
@@ -48,7 +48,7 @@ Zamp assignment/
 ```
 
 Both docs are v2 (September 4, 2026). The pivot from v1 is recorded in `decisions.md`
-D34 through D43 and in requirements section 0; do not reintroduce v1 features.
+D23 through D31 and in requirements section 0; do not reintroduce v1 features.
 
 ## Verified environment facts (September 3, 2026)
 

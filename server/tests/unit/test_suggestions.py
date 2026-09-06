@@ -1,4 +1,4 @@
-"""The suggested questions, and the one of them that has to draw a chart. Decision D78.
+"""The suggested questions, and the one of them that has to draw a chart.
 
 Suggested questions are how most people meet this product's charts: nobody types "total
 amount by vendor" into a blank box on their first visit. The model, asked for three good

@@ -50,7 +50,7 @@ documentation is ahead of the service: gemini-3.6-flash answers 400 INVALID_ARGU
 schema carrying ``maxItems``, with no indication of which argument it objected to. The
 constraint that provoked it was ``max_length=80`` on ``OpenExtraction.fields``, which
 pydantic renders as ``maxItems``, so every extraction call this project makes would have
-failed. See decision D64. The size and range constraints are not lost: they still validate
+failed. The size and range constraints are not lost: they still validate
 locally, and ``_size_hint`` restates them in the description so the model still reads them.
 The numeric ones were never emitted anyway, which this trim also fixes as a piece of
 honesty about what the set describes."""
@@ -68,7 +68,7 @@ wrong in the expensive direction: ``DashboardPlan`` converts to eight levels, so
 dashboard would have raised ``UnsupportedSchema`` on its first real call while every offline
 test passed, because the fake provider never converts a schema at all. Eight levels were
 then sent to gemini-3.5-flash-lite and accepted. Ten keeps a guard against runaway nesting
-without vetoing a contract the provider demonstrably handles. See decision D65."""
+without vetoing a contract the provider demonstrably handles."""
 
 
 class UnsupportedSchema(ValueError):
@@ -148,7 +148,7 @@ def _convert(node: Any, definitions: dict[str, Any], depth: int) -> Any:
     # first leaves a bare ``$ref`` to resolve, while resolving first sees no ``$ref`` at the
     # top level and walks away. Getting this backwards is silent — the field converts to
     # ``{"nullable": true}`` with no type and no properties, a schema that forbids nothing,
-    # and the model answers it with whatever it likes. See decision D65.
+    # and the model answers it with whatever it likes.
     node, nullable = _collapse_nullable(node)
 
     if "$ref" in node:

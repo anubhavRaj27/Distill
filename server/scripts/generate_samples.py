@@ -1,4 +1,4 @@
-"""Generate the sample corpus in ``samples/``. Decision D67.
+"""Generate the sample corpus in ``samples/``. Decision D43.
 
 Run from ``server/``:
 
@@ -883,7 +883,7 @@ def write_manifest(path: Path) -> None:
         "generated_by": "server/scripts/generate_samples.py",
         "note": (
             "Every organisation and figure here is fictional. The set is deliberately "
-            "inconsistent about field naming and date format; see decision D67."
+            "inconsistent about field naming and date format; see decision D43."
         ),
         "documents": DOCUMENTS,
     }

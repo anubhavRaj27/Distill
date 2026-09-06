@@ -56,7 +56,7 @@ class Settings(BaseSettings):
         "and is what development uses. `postgres` puts the bytes in the `blobs` table, "
         "which is what a deployment on a free tier needs: those containers have no disk "
         "that survives a restart, so a local store would empty itself on every redeploy "
-        "and take the source viewer with it. Decision D86.",
+        "and take the source viewer with it. Decision D45.",
     )
     storage_dir: Path = Field(
         default=Path("./var/storage"),
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     )
     max_files_per_upload: int = Field(default=25, ge=1)
 
-    # -- Large Language Model. See decision D13. ----------------------------
+    # -- Large Language Model. See decision D11. ----------------------------
     llm_provider: Literal["gemini", "fake"] = Field(
         default="fake",
         description="Defaults to `fake` on purpose: a checkout with no API key must still "
@@ -84,28 +84,28 @@ class Settings(BaseSettings):
         "tier, which one pass over a ten-document corpus exhausts. Measured on the sample "
         "corpus, Lite extracted all six invoices to the letter. Extraction keeps the "
         "model's default reasoning effort, unlike the interactive calls: see "
-        "llm_fast_thinking_level and decisions D62 and D67.",
+        "llm_fast_thinking_level and decisions D42 and D43.",
     )
     llm_fast_model: str = Field(
         default="gemini-3.5-flash-lite",
         description="The fast tier, used for chat planning, chat answering, dashboard "
         "planning, and suggestions. Renamed from llm_query_model in v2: there is no "
-        "natural-language-to-SQL step any more (decision D35), and a name describing a "
+        "natural-language-to-SQL step any more (decision D24), and a name describing a "
         "removed feature is worse than no name. Latency here is felt directly, "
         "because the user is watching an answer stream, and the Lite model is here for "
         "exactly that reason: measured on September 5, 2026 it began a chat answer in "
         "about 0.8 seconds against about 9 for gemini-3.5-flash on the same question. "
-        "Decision D62.",
+        "Decision D42.",
     )
     llm_embed_model: str = Field(
         default="gemini-embedding-001",
-        description="Embedding model for retrieval (decision D36) and schema drift "
-        "matching (decision D24). Verified callable on September 5, 2026.",
+        description="Embedding model for retrieval (decision D25) and schema drift "
+        "matching (decision D18). Verified callable on September 5, 2026.",
     )
     llm_embed_dimensions: int = Field(
         default=768,
         ge=64,
-        description="Output width requested from the embedding model. Decision D63. "
+        description="Output width requested from the embedding model. "
         "gemini-embedding-001 returns 3072 by default, which is four times the storage "
         "and four times the per-question arithmetic for a corpus this size, where 768 "
         "loses very little. Changing this changes the vector space, which is why "
@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     llm_fast_thinking_level: Literal["low", "high"] | None = Field(
         default="low",
         description="Reasoning effort for the calls a user waits on: chat planning, chat "
-        "answering, dashboard planning, suggestions. Decision D62. Measured on "
+        "answering, dashboard planning, suggestions. Decision D42. Measured on "
         "September 5, 2026, a Gemini 3 Flash model answered a structured call in about "
         "two seconds at `low` and about twenty-five at its default, which is the "
         "difference between meeting requirement FR-26 and missing it by a factor of "
@@ -170,12 +170,12 @@ class Settings(BaseSettings):
         description="RapidFuzz partial ratio below which a quote is not considered found. "
         "From implementation.md section 6.3.",
     )
-    # -- Retrieval and chat. Decisions D35, D36, D44, D45. ------------------
+    # -- Retrieval and chat. Decisions D24, D25, D32, D33. ------------------
     chunk_target_words: int = Field(
         default=110,
         ge=20,
         description="Aim for passages of about this many words. Chunk size IS highlight "
-        "size, because a citation highlights the whole chunk's word span (decision D45), "
+        "size, because a citation highlights the whole chunk's word span (decision D33), "
         "so this is a readability decision as much as a retrieval one: a 500 word chunk "
         "would light up half a page and tell the user nothing.",
     )
@@ -220,7 +220,7 @@ class Settings(BaseSettings):
     # -- Samples ------------------------------------------------------------
     samples_dir: Path = Field(
         default=Path("../samples"),
-        description="Read by the seed route through samples/manifest.json. See D15. In a "
+        description="Read by the seed route through samples/manifest.json. In a "
         "container the samples are copied in alongside the application, so this is set "
         "explicitly there rather than being relative to the checkout layout.",
     )

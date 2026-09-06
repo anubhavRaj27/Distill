@@ -4,7 +4,7 @@ THE PROBLEM THIS SOLVES
 -----------------------
 Retrieval needs the question and the chunks to live in the **same** vector space. With a
 real key that is trivially true. Without one, ``FakeClient.embed`` returns ``None`` for any
-text it has no recording of, and ``None`` is the right answer there: decision D24 relies on
+text it has no recording of, and ``None`` is the right answer there: decision D18 relies on
 it, because an invented vector would score a confident cosine against every schema field and
 make drift auto-apply on noise.
 
@@ -12,7 +12,7 @@ But a chat that retrieves nothing is not a chat. So this module adds a **lexical
 a deterministic hashed bag-of-words vector. Cosine over two of those approximates token
 overlap, which is a real (if shallow) similarity signal, so an offline clone genuinely
 retrieves the passage that mentions the words in the question. That is what makes the chat
-demonstrable with no key at all, which is decision D13's whole purpose.
+demonstrable with no key at all, which is decision D11's whole purpose.
 
 WHY THE FALLBACK LIVES HERE AND NOT IN THE PROVIDER
 ----------------------------------------------------
@@ -114,7 +114,7 @@ async def embed_texts(
     matters more than the quality of any single new vector.
 
     ``task`` says whether these texts are passages or a question, so a real provider can
-    embed each side of the pair appropriately (decision D63). The lexical fallback has no
+    embed each side of the pair appropriately. The lexical fallback has no
     notion of it and needs none: token overlap is symmetric.
     """
     if not texts:

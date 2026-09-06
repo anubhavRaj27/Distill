@@ -1,8 +1,8 @@
 """constrain schema_versions.created_by
 
 Gives ``schema_versions.created_by`` the same treatment every other enumerated column in the
-model already had: a VARCHAR with a CHECK constraint listing the permitted values. Decisions
-D23 and D25 turned this column into the thing that distinguishes "the system changed your
+model already had: a VARCHAR with a CHECK constraint listing the permitted values. Decision
+D27 turned this column into the thing that distinguishes "the system changed your
 schema without asking" from "you changed it", which the history view renders and the whole
 confidence-gated auto-apply design rests on. An unconstrained VARCHAR there meant a typo
 could produce a silently mislabelled audit entry.

@@ -1,9 +1,9 @@
-"""Workspace tokens. The entire access control model. See decision D8.
+"""Workspace tokens. The entire access control model. See decision D7.
 
 There are no accounts. A workspace is created anonymously, is handed a bearer token once,
 and that token is the only thing that grants access. The frontend stores it and encodes it
 in a shareable link, which means **anyone with the link has full access**. That is an
-accepted risk of decision D8, and the interface states it plainly rather than leaving the
+accepted risk of decision D7, and the interface states it plainly rather than leaving the
 user to discover it.
 
 Given the token is the only credential, two things follow.

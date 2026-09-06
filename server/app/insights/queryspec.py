@@ -1,4 +1,4 @@
-"""What the model is allowed to ask for. Decision D37.
+"""What the model is allowed to ask for. Decision D26.
 
 The single most important property of this module is what it makes **impossible**. A model
 cannot return a number to display, cannot return code, and cannot return SQL. It returns a
@@ -14,7 +14,7 @@ model typed is the one thing that cannot be.
 The shape is deliberately narrow. It expresses "aggregate this field, grouped by that one,
 filtered like so", which covers the questions a person actually asks of a pile of invoices,
 and nothing more. A richer specification would be a query language, and a query language the
-model writes is the thing decision D35 removed.
+model writes is the thing decision D24 removed.
 """
 
 from __future__ import annotations

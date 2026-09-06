@@ -1,13 +1,13 @@
-"""Field matching. Decisions D23, D24, and D27.
+"""Field matching. Decisions D18, D18, and D27.
 
 This suite is where the confidence-gated auto-apply policy is held honest. Two properties
 matter more than the rest:
 
 * an **ambiguous** match must reach the user, because a wrong auto-merge commingles two
   fields' values under one column and unpicking it means knowing which source key produced
-  each value (decision D25)
+  each value (decision D27)
 * all **three** zones must actually be reachable. An earlier calibration made auto-add
-  impossible, which meant a third of decision D23 was not implemented while the code read
+  impossible, which meant a third of the drift gate was not implemented while the code read
   as though it were. The zone-reachability tests exist so that cannot recur silently.
 """
 
@@ -93,12 +93,12 @@ def test_cosine_returns_zero_rather_than_raising_on_unusable_input(
 
 
 # ---------------------------------------------------------------------------
-# String similarity: decision D27's correctness fix
+# String similarity: decision D18's correctness fix
 # ---------------------------------------------------------------------------
 
 
 def test_supplier_does_not_score_as_supplier_id() -> None:
-    """THE regression test for decision D27.
+    """THE regression test for decision D18.
 
     With the filler-word fold this scored 1.00, because both fold to "supplier", which
     cleared the 0.90 auto-map bar and would have silently merged a company name into an
@@ -118,7 +118,7 @@ def test_word_order_does_not_matter_in_a_label() -> None:
 
 
 def test_a_semantic_rename_scores_low_on_string_which_is_the_whole_point() -> None:
-    """Direct evidence for decision D24's refusal to average the two signals: on a rename
+    """Direct evidence for decision D18's refusal to average the two signals: on a rename
     the string signal is not weak, it is actively misleading."""
     assert string_similarity("Supplier", "vendor_name") < 0.5
     assert string_similarity("Amount", "Total Due") < 0.5
@@ -205,7 +205,7 @@ def test_a_mapping_the_user_already_approved_auto_maps_without_asking_again() ->
 
 
 def test_a_semantic_rename_auto_maps_when_the_embedding_is_decisive() -> None:
-    """The demo path in decision D25: ``Supplier`` merging into ``vendor_name``."""
+    """The demo path in decision D27: ``Supplier`` merging into ``vendor_name``."""
     verdict = classify(
         incoming_key="supplier",
         incoming_label="Supplier",
@@ -221,7 +221,7 @@ def test_a_semantic_rename_auto_maps_when_the_embedding_is_decisive() -> None:
 
 def test_the_reason_for_an_auto_map_is_written_for_a_person() -> None:
     """It appears in schema history, which is the audit trail that makes auto-apply
-    defensible (decision D23), so it cannot read like an internal state dump."""
+    defensible (decision D27), so it cannot read like an internal state dump."""
     verdict = classify(
         incoming_key="vendor_name",
         incoming_label="Vendor Name",
@@ -240,7 +240,7 @@ def test_the_reason_for_an_auto_map_is_written_for_a_person() -> None:
 
 
 def test_two_nearly_equal_candidates_go_to_the_user() -> None:
-    """Decision D24's central example. A high absolute score is not evidence of an
+    """Decision D18's central example. A high absolute score is not evidence of an
     unambiguous match when a second field scores nearly as high."""
     verdict = classify(
         incoming_key="supplier",
@@ -348,12 +348,12 @@ def test_an_empty_schema_auto_adds() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Zone reachability. Decision D27's regression guard.
+# Zone reachability. Decision D18's regression guard.
 # ---------------------------------------------------------------------------
 
 
 def test_all_three_zones_are_reachable_at_the_configured_thresholds() -> None:
-    """An earlier calibration made auto-add impossible, so a third of decision D23 was
+    """An earlier calibration made auto-add impossible, so a third of the drift gate was
     unimplemented while the code read as though it were. This asserts the shipped
     configuration can actually produce all three outcomes."""
     configured = Thresholds.from_settings(Settings(llm_provider="fake"))
@@ -389,7 +389,7 @@ def test_all_three_zones_are_reachable_at_the_configured_thresholds() -> None:
 
 
 def test_unrelated_fixture_corpus_labels_never_reach_the_auto_map_bar() -> None:
-    """Decision D27's measurement, as a standing assertion. The highest string similarity
+    """Decision D18's measurement, as a standing assertion. The highest string similarity
     between two genuinely different labels in the corpus is 0.59."""
     different_pairs = [
         ("Currency", "Reference"),

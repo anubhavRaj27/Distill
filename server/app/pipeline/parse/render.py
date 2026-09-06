@@ -1,6 +1,6 @@
 """Rendering text onto pages we lay out ourselves, so we know where every word is.
 
-This is the machinery behind decision D18. A DOCX file, a spreadsheet, and a text file have
+This is the machinery behind decision D14. A DOCX file, a spreadsheet, and a text file have
 no pages and no coordinates, so the implementation document proposed a different provenance
 unit for each. Instead, Distill lays those formats out onto page-shaped sheets, records the
 box of every word while doing so, and renders a matching image. Provenance is then a box

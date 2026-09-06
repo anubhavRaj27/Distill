@@ -138,7 +138,7 @@ export function useConversation(workspaceId: string, token: string | null): Conv
         /*
          * The stream gave up rather than finishing. The answer itself may well have
          * completed on the server — generation does not depend on anyone listening
-         * (decision D44) — so the history is refetched rather than the message being
+         * (decision D32) — so the history is refetched rather than the message being
          * written off, and the live copy reports what went wrong until it arrives.
          */
         logger.event('chat.stream_failed', {
@@ -215,7 +215,7 @@ export function useConversation(workspaceId: string, token: string | null): Conv
    *
    * The case is a refresh mid-answer, or a shared link opened while someone else's
    * question is generating. The server keeps writing regardless of who is listening
-   * (decision D44), so the persisted row says `streaming` and the buffer is still there to
+   * (decision D32), so the persisted row says `streaming` and the buffer is still there to
    * be tailed. Without this the message would sit blank forever.
    */
   const reattached = useRef<string | null>(null);

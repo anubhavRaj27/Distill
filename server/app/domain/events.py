@@ -11,7 +11,7 @@ is what stops the table flickering while eight documents stream in (implementati
 section 5.1).
 
 Every event carries a per-workspace monotonic ``seq``. That is what ``Last-Event-ID`` resume
-is built on, and why the event log is a table rather than in-memory state (decision D14).
+is built on, and why the event log is a table rather than in-memory state (decision D12).
 """
 
 from __future__ import annotations
@@ -78,11 +78,11 @@ class SchemaUpdatedEvent(BaseEvent):
     """The workspace schema changed. The interface refetches the schema and the table.
 
     Replaces v1's ``schema.version`` and ``schema.proposal``. In v2 there are no schema
-    questions to answer (decision D38), so an event announcing a change is all the client
+    questions to answer (decision D27), so an event announcing a change is all the client
     needs: it never has to render a decision.
 
     ``summary`` is user-facing prose, and it is the ONLY explanation the user gets for a
-    change the system made without asking. That is the trade decision D38 makes, so the
+    change the system made without asking. That is the trade decision D27 makes, so the
     wording carries real weight: "kept 'Supplier' as a separate field because it was too
     close to call against 'Vendor'" is the whole audit trail.
     """
@@ -99,7 +99,7 @@ class SchemaUpdatedEvent(BaseEvent):
 
 
 class ChatProgressEvent(BaseEvent):
-    """Coarse chat state on the WORKSPACE stream. Decision D44.
+    """Coarse chat state on the WORKSPACE stream. Decision D32.
 
     Deliberately coarse. The tokens of an answer travel on the per-message stream and are
     never written to ``workspace_events``: persisting every token would turn one question

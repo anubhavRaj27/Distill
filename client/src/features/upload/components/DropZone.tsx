@@ -18,7 +18,7 @@ const Zone = styled.div`
 
   /*
    * A translucent surface over the first-run screen's aurora, not an opaque card on top of
-   * it. Decision D89.
+   * it.
    *
    * The blur is what makes this legible rather than merely pretty: it turns the ribbons
    * behind into broad fields of colour, so what sits under the prompt changes slowly across

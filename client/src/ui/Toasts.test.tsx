@@ -8,7 +8,7 @@ import { Toasts } from './Toasts';
 import { useToasts } from './toastStore';
 
 /**
- * The toast stack. Decision D73.
+ * The toast stack.
  *
  * What is worth holding here is not that a box appears: it is that the box is announced,
  * that it leaves on its own, and that it can be got rid of by hand before it does — a timer

@@ -54,7 +54,7 @@ export interface paths {
         head?: never;
         /**
          * Rename a workspace
-         * @description Set the workspace's name. Requirement FR-01, decision D77.
+         * @description Set the workspace's name. Requirement FR-01.
          *
          *     The name is generated once, from the first batch of documents, and is never regenerated
          *     afterwards — so this write is final in the sense that matters: nothing else will
@@ -91,7 +91,7 @@ export interface paths {
         put?: never;
         /**
          * Load the sample documents
-         * @description Load the curated sample set. Requirement FR-05, decision D15.
+         * @description Load the curated sample set. Requirement FR-05.
          *
          *     Reads ``samples/manifest.json`` rather than hard-coding filenames, so dropping files
          *     into ``samples/`` is the only step needed to change the demo corpus.
@@ -177,7 +177,7 @@ export interface paths {
          *
          *     Human-verified values survive by construction: the write path filters them out and a
          *     disagreeing model answer is recorded beside the human's rather than over it. See
-         *     ``app.pipeline.persist`` and decision D16.
+         *     ``app.pipeline.persist`` and decision D13.
          */
         post: operations["reextract_api_v1_workspaces__workspace_id__documents__document_id__reextract_post"];
         delete?: never;
@@ -222,7 +222,7 @@ export interface paths {
          *
          *     From this point the value is immune to re-extraction: the write path filters
          *     human-owned rows, and a later model answer that disagrees is stored beside it rather
-         *     than over it (decision D16).
+         *     than over it (decision D13).
          */
         patch: operations["correct_field_api_v1_workspaces__workspace_id__records__record_id__fields__field_key__patch"];
         trace?: never;
@@ -482,7 +482,7 @@ export interface components {
             id: string;
             /**
              * Token
-             * @description Bearer token for every subsequent request. Returned ONCE and never recoverable: only its hash is stored. Anyone holding it has full access to this workspace, which is the accepted tradeoff of having no accounts (decision D8).
+             * @description Bearer token for every subsequent request. Returned ONCE and never recoverable: only its hash is stored. Anyone holding it has full access to this workspace, which is the accepted tradeoff of having no accounts (decision D7).
              */
             token: string;
             /**
@@ -600,7 +600,7 @@ export interface components {
              */
             created_at: string;
             /**
-             * @description What the file was actually parsed AS, decided by sniffing the bytes rather than by trusting the extension. The Upload screen shows it per file (decision D71), and showing the extension there instead would hide exactly the case worth seeing: a .csv that is really a tab-separated export, or a .pdf that is a scan.
+             * @description What the file was actually parsed AS, decided by sniffing the bytes rather than by trusting the extension. The Upload screen shows it per file (decision D44), and showing the extension there instead would hide exactly the case worth seeing: a .csv that is really a tab-separated export, or a .pdf that is a scan.
              * @default pdf
              */
             source_format: components["schemas"]["SourceFormat"];
@@ -712,7 +712,7 @@ export interface components {
             environment: string;
             /**
              * Process Id
-             * @description Operating system process identifier. The in-process worker queue and event bus require exactly one API process, so seeing this value change between requests means the deployment is misconfigured. See decision D9.
+             * @description Operating system process identifier. The in-process worker queue and event bus require exactly one API process, so seeing this value change between requests means the deployment is misconfigured. See decision D8.
              */
             process_id: number;
             database: components["schemas"]["CheckResult"];
@@ -790,7 +790,7 @@ export interface components {
             };
             /**
              * Surface
-             * @description A complete A2UI message array. The numbers live in its updateDataModel message and were computed by the server (decision D37).
+             * @description A complete A2UI message array. The numbers live in its updateDataModel message and were computed by the server (decision D26).
              */
             surface?: {
                 [key: string]: unknown;

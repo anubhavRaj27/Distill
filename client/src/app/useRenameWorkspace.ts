@@ -6,7 +6,7 @@ import type { components } from '../api/schema';
 type WorkspaceOverview = components['schemas']['WorkspaceOverview'];
 
 /**
- * Rename a workspace. Decision D77.
+ * Rename a workspace.
  *
  * The name is generated once from the first batch of documents and never regenerated, so
  * this is the only thing that ever changes it after that — which is why the new name is

@@ -30,7 +30,7 @@ RESPONSE_MODELS = [
     # The three below were missing until September 5, 2026, and this file called itself
     # "every response model" without them. Both faults a real key found live in exactly
     # that gap: DashboardPlan converted eight levels deep against a limit of six, and
-    # ChatPlan's optional Visual collapsed to a shapeless `{"nullable": true}`. See D65.
+    # ChatPlan's optional Visual collapsed to a shapeless `{"nullable": true}`.
     ChatPlan,
     DashboardPlan,
     SuggestedQuestions,
@@ -71,7 +71,7 @@ def test_an_optional_nested_model_keeps_its_shape() -> None:
     ``$ref`` to resolve, and the field converts to ``{"nullable": true}``: no type, no
     properties, nothing forbidden. It validates, it is accepted by the provider, and the
     model then answers `false` where an object was wanted. That is what happened on the
-    first real chat-plan call. See decision D65."""
+    first real chat-plan call."""
 
     class Inner(BaseModel):
         title: str = Field(description="What to call it")
@@ -96,7 +96,7 @@ def test_array_bounds_are_described_rather_than_sent() -> None:
     ``maxItems`` is in the documented provider subset and is nevertheless answered with
     400 INVALID_ARGUMENT by gemini-3.6-flash, naming no argument. Every extraction call in
     this project carries one, from ``max_length=80`` on the fields list, so this was total
-    rather than partial breakage. See decision D64.
+    rather than partial breakage.
 
     The bound still has to reach the model, or an over-long list fails local validation and
     costs a retry, so it is restated in the description.

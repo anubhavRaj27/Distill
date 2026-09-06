@@ -1,4 +1,4 @@
-"""Transforming raw model output into the answer stream. Decisions D45 and D46.
+"""Transforming raw model output into the answer stream. Decisions D33 and D34.
 
 The model writes two things the user must never see raw:
 
@@ -22,7 +22,7 @@ ORDERING, WHICH IS PART OF THE CONTRACT
 ----------------------------------------
 When a marker resolves, the text before it is flushed as a token FIRST, then the
 ``citation`` event, then the rewritten ``[^n]``. The client therefore always knows what
-footnote 3 is before it has to render a reference to it (decision D45), and never displays
+footnote 3 is before it has to render a reference to it (decision D33), and never displays
 an unresolved marker.
 
 A DROPPED MARKER IS PREFERRED TO A WRONG ONE
@@ -60,7 +60,7 @@ CitationResolver = Callable[[UUID], Awaitable[ResolvedCitation | None]]
 
 
 def format_figure(value: Any, unit: str | None) -> str:
-    """Render a computed figure for prose. Decision D46.
+    """Render a computed figure for prose. Decision D34.
 
     Thousands separators and two decimal places for money, no decimals for whole numbers,
     and the currency code appended when one is known. The point is that the user reads the
@@ -228,7 +228,7 @@ class StreamProcessor:
         if self._emitted_unit:
             # A substituted figure already carries its currency, and models write the unit
             # again anyway: "`{{result.total}}` USD" becomes "16,752.90 USD USD". The prompt
-            # asks them not to; this makes it not matter. Decision D68.
+            # asks them not to; this makes it not matter.
             stripped = _drop_leading_unit(text, self._emitted_unit)
             if stripped != text:
                 self._emitted_unit = None
@@ -312,16 +312,16 @@ class StreamProcessor:
         self._stage(f"[^{number}]")
 
     def _substitute(self, raw: str) -> tuple[str, str | None]:
-        """Replace ``{{path}}`` with the server-computed value. Decision D46.
+        """Replace ``{{path}}`` with the server-computed value. Decision D34.
 
         Returns the rendered figure and the unit it already carries, if any, so the caller
-        can suppress the model writing that unit again. See ``_stage`` and decision D68.
+        can suppress the model writing that unit again. See ``_stage``.
         """
         path = raw[len(PLACEHOLDER_OPEN) : -len(PLACEHOLDER_CLOSE)].strip()
         entry = self.result_paths.get(path)
         if entry is None:
             # Emitting nothing is deliberate. Showing the raw placeholder would expose
-            # internals, and inventing a number is the exact thing decision D37 forbids.
+            # internals, and inventing a number is the exact thing decision D26 forbids.
             self._unresolved_placeholders += 1
             logger.info("chat.placeholder_unresolved", path=path)
             return "", None

@@ -6,11 +6,11 @@ one code path owns validation, persistence, and the announcement.
 WHAT V2 REMOVED FROM THIS MODULE
 ---------------------------------
 * **The per-workspace SQL view.** v1 regenerated a pivoted, typed view on every schema
-  change so that generated SQL had a flat table to read. Decision D35 removed the
+  change so that generated SQL had a flat table to read. Decision D24 removed the
   natural-language-to-SQL feature, and query specifications are now evaluated in Python over
   ``field_values`` directly (``app/insights/evaluate.py``), so the view had no reader left.
 * **Revert.** v1 offered one-click revert because the system was asking the user to make
-  schema decisions and those decisions needed undoing. v2 asks nothing (decision D38), so
+  schema decisions and those decisions needed undoing. v2 asks nothing (decision D27), so
   there is nothing to reverse. ``schema_versions`` rows are still written and still
   immutable, because they remain the store of the current schema and a genuine audit trail
   in the database; they are simply no longer surfaced as a history view.
@@ -93,7 +93,7 @@ async def apply(
     """Write a new schema version, regenerate the view, and publish the event.
 
     ``author`` distinguishes "the system changed your schema without asking" from "you
-    changed it", which the history view renders and decision D23's whole design rests on.
+    changed it", which the history view renders and decision D27's whole design rests on.
     ``summary`` is user-facing prose explaining the change, and for an automatic change it
     is the only explanation the user will ever get, so it is not optional.
     """
@@ -214,7 +214,7 @@ async def merge_fields(
 ) -> SchemaVersion:
     """Merge one field into another, moving values and provenance. Requirement FR-15.
 
-    This is the resolution path for every uncertain split decision D38 produces, which is
+    This is the resolution path for every uncertain split decision D27 produces, which is
     what makes "when unsure, keep them apart" an acceptable default rather than a way of
     dumping work on the user: the undo is one action and it loses nothing.
 

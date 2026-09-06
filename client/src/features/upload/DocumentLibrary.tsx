@@ -8,7 +8,7 @@ import { STAGE_WORDS } from '../processing/stageWords';
 import type { DocumentProgress } from '../processing/useDocumentProgress';
 
 /**
- * Every file in the workspace, with what became of it. Decision D71.
+ * Every file in the workspace, with what became of it. Decision D44.
  *
  * The Upload screen used to be a wait: it narrated files leaving this browser and then had
  * nothing to say. Come back later and it told you "this browser is not uploading anything

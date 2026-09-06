@@ -47,7 +47,7 @@ migrate: ## Bring the database to head. DATABASE_URL=... to target a deployed on
 	cd $(SERVER) && DATABASE_URL="$${DATABASE_URL:-$(LOCAL_DB_URL)}" uv run alembic upgrade head
 
 .PHONY: api
-api: ## Run the API on :8000. One worker, always: decisions D9 and D14
+api: ## Run the API on :8000. One worker, always: decisions D8 and D12
 	cd $(SERVER) && uv run uvicorn app.main:app --port $(PORT) --workers 1
 
 .PHONY: web

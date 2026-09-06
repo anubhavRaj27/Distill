@@ -1,4 +1,4 @@
-"""The Large Language Model boundary. See decision D13.
+"""The Large Language Model boundary. See decision D11.
 
 Everything that talks to a model goes through ``LLMClient``, and there are two
 implementations: ``GeminiClient`` for real calls, and ``FakeClient`` which needs no key and
@@ -46,7 +46,7 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 class CallKind(StrEnum):
     """What a model call is for. Selects the model tier, the prompt, and the fixture folder.
 
-    v2 removed ``NL2SQL`` with the feature it served (decision D35) and added the three
+    v2 removed ``NL2SQL`` with the feature it served (decision D24) and added the three
     calls the chat and dashboard need. There are now exactly two streamed-text callers and
     the rest are structured.
     """
@@ -59,25 +59,25 @@ class CallKind(StrEnum):
     CHAT_PLAN = "chat_plan"
     """Structured. Decides whether the question is answerable and whether a visual helps,
     and if so emits a `Visual` holding a query specification. It never emits numbers
-    (decision D37)."""
+    (decision D26)."""
 
     CHAT_ANSWER = "chat_answer"
     """Streamed text. Writes the prose, citing passages with markers and referring to
-    computed figures by placeholder (decisions D45, D46)."""
+    computed figures by placeholder (decisions D33, D34)."""
 
     PLAN_DASHBOARD = "plan_dashboard"
-    """Structured. Proposes dashboard panels from field statistics (decision D40)."""
+    """Structured. Proposes dashboard panels from field statistics (decision D29)."""
 
     SUGGEST_QUESTIONS = "suggest_questions"
 
     NAME_WORKSPACE = "name_workspace"
     """Structured, and tiny. Names the workspace from what turned up in the first batch,
-    so it stops being called "Untitled workspace" (decision D77). The person can rename it
+    so it stops being called "Untitled workspace". The person can rename it
     afterwards, and their name is never overwritten."""
 
     @property
     def needs_strong_model(self) -> bool:
-        """Whether this call gets the Pro tier rather than Flash. See decision D13.
+        """Whether this call gets the Pro tier rather than Flash. See decision D11.
 
         True only for extraction and schema inference. Those are the accuracy-critical
         calls, they run once per document rather than once per interaction, and an error in
@@ -144,7 +144,7 @@ type Vector = list[float]
 
 
 type EmbedTask = Literal["document", "query", "similarity"]
-"""What an embedding is for, in provider-neutral terms. Decision D63.
+"""What an embedding is for, in provider-neutral terms.
 
 Modern embedding models are asymmetric: a passage and the question that should retrieve it
 are embedded differently on purpose, and telling the model which side it is looking at
@@ -176,7 +176,7 @@ class LLMClient(Protocol):
         ...
 
     def stream_text(self, request: LLMRequest) -> AsyncIterator[str]:
-        """Stream a text answer as deltas. Decision D44.
+        """Stream a text answer as deltas. Decision D32.
 
         Returns an async iterator rather than being an async generator itself, so that a
         caller can hold the iterator without having started the request, and so that
@@ -196,7 +196,7 @@ class LLMClient(Protocol):
     async def embed(
         self, texts: Sequence[str], *, task: EmbedTask = "similarity"
     ) -> list[Vector | None]:
-        """Embed ``texts`` for retrieval or for schema drift matching. Decisions D24, D63.
+        """Embed ``texts`` for retrieval or for schema drift matching. Decision D18.
 
         ``task`` says which side of a retrieval pair these texts are, so the provider can
         embed a passage and a question appropriately. It is a hint, not a mode: every task
@@ -207,7 +207,7 @@ class LLMClient(Protocol):
         path: against Gemini every text gets a vector, and a genuine transport failure
         raises ``LLMUnavailable`` like any other call. ``None`` exists for ``FakeClient``,
         which replays recorded vectors and has none for a label it has never seen — the
-        no-key and test case D13 covers.
+        no-key and test case D11 covers.
 
         A caller that receives ``None`` scores that pair on string similarity alone, which
         yields more proposal cards and fewer auto-applies. The direction of that degradation

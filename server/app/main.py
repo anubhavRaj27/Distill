@@ -83,7 +83,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     worker = init_worker(settings=settings, client=client, storage=storage)
     await worker.start()
 
-    # Decision D9 accepts that a restart interrupts in-flight extractions, on the grounds
+    # Decision D8 accepts that a restart interrupts in-flight extractions, on the grounds
     # that the per-document status model makes them resumable. This is that resumption, and
     # it runs on every boot rather than being a manual recovery step.
     resumed = await resume_interrupted(worker)

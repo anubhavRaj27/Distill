@@ -31,7 +31,7 @@ class PanelResponse(BaseModel):
     surface: list[dict[str, Any]] = Field(
         default_factory=list,
         description="A complete A2UI message array. The numbers live in its "
-        "updateDataModel message and were computed by the server (decision D37).",
+        "updateDataModel message and were computed by the server (decision D26).",
     )
 
 

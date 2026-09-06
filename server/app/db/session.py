@@ -2,8 +2,8 @@
 
 v1 had a second, deliberately weaker engine here: generated SQL ran as a ``SELECT``-only
 role against a per-workspace view, with a statement timeout, as the innermost layer of
-decision D10's defence. v2 removed the natural-language-to-SQL feature entirely (decision
-D35), so there is no longer any model-authored SQL to sandbox, and the second engine went
+v1's SQL defence. v2 removed the natural-language-to-SQL feature entirely (decision
+D24), so there is no longer any model-authored SQL to sandbox, and the second engine went
 with the feature rather than being kept "just in case".
 
 What replaced it is not a weaker guarantee but a stronger one: query specifications are
@@ -84,7 +84,7 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
     ``workspace_events`` and delivered to nobody. The progress strip then sits on whatever
     the upload request published and never moves, while a page refresh shows the finished
     state, because a refresh replays from the table. That was the live behaviour until
-    September 6, 2026. See decision D70.
+    September 6, 2026. See decisions D12 and D19.
     """
     # Imported here, not at module scope: ``app.pipeline.worker`` imports this module for
     # ``session_scope`` itself, so a top-level import would close the circle.

@@ -1,4 +1,4 @@
-"""The database schema. Implementation.md section 4, plus decisions D14 and D16.
+"""The database schema. Implementation.md section 4, plus decisions D12 and D13.
 
 Two shape decisions carry most of the weight.
 
@@ -96,7 +96,7 @@ def _enum(python_enum: type, name: str) -> Enum:
 
 
 class Workspace(Base):
-    """An anonymous workspace. The only unit of access control. See decision D8."""
+    """An anonymous workspace. The only unit of access control. See decision D7."""
 
     __tablename__ = "workspaces"
 
@@ -104,7 +104,7 @@ class Workspace(Base):
 
     # Only the hash is stored. A leaked database therefore does not hand over access to
     # every workspace, which matters more here than usual because the token IS the only
-    # credential (decision D8).
+    # credential (decision D7).
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
 
     label: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -267,7 +267,7 @@ class SchemaVersion(Base):
     # [{key, label, type, description, enum_values?, currency_default?, source_keys, weight}]
     fields: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
 
-    # Constrained, not a bare VARCHAR. Decisions D23 and D25 make this column the difference
+    # Constrained, not a bare VARCHAR. Decision D27 makes this column the difference
     # between "the system changed your schema without asking" and "you changed it", which
     # the history view renders and the user's trust rests on. A value outside the vocabulary
     # would be a silently mislabelled audit entry, so the database refuses it.
@@ -364,7 +364,7 @@ class FieldValueRow(Base):
     # {page_index, boxes, quote, reasoning, match_score, locator, failure}
     provenance: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
-    # Decision D16. When re-extraction disagrees with a human-verified value, the human's
+    # Decision D13. When re-extraction disagrees with a human-verified value, the human's
     # value stays in `value` and the model's answer is kept here, so the interface can show
     # both and let the user decide rather than merely warning that a disagreement exists.
     model_value: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
@@ -384,7 +384,7 @@ class FieldValueRow(Base):
 
 
 class WorkspaceEventRow(Base):
-    """The persisted event log. Decision D14.
+    """The persisted event log. Decision D12.
 
     This exists so that ``Last-Event-ID`` resume is implementable at all: a client that
     reconnects needs to be told what it missed, and that is impossible if the log lived only
@@ -413,7 +413,7 @@ class WorkspaceEventRow(Base):
 
 
 class Chunk(Base):
-    """One retrievable passage of a document. Decisions D35 and D45.
+    """One retrievable passage of a document. Decisions D24 and D33.
 
     ``word_start`` and ``word_end`` index into the page's ``text_layer`` word list, which is
     what lets a chat citation resolve to highlight boxes **without re-parsing the original
@@ -421,7 +421,7 @@ class Chunk(Base):
     rather than a parse.
 
     Chunk size IS highlight size, because a citation highlights the whole chunk's word span
-    (decision D45). That is why passages are kept to roughly 80 to 160 words: a 500 word
+    (decision D33). That is why passages are kept to roughly 80 to 160 words: a 500 word
     chunk would light up half a page and tell the user nothing.
 
     ``page_index`` is null for the per-document **records digest**, a synthetic chunk whose
@@ -460,7 +460,7 @@ class Chunk(Base):
     token_estimate: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     is_digest: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
-    # JSONB rather than a vector column. Decision D36: a workspace of 25 documents is about
+    # JSONB rather than a vector column. Decision D25: a workspace of 25 documents is about
     # a thousand vectors, which an in-process cosine scans in single-digit milliseconds, and
     # this avoids making pgvector part of the one-command setup.
     embedding: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
@@ -470,7 +470,7 @@ class Chunk(Base):
 
 
 class ChatMessage(Base):
-    """One turn of the conversation. Decision D44.
+    """One turn of the conversation. Decision D32.
 
     ``content`` is written once, at the end of generation or on stop. While an answer is
     streaming its text lives in the in-memory answer buffer, not here: persisting every
@@ -497,7 +497,7 @@ class ChatMessage(Base):
     # [{n, chunk_id, document_id, filename, page_index, boxes, excerpt}]
     citations: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
 
-    # The `Visual` the model chose: a query specification, never numbers (decision D37).
+    # The `Visual` the model chose: a query specification, never numbers (decision D26).
     visual: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # The A2UI message array built from evaluating that specification.
     surface: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
@@ -566,7 +566,7 @@ class Blob(Base):
 
     Only written by ``app.storage.postgres``, which is one of two implementations of the
     storage boundary and the one a free deployment uses, because the container it runs in
-    has no disk that survives a restart. See decision D86.
+    has no disk that survives a restart. See decision D45.
 
     No foreign key to a document. Keys are hierarchical strings built by
     ``app.storage.local``, deletion is a prefix delete, and the storage layer deliberately

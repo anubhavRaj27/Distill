@@ -21,7 +21,7 @@ export interface DashboardPanel {
   /**
    * The A2UI message array for this panel's body, carrying its data in an
    * `updateDataModel` message. Passed through untouched: this hook must not read the
-   * numbers, only hand them to the renderer (decision D37).
+   * numbers, only hand them to the renderer (decision D26).
    */
   surface?: unknown[];
 }

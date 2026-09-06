@@ -5,7 +5,7 @@ import { parseSurface, readNumber, readProperty, resolvePath } from './model';
 /**
  * The half of A2UI that makes agent-chosen presentation safe.
  *
- * Product principle 5 and decision D37: the model says where a figure lives, the server
+ * Product principle 5 and decision D26: the model says where a figure lives, the server
  * puts the real figure there, and the client looks it up. These tests hold that the client
  * really does look it up — a renderer that quietly accepted an inline number would pass
  * every visual check and break the guarantee the whole architecture exists for.

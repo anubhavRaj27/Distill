@@ -1,5 +1,5 @@
 /**
- * Workspace identity. Requirement FR-01, decision D8 (no accounts), decision D31 (the
+ * Workspace identity. Requirement FR-01, decision D7 (no accounts), decision D21 (the
  * token travels in the URL fragment).
  *
  * The bearer token is issued once at workspace creation and is never recoverable — the

@@ -1,1 +1,1 @@
-"""Chunking, embedding, and searching the documents. Decisions D35 and D36."""
+"""Chunking, embedding, and searching the documents. Decisions D24 and D25."""

@@ -1,4 +1,4 @@
-"""Blob storage in the database. Decision D86.
+"""Blob storage in the database. Decision D45.
 
 Against the real test database, because the whole point of this backend is what Postgres
 does with a bytea: the substring reads, the upsert, and the prefix delete are all SQL, and

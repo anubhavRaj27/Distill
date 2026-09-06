@@ -1,5 +1,5 @@
 #!/bin/sh
-# Migrate, then serve. Decision D86.
+# Migrate, then serve. Decision D45.
 #
 # The retry is not superstition. On Railway the private network comes up a moment after the
 # container does, and on a first deploy the database service may still be starting, so the
@@ -23,5 +23,5 @@ until alembic upgrade head; do
 done
 
 # One worker, always. The document queue and the event bus are both in-process (decisions
-# D9 and D14), so a second worker is a second queue whose events no browser can see.
+# D8 and D12), so a second worker is a second queue whose events no browser can see.
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --workers 1

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 /**
- * Transient confirmations, held outside the component tree. Decision D73.
+ * Transient confirmations, held outside the component tree.
  *
  * The store exists for one reason the component tree cannot solve: the thing worth
  * confirming is often the last thing a screen does before it goes away. "Your documents

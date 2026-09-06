@@ -16,12 +16,12 @@ import { usePendingUploads } from './pendingUploads';
  * - **Files.** The selection is staged and the person is sent to `/w/{id}/upload`, which
  *   owns the transfer and shows a bar per file. Uploading here instead would mean a screen
  *   that cannot report progress holding a screen that exists to report it.
- * - **Samples.** The server loads them from its own disk (decision D15). There is nothing
+ * - **Samples.** The server loads them from its own disk. There is nothing
  *   for a progress bar to measure, and this used to go straight to Chat for that reason —
  *   which meant the sample path, the one a reviewer takes, skipped the screen that narrates
  *   the reading of the documents entirely. It now lands on the same upload screen, where
  *   there is a great deal to watch even with no bytes moving: parsing, extraction and
- *   indexing, per document. See decision D76.
+ *   indexing, per document. See decision D36.
  */
 
 export type StartIntent =
@@ -42,7 +42,7 @@ async function createWorkspace(): Promise<{ workspaceId: string; token: string }
   if (error || !data) throw toFailure(error, response?.status);
 
   // The token is returned exactly once and only its hash is stored server-side, so it is
-  // written to storage before anything else can fail (decision D8).
+  // written to storage before anything else can fail (decision D7).
   rememberWorkspace(data.id, data.token);
   return { workspaceId: data.id, token: data.token };
 }
@@ -67,7 +67,7 @@ export function useStartWorkspace() {
        * Nothing to stage, and staged anyway: an entry for this workspace is how the upload
        * screen knows a person arrived through the front door rather than by clicking the
        * Upload tab, which is what decides whether the reading is worth confirming and
-       * whether Continue waits for it (decisions D76, D81). The screen clears the entry on
+       * whether Continue waits for it (decisions D36). The screen clears the entry on
        * mount, so it says "this arrival", not "this workspace".
        */
       stage(workspaceId, [], []);
@@ -82,7 +82,7 @@ export function useStartWorkspace() {
     onSuccess: ({ workspaceId }) => {
       // Both ways in land on the same screen. The token is already in storage, so in-app
       // navigation does not carry it; the fragment form exists for links a person shares
-      // (decision D31).
+      // (decision D21).
       void navigate(`/w/${workspaceId}/upload`);
     },
     onError: (failure) => {

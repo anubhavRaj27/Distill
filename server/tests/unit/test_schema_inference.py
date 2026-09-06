@@ -1,4 +1,4 @@
-"""Initial unification and drift. Decisions D23, D24, and D25.
+"""Initial unification and drift. Decisions D18 and D27.
 
 The behaviour these tests pin down is the product's central claim: many documents that
 disagree with each other become one coherent schema, and the user is interrupted only where
@@ -96,7 +96,7 @@ def test_observations_are_ordered_by_coverage() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Initial unification, decision D25
+# Initial unification, decision D27
 # ---------------------------------------------------------------------------
 
 
@@ -134,10 +134,10 @@ async def test_a_case_and_separator_variant_unifies_without_asking(
 async def test_a_semantic_rename_unifies_when_vectors_are_recorded(
     settings: Settings,
 ) -> None:
-    """Decision D25's demo path: ``Supplier`` and ``Vendor`` merging automatically.
+    """Decision D27's demo path: ``Supplier`` and ``Vendor`` merging automatically.
 
     This is also the test that proves recorded vectors are what make the offline path
-    behave like the online one (decision D13).
+    behave like the online one (decision D11).
     """
     _record_vectors(
         settings,
@@ -163,7 +163,7 @@ async def test_a_semantic_rename_unifies_when_vectors_are_recorded(
 async def test_an_uncertain_pair_stays_split_and_is_recorded(
     client: FakeClient, settings: Settings
 ) -> None:
-    """Decisions D25 and D38. A wrong merge commingles two fields' values and unpicking it
+    """Decision D27. A wrong merge commingles two fields' values and unpicking it
     needs per-value provenance; a wrong split is a lossless move, so prefer the cheaper
     undo. v2 no longer ASKS about it: both fields exist and the near-miss is recorded so
     the change summary can explain it."""
@@ -248,7 +248,7 @@ async def test_a_currency_field_is_given_a_default_code(
 
 
 # ---------------------------------------------------------------------------
-# Drift, decisions D23 and D24
+# Drift, decisions D27 and D18
 # ---------------------------------------------------------------------------
 
 SCHEMA = [
@@ -325,7 +325,7 @@ async def test_a_clearly_novel_field_auto_adds_and_enters_the_schema(
 async def test_an_unconfirmable_field_is_added_separately_and_the_reason_recorded(
     client: FakeClient, settings: Settings
 ) -> None:
-    """Decision D38. With no vector we cannot rule out a semantic rename, so the field is
+    """Decision D27. With no vector we cannot rule out a semantic rename, so the field is
     added on its own rather than merged into a candidate.
 
     v1 asked the user about this. v2 does not ask anyone anything, so the honest outcome is
@@ -486,7 +486,7 @@ async def test_an_unusable_field_key_is_dropped_not_fatal(
 async def test_schema_labels_are_embedded_once_not_once_per_document(
     settings: Settings,
 ) -> None:
-    """Decision D24 budgets a label-keyed cache. Without it, a batch of eight documents
+    """Decision D18 budgets a label-keyed cache. Without it, a batch of eight documents
     pays for the schema's vectors eight times."""
     _record_vectors(settings, {"Vendor": [1.0, 0.0]})
     client = FakeClient(settings)
@@ -510,7 +510,7 @@ async def test_schema_labels_are_embedded_once_not_once_per_document(
 
 
 # ---------------------------------------------------------------------------
-# The enum that stopped a batch. Decision D80.
+# The enum that stopped a batch.
 # ---------------------------------------------------------------------------
 
 

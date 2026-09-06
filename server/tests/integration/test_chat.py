@@ -73,7 +73,7 @@ async def test_a_streaming_message_has_no_content_yet(
     workspace: tuple[str, str],
     auth: dict[str, str],
 ) -> None:
-    """Decision D44: while an answer streams, its text lives in the buffer, not the row.
+    """Decision D32: while an answer streams, its text lives in the buffer, not the row.
     Persisting every token would turn one question into hundreds of writes."""
     workspace_id, _ = workspace
     await _message(db, uuid.UUID(workspace_id), status=ChatStatus.STREAMING)
@@ -105,7 +105,7 @@ async def test_a_message_from_another_workspace_is_not_reachable(
     workspace: tuple[str, str],
     auth: dict[str, str],
 ) -> None:
-    """The workspace token is the only access control there is (decision D8), so every
+    """The workspace token is the only access control there is (decision D7), so every
     route has to scope by it rather than trusting an identifier in the path."""
     workspace_id, _ = workspace
 

@@ -6,18 +6,18 @@ import { DataScreen } from '../features/data/DataScreen';
 import { UploadScreen } from '../features/upload/UploadScreen';
 
 /**
- * Three screens and only three: Upload, Chat, Data (decision D34).
+ * Three screens and only three: Upload, Chat, Data (decision D23).
  *
  * Chat is the product's main screen, so it is what a bare workspace URL resolves to —
- * `/w/{id}` and `/w/{id}/chat` are the same place (requirements section 3.2). Decision D30
+ * `/w/{id}` and `/w/{id}/chat` are the same place (requirements section 3.2). Decision D20
  * records why this is React Router used declaratively rather than a generated route tree.
  *
  * A shared link lands on one of these routes carrying its token in the fragment, which is
- * consumed on arrival (decision D31).
+ * consumed on arrival (decision D21).
  *
  * `/` and `/w/{id}/upload` are one component. They are the same screen in two states — the
  * name, a way to put documents in, and whatever is already in — and the route is what says
- * which. See decision D72.
+ * which.
  */
 export function App() {
   return (
@@ -32,7 +32,7 @@ export function App() {
 
       {/*
         Above the routes, so a confirmation raised by a screen on its way out is still
-        there once the next screen has arrived. Decision D73.
+        there once the next screen has arrived.
       */}
       <Toasts />
     </BrowserRouter>

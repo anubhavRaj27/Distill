@@ -72,7 +72,7 @@ class _Subscriber:
 class EventBus:
     """In-process publish and subscribe, paired with the persisted log.
 
-    In-process is a deliberate limit, not an oversight: decision D9 chose a single instance
+    In-process is a deliberate limit, not an oversight: decision D8 chose a single instance
     with an in-process worker queue, and this bus shares that constraint. Running two API
     worker processes would split the bus and deliver each event to only the subscribers in
     one of them. The worker count is pinned to one, and ``/healthz`` reports the process

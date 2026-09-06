@@ -4,7 +4,7 @@ import styled from 'styled-components';
 import { useAppearance, type ThemePreference } from './appearance';
 
 /**
- * Light, automatic, dark — as a segmented control in the header. Decision D88.
+ * Light, automatic, dark — as a segmented control in the header.
  *
  * **Why three and not a toggle.** A two-state switch has to store a resolved palette, and
  * the moment it does, "follow my system" stops being reachable: a visitor who taps it once

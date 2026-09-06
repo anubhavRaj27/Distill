@@ -36,7 +36,7 @@ import { useStartWorkspace } from './useStartWorkspace';
 /**
  * Screen 1 of three: Upload. Routes `/` and `/w/{id}/upload`. Requirements section 3.1.
  *
- * ONE SCREEN, TWO MODES (decision D72)
+ * ONE SCREEN, TWO MODES
  * ------------------------------------
  * These were two files that rendered two different products. The first-run screen is the
  * name, a sentence, a drop zone; the workspace screen was a headline, a wide band of
@@ -49,10 +49,10 @@ import { useStartWorkspace } from './useStartWorkspace';
  *
  * - **First run** (`/`, no workspace): the drop zone and "Try with sample documents", with
  *   nothing below because there is nothing yet. No application header: Chat and Data lead
- *   nowhere before a workspace exists (decision D57).
+ *   nowhere before a workspace exists (decision D39).
  * - **In a workspace** (`/w/{id}/upload`): "Add more files" and "Continue" where the drop
  *   zone was, and under them the library — every document, what became of it, and a way to
- *   open or delete it (decision D71). Bytes still in flight draw the spiral above the
+ *   open or delete it (decision D44). Bytes still in flight draw the spiral above the
  *   actions while they last.
  *
  * The hero is deliberately smaller in the second mode. It is the same page and should look
@@ -114,7 +114,7 @@ const Main = styled.main`
 
   /*
    * The workspace state arrives rather than appearing. Dropping files navigates, which
-   * remounts this screen (decision D72), and without an entrance the front door is
+   * remounts this screen, and without an entrance the front door is
    * replaced by a different page between two frames — the drop zone gone, the header
    * suddenly there, the hero a different size. A fade with a small rise over half a second
    * makes it read as the same page changing its mind.
@@ -267,7 +267,7 @@ const Formats = styled.p`
  * screen with no header — deliberately, since there is nothing yet to navigate between.
  * Leaving it out here would make the palette the one setting you can only change after
  * uploading something, so it goes at the foot of the page with the other quiet facts about
- * the page rather than about the documents. Decision D88.
+ * the page rather than about the documents.
  */
 const Appearance = styled.div`
   display: flex;
@@ -298,7 +298,7 @@ const LibraryHeading = styled.h2`
  * A progress bar is honest and boring, and this wait is the first sustained look anyone
  * gets at the product. The cards are the actual files being sent — real thumbnails for
  * images, drawn sheets for the rest — so the animation is about *their* pile rather than
- * being decoration bolted on to pass the time. Decision D58.
+ * being decoration bolted on to pass the time.
  */
 const Carousel = styled.div`
   width: 100%;
@@ -498,7 +498,7 @@ const NO_FILES: File[] = [];
 /**
  * The route adapter, and the reason it exists.
  *
- * `/` and `/w/{id}/upload` are one component (decision D72), so React keeps the same
+ * `/` and `/w/{id}/upload` are one component, so React keeps the same
  * instance mounted across the navigation between them. Nearly everything below is read
  * ONCE, on mount: the workspace token, the files staged for this workspace, whether the
  * batch has been started. Sharing an instance quietly broke all of it — dropping files on
@@ -519,7 +519,7 @@ function UploadScreenFor() {
   const { workspaceId = '' } = useParams();
   const inWorkspace = workspaceId !== '';
   const navigate = useNavigate();
-  /* Read rather than imported, so the hero word follows the palette. Decision D88. */
+  /* Read rather than imported, so the hero word follows the palette. */
   const theme = useTheme();
   const addInput = useRef<HTMLInputElement>(null);
 
@@ -583,7 +583,7 @@ function UploadScreenFor() {
    * path stages an empty selection precisely so this still reads true — and set again when
    * files are added from inside the workspace. The confirmation and the Continue button
    * both key off it, so opening the Upload tab on a workspace that finished long ago
-   * announces nothing and holds nothing (decision D80).
+   * announces nothing and holds nothing.
    */
   const [workStartedHere, setWorkStartedHere] = useState(mine);
   const showToast = useToasts((state) => state.show);
@@ -621,7 +621,7 @@ function UploadScreenFor() {
   });
 
   /*
-   * The library, and the live stages laid over it. Decision D71.
+   * The library, and the live stages laid over it. Decision D44.
    *
    * The overview is the list of what exists; the event stream is what is happening to it.
    * The hook the processing strip uses is reused rather than a second subscriber written
@@ -648,7 +648,7 @@ function UploadScreenFor() {
      * the event stream has said. Driving it from the overview instead meant a document was
      * invisible until the next refetch — so an upload, or a click on "Try with sample
      * documents", showed an empty library for the entire time the reading was happening,
-     * which is the only time anyone is watching. Decision D76.
+     * which is the only time anyone is watching. Decision D36.
      */
     const described = new Map(stored.map((document) => [document.id, document]));
     return progress.map((entry) => {
@@ -679,7 +679,7 @@ function UploadScreenFor() {
   /*
    * Where the whole workspace is, not where the transfer is. "Ready" means read, extracted
    * and indexed — the point at which a document can actually be asked about — which is what
-   * this screen now waits for and reports (decision D76).
+   * this screen now waits for and reports (decision D36).
    */
   const readCount = library.filter(
     (document) => (document.liveStatus ?? document.status) === 'done',
@@ -835,7 +835,7 @@ function UploadScreenFor() {
    * One card per document, in order. `Spiral` repeats them itself when there are too few to
    * close the ring, so a single document still turns rather than hanging there.
    *
-   * Two sources, one ring (decision D79). When this browser is sending files, the cards are
+   * Two sources, one ring (decision D36). When this browser is sending files, the cards are
    * those files — real thumbnails for images, because the bytes are here. When it is not,
    * which is the whole of the sample-documents path, the cards are the documents the server
    * is reading. Cutting the second case is what took the animation off the samples path
@@ -903,11 +903,11 @@ function UploadScreenFor() {
    * wrong every time afterwards, because the same signal fired again on every later visit
    * to the Upload tab and took the tab away from someone who had deliberately opened it.
    * The move is now the Continue button, held shut while this visit's work is in flight,
-   * which says the same thing without steering (decision D80).
+   * which says the same thing without steering.
    *
    * The confirmation stays: it is the moment worth marking, and it is raised through the
    * store rather than rendered here so it survives whatever the person does next
-   * (decision D73).
+   *.
    *
    * Nothing is announced until work has actually been watched, and only work THIS visit
    * set going. Without the first, an empty list is trivially all-settled and the screen
@@ -932,7 +932,7 @@ function UploadScreenFor() {
     /*
      * The documents are read, not merely received. This is the moment worth confirming and
      * the moment worth moving on from — the whole reason this screen now waits for the
-     * pipeline rather than for the last byte (decision D76).
+     * pipeline rather than for the last byte (decision D36).
      */
     const readWord = readCount === 1 ? '1 document' : `${readCount} documents`;
     if (unreadableCount > 0 || failed > 0) {
@@ -978,7 +978,7 @@ function UploadScreenFor() {
       {/*
         The front door only. Once there are documents this screen is a working surface —
         a carousel, a file list, progress — and a moving background behind all of that is
-        something to look at while you are trying to read. Decision D89.
+        something to look at while you are trying to read.
       */}
       {!inWorkspace && <SilkAurora />}
 
@@ -1006,7 +1006,7 @@ function UploadScreenFor() {
                * onto a canvas once and the pixels do not care what the cascade does
                * afterwards. Naming the colour is what makes it a dependency of the effect
                * that builds them, so switching the palette rebuilds the word instead of
-               * leaving it in the old ink. Decision D88.
+               * leaving it in the old ink.
                */
               color={theme.color.ink}
               /*

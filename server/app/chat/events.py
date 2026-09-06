@@ -1,4 +1,4 @@
-"""The per-message answer stream vocabulary. Implementation section 5.2, decision D44.
+"""The per-message answer stream vocabulary. Implementation section 5.2, decision D32.
 
 A separate stream from the workspace event stream, and separate on purpose: an answer
 produces hundreds of token events, and writing those into the durable ``workspace_events``
@@ -8,9 +8,9 @@ is persisted in full anyway.
 ORDERING IS PART OF THE CONTRACT, NOT AN ACCIDENT
 --------------------------------------------------
 * ``visual`` or ``visual_skipped`` always precedes the first ``token``, so the client can
-  reserve the card's space before prose starts moving underneath it (decision D47).
+  reserve the card's space before prose starts moving underneath it.
 * a ``citation`` arrives before the token containing its marker's closing bracket, so the
-  client never has to render an unresolved footnote and then rewrite it (decision D45).
+  client never has to render an unresolved footnote and then rewrite it (decision D33).
 * ``done`` carries the whole persisted message, so a client that reconnected late can
   replace its local state wholesale instead of trying to reconcile a partial buffer.
 """
@@ -59,7 +59,7 @@ class VisualEvent(BaseModel):
     surface: list[dict[str, Any]] = Field(
         description="A complete A2UI message array, sent once. Never streamed in pieces: "
         "a half-built surface is not renderable, so there is nothing to gain from it "
-        "(decision D47)."
+        "."
     )
 
 

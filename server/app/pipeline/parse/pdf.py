@@ -1,7 +1,7 @@
 """PDF parsing: word geometry from pdfplumber, page images from pypdfium2.
 
 The coordinate convention is pdfplumber's own, verified against a real fixture in
-``tests/unit/test_pdf_geometry.py`` (decision D17), so word boxes are used as reported with
+``tests/unit/test_pdf_geometry.py``, so word boxes are used as reported with
 no transform. That test is what makes this module's ``BBox`` construction safe to read at a
 glance rather than something to re-derive.
 

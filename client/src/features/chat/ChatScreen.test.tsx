@@ -321,7 +321,7 @@ describe('ChatScreen', () => {
 
   it('reattaches to an answer that was still being written', async () => {
     /*
-     * A refresh mid-answer. Generation does not depend on anyone listening (decision D44),
+     * A refresh mid-answer. Generation does not depend on anyone listening (decision D32),
      * so the persisted row says `streaming` with empty content and the buffer is still
      * there to be tailed. Without reattachment the message would sit blank forever.
      */

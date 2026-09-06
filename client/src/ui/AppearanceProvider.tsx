@@ -12,7 +12,7 @@ import {
 } from './appearance';
 
 /**
- * Holds the appearance preference and turns it into a palette. Decision D88.
+ * Holds the appearance preference and turns it into a palette.
  *
  * The vocabulary and the decision rules are in `appearance.ts`; what is here is only the
  * three things that need a running browser — remembering the choice, watching the system,

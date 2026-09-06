@@ -31,7 +31,7 @@ export const api = createClient<paths>({
 });
 
 /**
- * Workspace credentials travel as a bearer token on every request (decision D8).
+ * Workspace credentials travel as a bearer token on every request (decision D7).
  *
  * The server declares `authorization` as an explicit header parameter, so it is passed
  * through `params.header` rather than being injected by middleware. That keeps it visible

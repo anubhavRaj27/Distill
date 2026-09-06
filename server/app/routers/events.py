@@ -1,6 +1,6 @@
-"""The workspace event stream. Requirement FR-04, decision D14, review finding 8.3.
+"""The workspace event stream. Requirement FR-04, decision D12, review finding 8.3.
 
-Server-Sent Events rather than WebSockets (decision D7): the traffic is one-directional,
+Server-Sent Events rather than WebSockets (decision D6): the traffic is one-directional,
 and resumption after a dropped connection comes free through ``Last-Event-ID``.
 
 FOUR THINGS HERE EXIST TO STOP STREAMING FROM SILENTLY NOT STREAMING

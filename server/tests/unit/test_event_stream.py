@@ -1,4 +1,4 @@
-"""The event bus and the resumable stream. Decision D14 and review finding 8.3.
+"""The event bus and the resumable stream. Decision D12 and review finding 8.3.
 
 Two of these are regression tests for bugs that reached a running server, and both were
 invisible to the rest of the suite because nothing had opened a stream yet:
@@ -240,7 +240,7 @@ def test_only_transient_failures_are_retried(reason: str | None, retryable: bool
 
 
 # ---------------------------------------------------------------------------
-# Background sessions deliver what they stage. Decision D70.
+# Background sessions deliver what they stage. Decisions D12 and D19.
 # ---------------------------------------------------------------------------
 
 

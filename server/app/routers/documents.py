@@ -19,7 +19,7 @@ Writes, reads, and unlinks go through ``anyio.to_thread.run_sync``. This is not 
 appeasement: a twenty megabyte synchronous write on the event loop stalls every other
 request in the process, and in this application that includes the Server-Sent Events
 heartbeats that tell every connected browser the backend is alive. A single process
-(decision D9) makes that a real consequence rather than a theoretical one.
+(decision D8) makes that a real consequence rather than a theoretical one.
 """
 
 from __future__ import annotations
@@ -277,7 +277,7 @@ class SeedResponse(BaseModel):
 async def seed(
     workspace: CurrentWorkspace, session: Session, settings: Config
 ) -> SeedResponse:
-    """Load the curated sample set. Requirement FR-05, decision D15.
+    """Load the curated sample set. Requirement FR-05.
 
     Reads ``samples/manifest.json`` rather than hard-coding filenames, so dropping files
     into ``samples/`` is the only step needed to change the demo corpus.
@@ -570,7 +570,7 @@ async def reextract(
 
     Human-verified values survive by construction: the write path filters them out and a
     disagreeing model answer is recorded beside the human's rather than over it. See
-    ``app.pipeline.persist`` and decision D16.
+    ``app.pipeline.persist`` and decision D13.
     """
     document = await _require_document(session, workspace.id, document_id)
     document.failure_reason = None

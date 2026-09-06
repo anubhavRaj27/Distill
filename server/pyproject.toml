@@ -19,7 +19,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30",
     # The synchronous driver, for the one place that cannot be async: blob storage in the
-    # database (decision D86). The Storage protocol is synchronous by design, and asyncpg
+    # database (decision D45). The Storage protocol is synchronous by design, and asyncpg
     # cannot be called from a synchronous method.
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
@@ -36,7 +36,7 @@ dependencies = [
     # Grounding
     "rapidfuzz>=3.10",            # fuzzy quote location, see implementation.md 6.3
 
-    # Large Language Model access. See decisions D13 and D20.
+    # Large Language Model access. See decisions D11 and D16.
     # Instructor was removed on purpose: it would convert response schemas with its own
     # converter, bypassing app/llm/jsonschema.py, which is the tested mitigation for the
     # provider schema subset problem. See app/llm/gemini.py for the full reasoning.

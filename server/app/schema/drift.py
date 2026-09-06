@@ -1,6 +1,6 @@
 """Deciding what to do when a document has something the schema cannot record.
 
-Decisions D23, D24, and **D38**. Schema-guided extraction returns ``extra_fields``: salient
+Decisions D18 and **D27**. Schema-guided extraction returns ``extra_fields``: salient
 values that match no current field. That list is the system noticing a document has
 something to say the schema cannot hold, which is the alternative to silently dropping it
 (requirement FR-11).
@@ -12,8 +12,8 @@ proposal card. v2 keeps the classifier exactly as it was and changes only what h
 the uncertain zone: it **auto-adds as a separate field**, and records why in the schema
 change summary.
 
-The reasoning is decision D34's, that schema administration is not the job a finance
-operations person came to do, plus decision D25's asymmetry argument, which still holds and
+The reasoning is decision D23's, that schema administration is not the job a finance
+operations person came to do, plus decision D27's asymmetry argument, which still holds and
 now does all the work: **a wrong split is a cheap merge later, a wrong merge is expensive to
 unpick.** Splitting on uncertainty leaves two clean columns and the user can merge them from
 the column menu in one action, with values and provenance moving intact. Merging on
@@ -27,7 +27,7 @@ Classification        Action
 Unambiguous match     auto-map onto the existing field
 Clearly novel         auto-add as a new field
 Uncertain (any of     auto-add as a **separate** field, with the reason recorded
-D28's ask reasons)    in ``change_summary``
+D27's ask reasons)    in ``change_summary``
 ===================== =========================================================
 
 Nothing is dropped and nothing interrupts. The audit trail is the change summary, which is
@@ -65,7 +65,7 @@ document belongs in this workspace at all.
 class DriftSeparation:
     """An extra field kept as its own column because the match was too close to call.
 
-    Not a pending question (decision D38). The field is already in the schema by the time
+    Not a pending question (decision D27). The field is already in the schema by the time
     this is reported; this records the near-miss so the change summary can explain it and
     so the interface can hint that a merge is available.
     """
@@ -154,7 +154,7 @@ class DriftOutcome:
     def summary(self) -> str:
         """The change summary. This is the ENTIRE audit trail for an unprompted change.
 
-        Decision D38 removed the proposal card, so nothing else will ever tell the user why
+        Decision D27 removed the proposal card, so nothing else will ever tell the user why
         their schema grew a column that looks like one they already had. The near-miss is
         named explicitly for that reason.
         """
@@ -207,7 +207,7 @@ async def assess(
     client: LLMClient,
     settings: Settings,
 ) -> DriftOutcome:
-    """Sort a document's extra fields into decision D23's three zones.
+    """Sort a document's extra fields into decision D27's three zones.
 
     Never raises for content reasons. An extra field that cannot be turned into a legal
     field key is dropped with a log line rather than failing the document, because losing
@@ -263,7 +263,7 @@ async def assess(
             logger.info("drift.auto_mapped", source=key, target=verdict.target_key)
             continue
 
-        # AUTO_ADD and ASK now take the SAME action (decision D38). They differ only in
+        # AUTO_ADD and ASK now take the SAME action (decision D27). They differ only in
         # what gets recorded: an uncertain match is noted as a separation so the change
         # summary can explain the near-miss and the interface can offer a merge.
         if verdict.outcome in (Outcome.AUTO_ADD, Outcome.ASK):

@@ -1,11 +1,11 @@
-"""Resolving a cited chunk to a highlightable region. Decision D45, requirement FR-22.
+"""Resolving a cited chunk to a highlightable region. Decision D33, requirement FR-22.
 
 A citation is chunk-level. The model writes ``[^chunk:<id>]`` and the chunk IS the citation,
 so there is no quote to locate and no fuzzy matching involved: the chunk already recorded
 which words of which page it covers, and the highlight is those words' boxes grouped into
 visual lines.
 
-That is the whole reason chunks are kept small (decision D45): chunk size is highlight size.
+That is the whole reason chunks are kept small (decision D33): chunk size is highlight size.
 
 DIGEST CHUNKS ARE THE INTERESTING CASE
 ---------------------------------------

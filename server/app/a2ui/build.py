@@ -1,4 +1,4 @@
-"""Turning an evaluated result into A2UI messages. Requirement A2-03, decision D37.
+"""Turning an evaluated result into A2UI messages. Requirement A2-03, decision D26.
 
 The shape of every surface is the same three messages:
 
@@ -231,7 +231,7 @@ def result_paths(
 ) -> dict[str, tuple[Any, str | None]]:
     """Every path a prose placeholder may refer to, with the unit that applies to it.
 
-    Decision D46. Built here rather than in the stream processor because this module owns
+    Decision D34. Built here rather than in the stream processor because this module owns
     the shape of the data model, so it is the only place that can enumerate the paths
     without guessing.
 

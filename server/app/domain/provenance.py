@@ -1,6 +1,6 @@
 """Where a value came from, in one shape for every document format.
 
-DESIGN NOTE, and a deliberate simplification of implementation.md (decision D18)
+DESIGN NOTE, and a deliberate simplification of implementation.md (decision D14)
 --------------------------------------------------------------------------------
 The implementation document proposed a different provenance unit per format: a bounding box
 for PDFs and images, a paragraph index for DOCX, a cell range for spreadsheets, a line span

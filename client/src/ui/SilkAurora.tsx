@@ -10,7 +10,7 @@ import { usePrefersReducedMotion } from './usePrefersReducedMotion';
  * that one was reimplemented in CSS to shed 600 kB of `three`, this one is kept as WebGL,
  * because the original already is: it is plain WebGL 1, one full-screen triangle strip and
  * one fragment shader, with no npm dependency of any kind. There is nothing to save by
- * rewriting it, and nothing in CSS that draws flowing ribbons of light. Decision D89.
+ * rewriting it, and nothing in CSS that draws flowing ribbons of light.
  *
  * Three things were changed, and all three are the reasons this is a port rather than a
  * copy.
@@ -21,7 +21,7 @@ import { usePrefersReducedMotion } from './usePrefersReducedMotion';
  * paints, plus the scrim that keeps the words on top of it legible.
  *
  * **Its colours come from the theme.** Upstream hard-codes a near-black base with champagne
- * and mint. Here every colour is a token, so the aurora follows the palette (decision D88)
+ * and mint. Here every colour is a token, so the aurora follows the palette
  * instead of pasting a dark rectangle into a paper-coloured page.
  *
  * **It can subtract.** That is the substantive change, and it is what makes a light mode

@@ -10,7 +10,7 @@ import { consumeSse } from '../../lib/sse';
  * durable, workspace-wide and resumable from a persisted log, where an answer stream is
  * ephemeral and belongs to one message. They share `lib/sse` and nothing else.
  *
- * The upload screen hands over as soon as bytes have arrived (decision D53), so parsing,
+ * The upload screen hands over as soon as bytes have arrived (decision D36), so parsing,
  * extraction and indexing are still running when Chat opens. This is what narrates that,
  * and it is why the chat screen is usable during it rather than gated behind it.
  */

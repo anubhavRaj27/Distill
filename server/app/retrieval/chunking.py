@@ -1,4 +1,4 @@
-"""Splitting a parsed document into retrievable passages. Decision D45.
+"""Splitting a parsed document into retrievable passages. Decision D33.
 
 CHUNK SIZE IS HIGHLIGHT SIZE
 ----------------------------
@@ -11,7 +11,7 @@ user nothing useful.
 WORD RANGES, NOT TEXT OFFSETS
 -----------------------------
 Each chunk records ``word_start`` and ``word_end`` as indices into the page's word list.
-Decision D18 already gave every supported format words with boxes, so a citation resolves to
+Decision D14 already gave every supported format words with boxes, so a citation resolves to
 highlight rectangles by slicing that list and grouping the boxes into lines. No re-parsing,
 no character-offset arithmetic, and no format-specific branch.
 

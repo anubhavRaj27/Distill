@@ -1,4 +1,4 @@
-"""Per-field statistics. Implementation section 6.5, decision D40.
+"""Per-field statistics. Implementation section 6.5, decision D29.
 
 Used for two things, and the second is why the shape matters: suggested questions
 (requirement FR-25) and the dashboard planner (FR-30). Both hand these numbers to a model

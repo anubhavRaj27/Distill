@@ -16,8 +16,8 @@ def build_client(settings: Settings) -> LLMClient:
     """Construct the configured client.
 
     ``LLM_PROVIDER=gemini`` that cannot be constructed is a **hard failure**, not a
-    fall back to the offline provider. This reverses the original behaviour here, and
-    decision D26 records why: the fake provider synthesises values from label-and-value
+    fall back to the offline provider. This reverses the original behaviour here, for one
+    reason: the fake provider synthesises values from label-and-value
     heuristics, and those values flow into the table wearing the same confidence tiers and
     provenance links as real extraction. An operator who set a key and mistyped it would get
     a running system quietly producing heuristic data it presents as model output, in a
@@ -26,7 +26,7 @@ def build_client(settings: Settings) -> LLMClient:
     heuristics as extraction is a credibility problem nobody notices until the demo.
 
     The offline provider stays fully supported — it is simply reached by asking for it,
-    with ``LLM_PROVIDER=fake``, which is still the default (decision D13).
+    with ``LLM_PROVIDER=fake``, which is still the default (decision D11).
     """
     if settings.llm_provider == "gemini":
         from app.llm.gemini import GeminiClient

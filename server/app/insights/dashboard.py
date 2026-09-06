@@ -1,4 +1,4 @@
-"""Generating the dashboard. Requirements FR-30 to FR-34, decision D40.
+"""Generating the dashboard. Requirements FR-30 to FR-34, decision D29.
 
 The agent decides what is worth showing; the server decides whether it was right.
 

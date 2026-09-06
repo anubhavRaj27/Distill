@@ -89,7 +89,7 @@ class Unauthorised(DistillError):
 
     Distinguishing "no such workspace" from "wrong token" would let anyone enumerate
     workspace identifiers, and workspace identifiers are the only access control this
-    product has (decision D8).
+    product has (decision D7).
     """
 
     code = "unauthorised"
@@ -121,7 +121,7 @@ class InvalidValue(DistillError):
 
 
 class QueryRejected(DistillError):
-    """Generated SQL failed the guard. See decision D10."""
+    """Generated SQL failed the guard. A v1 leftover: v2 generates no SQL (decision D24)."""
 
     code = "query_rejected"
     http_status = status.HTTP_422_UNPROCESSABLE_CONTENT

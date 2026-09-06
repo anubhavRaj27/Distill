@@ -1,4 +1,4 @@
-"""The embedding half of the drift signal. Decision D24.
+"""The embedding half of the drift signal. Decision D18.
 
 Drift matching scores a candidate field against the existing schema with two independent
 signals, and this suite covers the one that needs a provider. The important behaviour is
@@ -99,7 +99,7 @@ def test_a_missing_key_is_refused_before_a_client_is_ever_built() -> None:
 
 
 def test_an_unconstructable_gemini_client_fails_loudly(monkeypatch) -> None:
-    """Decision D26. With a key present, ``Settings`` is satisfied and construction is the
+    """With a key present, ``Settings`` is satisfied and construction is the
     next thing that can fail — a broken software development kit import, or a client
     constructor that throws. That used to fall back to the offline provider, which is the
     failure mode this refuses to have: heuristic values reach the table wearing the same

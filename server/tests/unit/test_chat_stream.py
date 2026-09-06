@@ -1,4 +1,4 @@
-"""The answer buffer and the stream processor. Decisions D44, D45, D46.
+"""The answer buffer and the stream processor. Decisions D32, D33, D34.
 
 These two carry the streaming contract, and both fail in ways a user sees directly: a
 buffer bug loses an answer, and a processor bug shows raw markers or an unresolved
@@ -79,7 +79,7 @@ async def test_a_follower_attached_before_anything_is_written_sees_everything() 
 
 
 async def test_a_follower_attached_after_completion_replays_everything() -> None:
-    """Generation does not wait for a listener (decision D44), so a client that connects
+    """Generation does not wait for a listener (decision D32), so a client that connects
     late must still get the whole answer."""
     buffer = AnswerBuffer(message_id=uuid4())
     await buffer.append(TokenEvent(text="one"))
@@ -182,7 +182,7 @@ async def test_a_marker_split_one_character_at_a_time_still_resolves() -> None:
 
 
 async def test_the_citation_arrives_before_the_token_that_references_it() -> None:
-    """Decision D45. The client must never render an unresolved footnote."""
+    """Decision D33. The client must never render an unresolved footnote."""
     _, events = await _run([f"Claim [^chunk:{CHUNK_A}] here."])
     kinds = [type(event).__name__ for event in events]
     citation_at = kinds.index("CitationEvent")
@@ -237,7 +237,7 @@ async def test_a_citation_carries_boxes_for_the_highlight() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Placeholders, decision D46
+# Placeholders, decision D34
 # ---------------------------------------------------------------------------
 
 
@@ -259,7 +259,7 @@ async def test_a_placeholder_split_across_deltas_is_substituted() -> None:
 
 async def test_an_unresolvable_placeholder_emits_nothing() -> None:
     """Showing the raw placeholder would expose internals; inventing a number is exactly
-    what decision D37 forbids."""
+    what decision D26 forbids."""
     processor, _ = await _run(
         ["Total {{result.nope}} end."], paths={"result.total": (1.0, None)}
     )
@@ -337,7 +337,7 @@ async def test_the_reassembled_text_equals_what_the_user_saw() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Units after a substituted figure. Decision D68.
+# Units after a substituted figure.
 # ---------------------------------------------------------------------------
 
 

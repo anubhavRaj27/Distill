@@ -2,7 +2,7 @@
 
 There were two places constructing a ``LocalStorage`` directly, the lifespan and the
 documents router, which is two places to forget when a second backend appears. See decision
-D86.
+D45.
 
 **Cached, and that is not an optimisation.** The documents router builds a store per
 request. A directory does not care, but ``PostgresStorage`` owns a connection pool, so a

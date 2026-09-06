@@ -1,7 +1,7 @@
 """Generated fixtures for every supported format.
 
 Generated rather than committed, for the same reason as the PDF fixtures: the expected
-content lives in code beside the assertions. Anubhav's real sample documents (decision D15)
+content lives in code beside the assertions. Anubhav's real sample documents
 go in ``samples/`` and are exercised by the seed route, not by these tests, so the unit
 suite stays fast and deterministic.
 """

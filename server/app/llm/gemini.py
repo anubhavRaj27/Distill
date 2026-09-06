@@ -1,6 +1,6 @@
 """Gemini access, through the google-genai software development kit.
 
-DELIBERATE DEVIATION FROM implementation.md SECTION 2.2 (decision D20)
+DELIBERATE DEVIATION FROM implementation.md SECTION 2.2 (decision D16)
 -----------------------------------------------------------------------
 The implementation document chose Instructor as the structured-output layer, for retries on
 malformed output and for provider independence. This module calls ``google-genai`` directly
@@ -24,7 +24,7 @@ WHAT IS AND IS NOT VERIFIED
 Verified without a key: the schema conversion, the prompt assembly, the retry decision
 logic, and the error classification, all through ``FakeClient`` and the unit suite.
 
-Verified WITH a key on September 5, 2026 (decision D62): a structured extraction call
+Verified WITH a key on September 5, 2026 (decision D42): a structured extraction call
 returns a schema-valid ``OpenExtraction`` through ``app.llm.jsonschema``, which closes
 review finding 8.7; embeddings return one vector per input at the requested width; and a
 chat answer streams. The model identifiers in ``config.py`` were changed in the same pass,
@@ -113,7 +113,7 @@ class GeminiClient:
         return "gemini"
 
     def model_for(self, kind: CallKind) -> str:
-        """The model tier for a call kind. See decision D13."""
+        """The model tier for a call kind. See decision D11."""
         return (
             self._settings.llm_extract_model
             if kind.needs_strong_model
@@ -218,7 +218,7 @@ class GeminiClient:
 
             if self._settings.llm_record:
                 # Capture the interaction so the fake can replay it, which is how the
-                # deterministic end-to-end test gets real data (decision D13).
+                # deterministic end-to-end test gets real data (decision D11).
                 write_fixture(
                     self._settings.llm_fixture_dir
                     / request.kind.value
@@ -235,7 +235,7 @@ class GeminiClient:
     async def embed(
         self, texts: Sequence[str], *, task: EmbedTask = "similarity"
     ) -> list[Vector | None]:
-        """Embed passages, questions, or field labels. Decisions D24, D36, D63.
+        """Embed passages, questions, or field labels. Decisions D18, D25.
 
         Never returns ``None`` entries: Gemini embeds whatever it is given. The optional
         element type exists for ``FakeClient``, which has no vector for an unrecorded label.
@@ -337,7 +337,7 @@ class GeminiClient:
         )
 
     async def stream_text(self, request: LLMRequest) -> AsyncIterator[str]:
-        """Stream a text answer. Decision D44.
+        """Stream a text answer. Decision D32.
 
         No retry loop, unlike ``structured``. Once the first delta has reached the user's
         screen, silently restarting the call would rewrite text they have already read. A
@@ -392,7 +392,7 @@ class GeminiClient:
 
         Only the calls a user waits on are turned down. Extraction and schema inference
         keep the default, because their cost is paid once per document by a background
-        worker and their errors are baked into the table. See decision D62 and the timings
+        worker and their errors are baked into the table. See decision D42 and the timings
         in ``Settings.llm_fast_thinking_level``.
         """
         level = self._settings.llm_fast_thinking_level

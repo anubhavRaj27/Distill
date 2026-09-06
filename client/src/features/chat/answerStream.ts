@@ -15,7 +15,7 @@ import type { SseMessage } from '../../lib/sse';
  * `visual` or `visual_skipped` always precedes the first `token`, and a `citation` always
  * precedes the token carrying its marker. So the reducer never has to render an
  * unresolved footnote and rewrite it later, and never has to reflow prose around a card
- * that arrives late (decisions D45 and D47).
+ * that arrives late (decision D33).
  */
 
 export type ChatMessage = components['schemas']['MessageResponse'];

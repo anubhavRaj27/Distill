@@ -1,4 +1,4 @@
-"""Orchestrating one answer, from question to persisted message. Decision D44.
+"""Orchestrating one answer, from question to persisted message. Decision D32.
 
 The shape here is the decision: ``ask`` writes the user's message, creates the assistant
 message as ``streaming``, spawns a background task, and returns immediately with a stream
@@ -14,7 +14,7 @@ STAGE ORDER IS THE CONTRACT
 ``visual_skipped`` → ``answering`` → tokens and citations → ``done``.
 
 The visual always precedes the first token, so the client reserves the card's space before
-prose starts moving underneath it (decision D47).
+prose starts moving underneath it.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ logger = get_logger(__name__)
 
 _tasks: dict[UUID, asyncio.Task[None]] = {}
 """In-flight generation tasks, so ``stop`` can cancel one. In-process, consistent with the
-single-process constraint decision D9 imposes."""
+single-process constraint decision D8 imposes."""
 
 
 def message_payload(message: ChatMessage) -> dict[str, Any]:
@@ -234,7 +234,7 @@ async def _generate(
             fixture_key=f"plan-{message_id.hex[:12]}",
         )
 
-        # -- evaluate and build the visual, BEFORE any prose (decision D47)
+        # -- evaluate and build the visual, BEFORE any prose
         evaluated = None
         surface: list[dict[str, Any]] | None = None
         visual_kind = None

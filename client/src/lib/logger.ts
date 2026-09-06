@@ -26,7 +26,7 @@ type EventName =
   | 'chat.stream_reattach'
   | 'chat.stream_failed'
   /*
-   * The document library on the Upload screen (decision D71). A deletion cascades through
+   * The document library on the Upload screen (decision D44). A deletion cascades through
    * the extracted row, the passages and the citations, so "was it asked for, and did it
    * work" is worth having when someone reports a document that should still be there.
    */

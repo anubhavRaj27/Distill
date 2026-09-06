@@ -1,6 +1,6 @@
 """The embedding thresholds, checked against cosines measured from a real model.
 
-Decision D66. On September 5, 2026 twelve synonym pairs and twelve unrelated pairs of field
+On September 5, 2026 twelve synonym pairs and twelve unrelated pairs of field
 labels were embedded with gemini-embedding-001 and scored. The numbers below are from that
 run, not invented, and they are the reason the thresholds moved: unrelated labels score
 0.764 to 0.827 under this model and synonyms 0.822 to 0.982, a band nothing like the 0.4 to
@@ -8,7 +8,7 @@ run, not invented, and they are the reason the thresholds moved: unrelated label
 
 Vectors here are two-dimensional unit vectors placed at an exact angle, so a pair's cosine
 is whatever this file says it is. That keeps the calibration checkable with no key and no
-network, which is the same trick decision D13 relies on everywhere else.
+network, which is the same trick decision D11 relies on everywhere else.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ def test_a_measured_synonym_now_maps_where_it_used_to_be_asked() -> None:
 def test_two_plausible_totals_are_still_asked_about() -> None:
     """The case that survives calibration, and should. In the live run `Grand total` scored
     0.926 against `Total due` and 0.901 against `Subtotal`: the margin does not hold, and
-    folding a grand total into a subtotal is exactly the wrong merge D24 refuses to risk.
+    folding a grand total into a subtotal is exactly the wrong merge D18 refuses to risk.
     Two columns and a question beat one wrong column."""
     result = verdict(
         "Grand total",

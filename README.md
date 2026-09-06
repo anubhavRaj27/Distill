@@ -52,8 +52,8 @@ That creates the `distill` login role (password `distill`, matching the default 
 string), the application database, and the database the test suite uses.
 
 The script also creates a `distill_readonly` role. It is a leftover: it existed to confine
-generated Structured Query Language (SQL) under decision D10, and v2 generates none
-(decision D35). Nothing connects as it, and
+generated Structured Query Language (SQL) under v1's SQL guard, and v2 generates none
+(decision D24). Nothing connects as it, and
 `server/scripts/bootstrap_db_per_database.sql` exists only to grant privileges to it, so you
 can skip that script entirely.
 
@@ -67,9 +67,9 @@ The defaults work as they are. The only variable that changes behavior is `LLM_P
 
 - **`fake`** (the default) runs the entire pipeline against recorded fixtures, with no
   network and no key. A fresh checkout works immediately. This is a supported way to run the
-  product, not a degraded one (decision D13).
+  product, not a degraded one (decision D11).
 - **`gemini`** makes real model calls. Set `GEMINI_API_KEY` as well, or the server refuses to
-  start rather than quietly falling back (decision D26).
+  start rather than quietly falling back.
 
 ### 3. Install dependencies and run migrations
 
@@ -106,8 +106,8 @@ Port 8000 is not arbitrary: the frontend proxies `/api` and `/healthz` there, so
 talks to a single origin in development exactly as it does in production.
 
 `--workers 1` is not arbitrary either. Document processing runs on an in-process asyncio
-queue (decision D9), and while every event is persisted so a reconnecting client can replay
-it, *live* delivery goes through an in-process bus (decision D14). A second worker would give
+queue (decision D8), and while every event is persisted so a reconnecting client can replay
+it, *live* delivery goes through an in-process bus (decision D12). A second worker would give
 you two independent queues, and a browser connected to one process would never see the live
 events published by the other. The streaming chat answer buffer is in-process for the same
 reason. Avoid `--reload` while a document is processing, since a reload mid-run restarts the
@@ -158,7 +158,7 @@ state, not a warning.
    and indexing. A value appears in the table and becomes askable at the same moment.
 3. **Chat.** Ask in plain language. The answer streams, cites the passages it used, and may
    open with a chart or a metric. Every figure in that visual is computed by the server from
-   a query the model specified, never typed by the model (decision D37).
+   a query the model specified, never typed by the model (decision D26).
 4. **Data.** One unified table across every document, plus a dashboard the agent assembles
    from the fields it found. Click any cell to open the source document with the value
    highlighted on the page. Edit a cell to correct it; a human correction is never overwritten
@@ -167,7 +167,7 @@ state, not a warning.
 There are no accounts. Creating a workspace mints a token once, which the frontend keeps in
 `localStorage` and encodes in a shareable link fragment. That token is the only credential, so
 **anyone with the link has full access** to that workspace, and only its hash is stored server
-side (decision D8). Lose it and the workspace is unreachable: there is no recovery, by design.
+side (decision D7). Lose it and the workspace is unreachable: there is no recovery, by design.
 
 ---
 
@@ -221,7 +221,7 @@ add up fails the run instead of shipping.
 ## Model configuration
 
 Relevant only with `LLM_PROVIDER=gemini`. Every model identifier below was verified callable
-on September 5, 2026 (decision D62).
+on September 5, 2026 (decision D42).
 
 | Variable | Default | What it does |
 | --- | --- | --- |
@@ -266,7 +266,7 @@ Run from the directory named.
 
 **`LLM_PROVIDER is 'gemini' but GEMINI_API_KEY is not set`** at startup. Deliberate: a server
 that boots with a mistyped key would serve offline heuristics dressed as real extraction.
-Either supply the key or set `LLM_PROVIDER=fake` (decision D26).
+Either supply the key or set `LLM_PROVIDER=fake`.
 
 **`connection refused` on the database.** Postgres is not running:
 `brew services start postgresql@16`. If it is running, check that step 1 created the role, and

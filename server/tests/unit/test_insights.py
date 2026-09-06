@@ -1,6 +1,6 @@
 """Query specifications, their evaluation, and the A2UI surfaces built from them.
 
-This is decision D37's test file: the rule that every displayed number is computed by the
+This is decision D26's test file: the rule that every displayed number is computed by the
 server and bound by path, never typed by the model. The tests that matter most are the ones
 asserting what the model **cannot** do, and the one asserting that a total spanning two
 currencies is reported with a caveat rather than silently summed.
@@ -251,7 +251,7 @@ def test_a_dashboard_panel_surface_leaves_the_heading_to_its_card() -> None:
 
 
 def test_the_numbers_live_in_the_data_model_and_the_component_only_binds() -> None:
-    """Decision D37, as a structural assertion.
+    """Decision D26, as a structural assertion.
 
     A number appearing inline in a component would mean something other than the evaluator
     produced it. The component may only carry a path.
@@ -383,7 +383,7 @@ def test_the_catalog_lists_exactly_the_components_we_ship() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Placeholder paths, decision D46
+# Placeholder paths, decision D34
 # ---------------------------------------------------------------------------
 
 

@@ -219,7 +219,7 @@ def merge_with_existing(
     ``model_value`` with the tier set to conflict.
 
     Keeping both is what makes the conflict actionable rather than merely alarming
-    (decision D16): the interface can show the user the two candidates and let them decide,
+    (decision D13): the interface can show the user the two candidates and let them decide,
     instead of telling them a disagreement exists without saying what it is.
 
     Note that this is belt to the database's braces. The persistence layer also filters

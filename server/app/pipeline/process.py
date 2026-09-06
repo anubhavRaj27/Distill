@@ -21,7 +21,7 @@ working, under a per-workspace lock so two documents finishing together cannot b
 one. Once it exists, every parked document is mapped onto it **without another model call**,
 because the open extraction already read those documents.
 
-v2 removed the confirmation step (decision D38). Uncertain unification resolves to separate
+v2 removed the confirmation step (decision D27). Uncertain unification resolves to separate
 fields and the reason goes into the schema change summary, so there is no proposal row, no
 card, and no debounce window to hold a batch open for a decision that will never be asked.
 """
@@ -64,7 +64,7 @@ logger = get_logger(__name__)
 _schema_locks: dict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
 """One lock per workspace, so two documents finishing at once cannot both infer a schema.
 
-In-process, which is consistent with the single-process constraint decision D9 already
+In-process, which is consistent with the single-process constraint decision D8 already
 imposes and which ``/healthz`` reports so a misconfiguration is visible.
 """
 
@@ -634,7 +634,7 @@ async def maybe_generate_dashboard(
 
 
 # ---------------------------------------------------------------------------
-# The workspace's name, once there is something to name it after. Decision D77.
+# The workspace's name, once there is something to name it after.
 # ---------------------------------------------------------------------------
 
 _naming_locks: dict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)

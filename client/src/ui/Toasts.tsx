@@ -6,7 +6,7 @@ import { useToasts, type Toast } from './toastStore';
 
 /**
  * The toast stack, mounted once above the routes so a message outlives the screen that
- * raised it. Decision D73.
+ * raised it.
  *
  * **It is announced, not just drawn.** The region is a polite live region, so the
  * confirmation reaches a screen reader without stealing focus — which is the whole point of
@@ -26,7 +26,7 @@ const Region = styled.div`
   /*
    * Top right, clear of the bottom of the screen entirely.
    *
-   * A person often arrives here from an upload (decisions D73, D81), and the bottom of the
+   * A person often arrives here from an upload (decision D36), and the bottom of the
    * chat screen is the composer — the box they are about to type in. Bottom centre covered it
    * outright and bottom right still clipped its corner on a narrow window. The top right is
    * the one region no screen in this product puts anything in, and it clears the 64px

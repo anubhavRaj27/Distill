@@ -3,7 +3,7 @@
  *
  * `EventSource` would be the obvious choice and cannot be used, for one blunt reason: it
  * sends no request headers. Every route in this API authorises with
- * `Authorization: Bearer <workspace token>` (decision D8), and there is no query-parameter
+ * `Authorization: Bearer <workspace token>` (decision D7), and there is no query-parameter
  * fallback — deliberately, since a token in a URL ends up in logs, history and referrers.
  * So the stream is read as a `fetch` body instead.
  *

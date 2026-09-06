@@ -10,7 +10,7 @@
 # Build from the REPOSITORY ROOT, not from server/:
 #     docker build -t distill .
 #
-# Decision D86.
+# Decision D45.
 
 # ---------------------------------------------------------------------------
 # 1. Build the interface

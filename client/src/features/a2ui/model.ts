@@ -1,11 +1,11 @@
 /**
- * Reading an A2UI message array into something renderable. Requirement A2-02, decision D39.
+ * Reading an A2UI message array into something renderable. Requirement A2-02, decision D28.
  *
  * The server sends three messages per surface (`server/app/a2ui/build.py`): `createSurface`
  * names the catalog, `updateDataModel` writes the **server-computed** result at `/result`,
  * and `updateComponents` emits components whose properties are *path bindings* into it.
  *
- * The separation is the entire safety argument of decision D37, and it only holds if the
+ * The separation is the entire safety argument of decision D26, and it only holds if the
  * client honours it. A component says "my value is at `/result/rows/0/value`"; this module
  * looks that path up in the data model the server wrote. No figure a surface renders ever
  * passed through the model, so letting the agent choose the presentation cannot let it

@@ -7,7 +7,7 @@ import { theme } from '../../ui/theme';
 import { DocumentLibrary, type LibraryDocument } from './DocumentLibrary';
 
 /**
- * The list that answers "what is actually in this workspace". Decision D71.
+ * The list that answers "what is actually in this workspace". Decision D44.
  *
  * Three things it has to get right, and each is here because getting it wrong is quiet
  * rather than loud: a document still being read must not offer to open, a deletion must be

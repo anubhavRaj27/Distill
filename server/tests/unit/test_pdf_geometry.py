@@ -1,4 +1,4 @@
-"""The coordinate convention, as an executable assertion. See decision D17.
+"""The coordinate convention, as an executable assertion.
 
 This is deliberately the first test in the project. The entire provenance feature, which is
 the product's central trust claim, rests on the backend and the browser agreeing about where

@@ -1,11 +1,11 @@
-"""Label vectors for drift matching, with a cache. Decision D24.
+"""Label vectors for drift matching, with a cache. Decision D18.
 
-Decision D24 budgets "a label-keyed cache so a schema's labels are not re-embedded once per
+Decision D18 budgets "a label-keyed cache so a schema's labels are not re-embedded once per
 document". This is that cache.
 
 Keyed on the **embedding text**, not the field key, so two fields that happen to describe
 themselves identically share a vector and a rename does not invalidate one. The cache lives
-for the process, which matches the single-process constraint decision D9 already imposes.
+for the process, which matches the single-process constraint decision D8 already imposes.
 
 The embedding text is the label plus the description rather than the key alone. A key like
 ``po_no`` carries almost no signal, while "Purchase Order Number, the reference the customer
@@ -35,7 +35,7 @@ def embedding_text(label: str, description: str = "", key: str = "") -> str:
     signature because callers naturally have one to hand and because excluding it is a
     decision worth stating at the call site rather than hiding.
 
-    Why not label plus description, which is what decision D24 sketched:
+    Why not label plus description, which is what decision D18 sketched:
 
     * **Fixture stability.** This string is the cache key and the recorded-fixture key. Our
       descriptions are generated, and one of them is "For example: Acme Industrial", built
@@ -73,7 +73,7 @@ async def vectors_for(client: LLMClient, texts: list[str]) -> dict[str, Vector |
     for start in range(0, len(missing), MAX_EMBED_BATCH):
         batch = missing[start : start + MAX_EMBED_BATCH]
         # "similarity", not "document": neither of two field labels being compared is a
-        # query for the other. Decision D63.
+        # query for the other.
         vectors = await client.embed(batch, task="similarity")
         if len(vectors) != len(batch):
             # A provider that returns a different count has broken the positional contract

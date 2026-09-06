@@ -1,4 +1,4 @@
-"""Dashboard vetting. Requirement FR-31, decision D40.
+"""Dashboard vetting. Requirement FR-31, decision D29.
 
 The planner is a model, so it cannot be unit tested. What can, and what actually protects
 the user's first impression of the product, is the vetting pass: the agent proposes before

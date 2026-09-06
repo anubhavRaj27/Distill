@@ -1,7 +1,7 @@
 """Turning the one configured connection string into the driver a caller needs.
 
 The application is asyncpg throughout, with one exception: blob storage in the database is
-synchronous, because the ``Storage`` protocol is (decision D86). So the same URL has to be
+synchronous, because the ``Storage`` protocol is (decision D45). So the same URL has to be
 expressed twice, and the two drivers disagree about more than the scheme.
 
 The disagreement that matters is TLS. asyncpg, through SQLAlchemy, takes ``ssl=require``.

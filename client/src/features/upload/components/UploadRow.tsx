@@ -13,7 +13,7 @@ import type { DocumentProgress } from '../../processing/useDocumentProgress';
  * place for a progress row to stop, since nothing useful has happened yet at that point.
  * It now carries on through what the server does with the file: reading it, pulling out
  * values, making it searchable. "Ready" is the end of the whole pipeline, not the end of
- * the transfer (decision D76).
+ * the transfer (decision D36).
  *
  * State is carried on three channels at once, never colour alone: the bar's fill, a word,
  * and an icon. That is the same rule the confidence tiers follow, applied here because this

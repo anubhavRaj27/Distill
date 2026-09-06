@@ -1,9 +1,9 @@
-"""Finding the passages that answer a question. Decisions D35 and D36.
+"""Finding the passages that answer a question. Decisions D24 and D25.
 
 Cosine similarity computed in process over every chunk in the workspace. A workspace of 25
 documents at roughly 40 passages each is about a thousand vectors, which is scanned in
 single-digit milliseconds, so this avoids making pgvector part of the one-command setup
-(decision D36).
+(decision D25).
 
 TWO THINGS THIS DOES BEYOND RANKING
 ------------------------------------

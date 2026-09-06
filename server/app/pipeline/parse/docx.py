@@ -2,7 +2,7 @@
 
 Paragraphs and table rows become lines, in document order, and are laid out onto rendered
 pages by ``app.pipeline.parse.render``. So a DOCX value gets a real highlight box like every
-other format, and its ``locator`` still says "paragraph 12" (decision D18).
+other format, and its ``locator`` still says "paragraph 12" (decision D14).
 
 Document order matters and is not what ``python-docx`` gives by default: ``paragraphs`` and
 ``tables`` are separate collections, so reading them in sequence would place every table

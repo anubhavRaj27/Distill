@@ -48,7 +48,7 @@ async def test_a_missing_workspace_is_indistinguishable_from_a_wrong_token(
 ) -> None:
     """Telling these apart would let anyone enumerate workspace identifiers.
 
-    The workspace token is the ONLY credential this product has (decision D8), so a valid
+    The workspace token is the ONLY credential this product has (decision D7), so a valid
     identifier is most of the way to access. Both cases must return the same code and the
     same message.
     """
@@ -89,7 +89,7 @@ async def test_every_error_carries_a_correlation_identifier(
 
 
 async def test_health_reports_the_process_identifier(client: AsyncClient) -> None:
-    """Decision D9: exactly one API process, so this value must be visible."""
+    """Decision D8: exactly one API process, so this value must be visible."""
     response = await client.get("/healthz")
     assert response.status_code == 200
     body = response.json()

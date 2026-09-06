@@ -11,7 +11,7 @@ import { darkTheme, lightTheme, type Theme } from './theme';
  * Both palettes are put through the same table. A second theme is the easiest way in the
  * world to ship an inaccessible one — the light theme was measured, the dark theme was
  * eyeballed at night on a good monitor — and the only defence is that neither is allowed
- * to be special. See decision D88.
+ * to be special.
  *
  * The tier colours are included because they are used for text and glyphs, not only for
  * borders — a low-confidence marker nobody can read is worse than no marker.
@@ -120,7 +120,7 @@ describe('the two palettes', () => {
 
 /**
  * The drop zone's glass, which is the one surface in the app whose background is a moving
- * shader rather than a colour. Decision D89.
+ * shader rather than a colour.
  *
  * A translucent panel is where a contrast promise quietly dies: it looks fine over the part
  * of the background that was on screen when it was designed, and fails over the part that

@@ -165,7 +165,7 @@ def test_re_extraction_never_overwrites_a_human_value() -> None:
 
 
 def test_a_disagreeing_model_answer_is_kept_beside_the_human_one() -> None:
-    """Decision D16. A flag alone would say a disagreement exists without saying what it
+    """Decision D13. A flag alone would say a disagreement exists without saying what it
     is, which the user cannot act on."""
     human = _human("Northwind Traders Pvt Ltd")
     fresh = score(

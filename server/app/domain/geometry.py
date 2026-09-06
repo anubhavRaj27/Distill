@@ -10,7 +10,7 @@ expressed in **PDF points with a top-left origin and y increasing downward**:
 
 This is not an arbitrary choice, it is the convention pdfplumber already reports, so
 adopting it means zero transforms anywhere in the pipeline. It was verified against a real
-PDF rather than assumed. See decision D17 and ``tests/unit/test_pdf_geometry.py``, which
+PDF rather than assumed. See ``tests/unit/test_pdf_geometry.py``, which
 asserts it against a generated fixture with known coordinates.
 
 Concretely, for a 612 x 792 point page with a glyph whose PDF-native (bottom-left origin)

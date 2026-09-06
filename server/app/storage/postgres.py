@@ -1,4 +1,4 @@
-"""Blob storage in Postgres. Decision D86.
+"""Blob storage in Postgres. Decision D45.
 
 The free hosting tiers this is deployed on give a container no disk that survives a restart,
 so ``LocalStorage`` on a deployed instance means the originals and the page images quietly

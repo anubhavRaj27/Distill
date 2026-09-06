@@ -10,7 +10,7 @@ import { AppHeader } from './AppHeader';
 
 /**
  * The workspace name in the chrome, which is a label almost always and a text field
- * occasionally. Decision D77.
+ * occasionally.
  *
  * What these hold: that renaming is possible at all, that abandoning an edit abandons it,
  * and that an empty name cannot be saved — an unnamed workspace and one deliberately called

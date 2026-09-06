@@ -7,7 +7,7 @@ Two modes, as implementation.md section 6.2 describes:
 * **schema-guided extraction** thereafter. Fills the agreed schema and reports what did not
   fit in ``extra_fields``, which is what feeds drift detection.
 
-Both return the same flat response shape (decision D19), so there is one fixture shape and
+Both return the same flat response shape (decision D15), so there is one fixture shape and
 one set of downstream handling.
 
 PAGES ARE SENT AS NUMBERED BLOCKS WITHOUT LINE NUMBERS

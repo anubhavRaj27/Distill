@@ -7,7 +7,7 @@ import { logger } from '../../lib/logger';
 type WorkspaceOverview = components['schemas']['WorkspaceOverview'];
 
 /**
- * Remove a document and everything derived from it. Requirement FR-07, decision D71.
+ * Remove a document and everything derived from it. Requirement FR-07, decision D44.
  *
  * Not optimistic, unlike a cell correction. A correction is the person's own typing coming
  * back to them and showing it immediately is honest; a deletion cascades server-side through

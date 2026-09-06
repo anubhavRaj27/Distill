@@ -36,7 +36,7 @@ def test_a_rendered_page_matches_its_declared_point_size() -> None:
 
 @pytest.mark.parametrize("dpi", [72, 144, 200])
 def test_every_word_box_contains_the_ink_of_its_word(dpi: int) -> None:
-    """The load-bearing assertion for decision D18's single coordinate convention."""
+    """The load-bearing assertion for decision D14's single coordinate convention."""
     page, png = render_pages(
         [RenderLine("Supplier: Northwind Traders"), RenderLine("Total: 12480.50")], dpi=dpi
     )[0]

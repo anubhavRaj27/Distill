@@ -89,7 +89,7 @@ const Workspace = styled.div`
 `;
 
 /**
- * The workspace's name, and a way to change it. Decision D77.
+ * The workspace's name, and a way to change it.
  *
  * A button rather than a text field sitting there permanently: this is a label that is read
  * far more often than it is written, and an input in the chrome of every screen invites

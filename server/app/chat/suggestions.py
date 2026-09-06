@@ -60,7 +60,7 @@ async def suggest(
     product's charts — nobody types "total amount by vendor" into a blank box on their first
     visit — so a set where none of them draws a chart hides the visual half of the product.
     That is what was happening: the model reliably offered a sum, a lookup and a
-    superlative, all of which answer in prose. See decision D78.
+    superlative, all of which answer in prose.
     """
     if not fields:
         return []

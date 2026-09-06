@@ -10,14 +10,14 @@ import type { DashboardState } from './useDashboard';
  * coverage, and their value distributions (requirements section 3.3).
  *
  * A panel's body is an **A2UI surface**, rendered by the same component that renders a
- * chat visual (decision D39, product principle 5): the agent emits a query specification,
+ * chat visual (decision D28, product principle 5): the agent emits a query specification,
  * the server evaluates it against `field_values`, and the result is bound into the surface
  * by path. A chart drawn in the client from numbers the client added up would be a
  * different product with a weaker promise.
  *
  * That slot sat empty until September 6, 2026 — the panels arrived with their surfaces
  * attached and this file rendered the rationale and dropped them, so the product had a
- * dashboard with no charts in it (decision D75). It is one line of rendering, and the
+ * dashboard with no charts in it. It is one line of rendering, and the
  * comment that used to be here said it was waiting for a catalog that already existed.
  *
  * What is real today: the states. Not generated, generating, ready, stale, and failed are

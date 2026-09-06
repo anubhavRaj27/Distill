@@ -1,4 +1,4 @@
-"""The in-process job queue. Decision D9.
+"""The in-process job queue. Decision D8.
 
 An ``asyncio.Queue`` with a fixed pool of consumer tasks, rather than Redis with a separate
 worker process. A single instance over five days does not need a broker, and a broker adds a
@@ -10,7 +10,7 @@ Three consequences of that choice, all handled here rather than left implicit:
   the event bus. Pinned in the Dockerfile, the compose file, and the Makefile, and
   ``/healthz`` reports the process identifier so a misconfiguration is visible rather than
   mysterious.
-* **A restart interrupts in-flight work.** Decision D9 accepts this and notes that the
+* **A restart interrupts in-flight work.** Decision D8 accepts this and notes that the
   per-document status model makes it resumable. ``resume_interrupted`` is that resumption:
   on boot, any document left mid-pipeline is re-queued.
 * **Concurrency is bounded.** Extraction is a network call per document, so the limit exists
@@ -186,7 +186,7 @@ def _is_retryable(failure_reason: str | None) -> bool:
 
 
 async def resume_interrupted(worker: Worker) -> int:
-    """Re-queue documents left mid-pipeline by a restart. Decision D9's accepted risk.
+    """Re-queue documents left mid-pipeline by a restart. Decision D8's accepted risk.
 
     A document stuck in ``uploaded``, ``parsing``, ``extracting``, or ``indexing`` had a
     process die under it. ``awaiting_schema`` is deliberately excluded: that is a legitimate
