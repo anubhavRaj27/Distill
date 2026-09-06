@@ -77,6 +77,39 @@ interface Palette {
     ring: string;
 
     /**
+     * A surface you can see through: the drop zone, which sits over the aurora.
+     *
+     * Expressed as a translucent version of `paperRaised` rather than as its own colour,
+     * because that is exactly what it is — the same panel, letting some of what is behind
+     * it come through. `glassDragging` is the same surface a shade more solid, so the zone
+     * still visibly firms up when a file is over it.
+     *
+     * **The alpha is a contrast budget, not a taste.** Whatever shows through has to leave
+     * the panel's own text above 4.5:1, and the two palettes have wildly different room.
+     * Dark has almost none: the text on this panel is pale, the aurora's overlapping ribbons
+     * can reach white, and pale-on-white is where a glass panel fails — 0.52 measured 2.89:1
+     * against a white backdrop, which is why it is not 0.52. Light has room to spare, since
+     * its text is the darkest colour in the palette and the aurora only ever takes cream
+     * down to a mid tone, so light is the more transparent of the two even though it looks
+     * like it should be the other way round. `theme.test.ts` asserts both against the worst
+     * backdrop each can face.
+     */
+    glass: string;
+    glassDragging: string;
+
+    /**
+     * The drop zone's aurora. Decoration, and the only tokens here that carry no meaning.
+     *
+     * They are named rather than passed as props for the same reason every other colour is:
+     * so a palette owns its own appearance, and so a reader looking for what colours this
+     * product uses finds all of them in one file. `base` and `mid` are the ground the
+     * shader starts from; `sheen` and `accent` are the two ribbon hues. Because they say
+     * nothing, they are the one group exempt from the contrast table — no text is ever
+     * placed on them, which the scrim in `SilkAurora` is what guarantees.
+     */
+    aurora: { base: string; mid: string; sheen: string; accent: string };
+
+    /**
      * The source viewer's highlighter.
      *
      * This one does not invert, and that is the point: it is painted in `multiply` over a
@@ -132,6 +165,27 @@ const light: Palette = {
     ring: 'rgba(26, 34, 56, 0.2)',
 
     highlight: 'rgba(214, 178, 74, 0.42)',
+
+    glass: 'rgba(255, 255, 255, 0.38)',
+    glassDragging: 'rgba(240, 236, 229, 0.8)',
+
+    /*
+     * Cream, going a shade deeper, washed with gold and sage.
+     *
+     * The shader subtracts these on a light ground, so what is named here is the colour a
+     * ribbon *leaves behind*, not the light it adds — and that is why these two are far more
+     * saturated than they look on the panel. Subtraction removes a tint's complement, so a
+     * pale tint has a pale complement, removes roughly the same amount from all three
+     * channels, and produces grey. The first attempt here used a soft sage and a soft
+     * champagne and the whole panel came out the colour of dishwater. Saturated in, muted
+     * out.
+     */
+    aurora: {
+      base: '#FBF9F6',
+      mid: '#F4F0E9',
+      sheen: '#D9B44A',
+      accent: '#79BFB1',
+    },
   },
 
   tier: {
@@ -191,6 +245,17 @@ const dark: Palette = {
 
     /* Unchanged, and deliberately so. See the field's comment on `Palette`. */
     highlight: 'rgba(214, 178, 74, 0.42)',
+
+    glass: 'rgba(25, 29, 42, 0.75)',
+    glassDragging: 'rgba(12, 15, 22, 0.9)',
+
+    /* Champagne and mint over ink, which is upstream's pairing and needed no changing. */
+    aurora: {
+      base: '#0F121B',
+      mid: '#191D2A',
+      sheen: '#F4DFB8',
+      accent: '#6ED6C9',
+    },
   },
 
   tier: {

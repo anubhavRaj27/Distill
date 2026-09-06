@@ -3478,3 +3478,89 @@ must not do. Per-workspace appearance, which is a setting about a reader, not ab
 collection. Any transition beyond a short cross-fade on the body's own background and text:
 transitioning every colour would mean animating several thousand table cells at once.
 A high-contrast third palette.
+
+---
+
+## D89. An aurora behind the front door, and a shader that can subtract
+
+**Date:** September 7, 2026 · **Status:** Active
+
+**Decision.** The first-run screen — and only that screen — gets componentry.dev's "Silk
+Aurora" as its background: a WebGL fragment shader painting slow ribbons of light,
+`ui/SilkAurora.tsx`. Five things came with it:
+
+1. **The hero is gone.** Upstream ships a full-height section that renders its own headline,
+   subtitle and description. What is kept is the canvas, and a scrim.
+2. **Every colour is a token.** A new `color.aurora` group per palette: base, mid, sheen,
+   accent.
+3. **A `u_polarity` uniform**, so the shader can subtract on a pale ground.
+4. **A two-part scrim**: a fixed-width band of the page's own colour down the middle, plus
+   a light flat veil.
+5. **A licence note.** Upstream's own documentation says the component "is inspired by
+   various open-source projects and patterns. Please verify licenses." That applies here as
+   it did to `Spiral` (D65) and `ParticleText`.
+
+**Alternatives considered.** The component as shipped, with its own headline. A CSS-only
+approximation of flowing gradients, which is what `Spiral` did to the upstream `three`
+scene. Putting it inside the drop zone panel — which is what was built first, and was wrong.
+Restricting the aurora to dark mode, where an additive shader needs no thought.
+
+**Reasoning.**
+
+**This one stays WebGL, and `Spiral` did not, for a reason that is not inconsistency.**
+`Spiral`'s upstream was a `three` scene: 600 kB of dependency to draw twelve rectangles, and
+CSS draws rectangles. This upstream has no dependencies at all — plain WebGL 1, one triangle
+strip, one fragment shader — and there is nothing in CSS that draws flowing ribbons of
+light. The test both times was what the dependency buys, not what the technology is called.
+
+**The substantive change is that the shader can now subtract.** The original starts near
+black and adds light, which is the only thing that works on a dark page and the only thing
+that cannot work on a pale one: every ribbon saturates to white and the panel turns into a
+smear. On paper the physical model is the other one, ink taken out of white, so at polarity
+0 each ribbon subtracts its own complement instead of adding its colour. Same geometry,
+opposite arithmetic — and it is what makes the aurora belong to a product whose whole visual
+language is ink and paper (D32), rather than a dark rectangle pasted into a cream page.
+
+**The corollary caught us out and is worth recording.** Subtraction removes a tint's
+complement, so a *pale* tint has a pale complement, removes roughly the same amount from all
+three channels, and produces grey. The light palette's first sage and champagne were chosen
+to look like the colour wanted on screen and the whole page came out the colour of
+dishwater. Saturated in, muted out. Intensity and vignette are per-palette for the same
+asymmetry: adding light to near-black has a long way to travel before anything blows out,
+and removing ink from cream does not.
+
+**The scrim is a contrast promise, not a look.** The 4.5:1 minimum is a requirement (NFR,
+D32) and text over a moving shader cannot be measured, so the column the content sits in is
+held at the page's own colour and the aurora is left to the margins.
+
+It took three shapes to get right, and the third is the only one that is actually a promise.
+An ellipse sized to the viewport left the format list and the appearance switch sitting on
+open aurora at the foot of the page. An ellipse sized to the content fixed that, but a
+percentage shape is a constant fraction of the window, so it held the column at one width
+and either strangled the aurora or exposed the text at every other — and it was what made
+the light palette read as barely there, since to keep the text safe on a narrow window the
+aurora had to be turned down everywhere. What is there now is a band 840 pixels wide,
+centred, in pixels rather than percentages. Every piece of content on this screen is
+narrower than that — the drop zone is 640, `measure.prose` is 720 — so all of it sits on
+solid `paper` at every window size, and the contrast is the contrast `theme.test.ts` already
+asserts rather than something argued in prose. On a window too narrow to have margins the
+band covers everything, which is the right answer: a window that small has no room for
+decoration. Everything outside the band is margin, and the aurora is free to be as strong
+there as it likes, which is what finally let the light palette run at full intensity.
+
+**It is the front door only.** Once there are documents this screen is a working surface: a
+carousel, a file list, progress bars. A moving background behind all of that is something to
+look at while you are trying to read.
+
+**Failure is silence.** No WebGL, or a context lost to a GPU switch or a sleeping laptop,
+renders nothing at all — the page's own background is already the right colour. Upstream
+shows a notice reading "Interactive WebGL content is unavailable", which is right for a hero
+whose absence leaves an empty screen and wrong for a decoration behind a drop zone that is
+complete without it. Announcing the absence of a decoration is telling somebody about a
+problem they do not have.
+
+**Cut.** Upstream's glint, a sparse fast white sparkle, which reads as noise on a screen
+somebody is about to drop files into. Device pixel ratio above 1.25: three five-octave fbm
+calls per pixel per frame over a whole screen is four times the cost at retina for a picture
+made entirely of soft gradients. Frames while the tab is hidden. Any aurora on the Chat and
+Data screens.

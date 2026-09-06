@@ -16,7 +16,21 @@ const Zone = styled.div`
   align-items: center;
   gap: ${({ theme }) => theme.space.md};
 
-  background: ${({ theme }) => theme.color.paperRaised};
+  /*
+   * A translucent surface over the first-run screen's aurora, not an opaque card on top of
+   * it. Decision D89.
+   *
+   * The blur is what makes this legible rather than merely pretty: it turns the ribbons
+   * behind into broad fields of colour, so what sits under the prompt changes slowly across
+   * the panel instead of moving under the words. The text in here is the ink colour, the
+   * strongest in the palette, which is what lets the panel carry its own contrast without
+   * the page's scrim behind it.
+   *
+   * No backticks in this comment, and none in any other inside a styled block: this is a
+   * template literal, and one would end it. GlobalStyle carries the same warning.
+   */
+  background: ${({ theme }) => theme.color.glass};
+  backdrop-filter: blur(22px) saturate(1.15);
   border: 1px dashed ${({ theme }) => theme.color.lineStrong};
   border-radius: ${({ theme }) => theme.radius.md};
   cursor: pointer;
@@ -32,7 +46,8 @@ const Zone = styled.div`
    */
   &[data-dragging='true'] {
     border-color: ${({ theme }) => theme.color.ink};
-    background: ${({ theme }) => theme.color.paperSunken};
+    /* Firming up as well as darkening: a file is over it, so it stops being a window. */
+    background: ${({ theme }) => theme.color.glassDragging};
   }
 
   svg {

@@ -18,6 +18,7 @@ import { makeTasks, runBatch, type UploadTask } from '../../lib/upload';
 import { consumeTokenFromFragment, recallToken } from '../../lib/workspace-token';
 import { AppearanceSwitch } from '../../ui/AppearanceSwitch';
 import { ParticleText } from '../../ui/ParticleText';
+import { SilkAurora } from '../../ui/SilkAurora';
 import { Spiral } from '../../ui/Spiral';
 import { useToasts } from '../../ui/toastStore';
 import { isSettled } from '../processing/stageWords';
@@ -71,10 +72,19 @@ import { useStartWorkspace } from './useStartWorkspace';
  */
 
 const Page = styled.div`
+  position: relative;
   min-height: 100%;
   display: flex;
   flex-direction: column;
   background: ${({ theme }) => theme.color.paper};
+
+  /*
+   * A stacking context of its own, so the aurora behind the first-run screen is behind this
+   * screen and nothing else. Without it a negative z-index would put the canvas behind the
+   * page's own background and it would never be seen at all, and a positive one would put
+   * it in the same stack as the source viewer and the toasts.
+   */
+  isolation: isolate;
 `;
 
 /**
@@ -83,6 +93,8 @@ const Page = styled.div`
  * next row of a column layout and opens somewhere off the bottom of the page.
  */
 const Split = styled.div`
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -963,6 +975,13 @@ function UploadScreenFor() {
 
   return (
     <Page>
+      {/*
+        The front door only. Once there are documents this screen is a working surface —
+        a carousel, a file list, progress — and a moving background behind all of that is
+        something to look at while you are trying to read. Decision D89.
+      */}
+      {!inWorkspace && <SilkAurora />}
+
       {inWorkspace && (
         <AppHeader
           active="upload"

@@ -117,3 +117,58 @@ describe('the two palettes', () => {
     }
   });
 });
+
+/**
+ * The drop zone's glass, which is the one surface in the app whose background is a moving
+ * shader rather than a colour. Decision D89.
+ *
+ * A translucent panel is where a contrast promise quietly dies: it looks fine over the part
+ * of the background that was on screen when it was designed, and fails over the part that
+ * was not. So the alpha is checked against the extreme its own palette's aurora can reach,
+ * not against a screenshot.
+ *
+ * The two extremes are read off the shader's own coefficients. On ink the veils are additive
+ * and clamp, so the brightest a pixel can get is white, and white behind a pale-texted panel
+ * is the dangerous case. On paper they subtract, and with every ribbon overlapping at the
+ * light palette's intensity the cream bottoms out around this olive — dark, but nowhere near
+ * black, which is why the light glass can afford to be the more transparent of the two.
+ */
+const WORST_BACKDROP = {
+  light: '#8C9761',
+  dark: '#FFFFFF',
+} as const;
+
+function parseAlphaColor(value: string): { rgb: [number, number, number]; alpha: number } {
+  const parts = value.match(/[\d.]+/g);
+  if (!parts || parts.length < 4) throw new Error(`Not an rgba() colour: ${value}`);
+  const [r, g, b, alpha] = parts.map(Number) as [number, number, number, number];
+  return { rgb: [r, g, b], alpha };
+}
+
+/** What a translucent surface actually resolves to over a given backdrop. */
+function flatten(surface: string, backdrop: string): string {
+  const { rgb, alpha } = parseAlphaColor(surface);
+  const under = backdrop.replace('#', '');
+  const channel = (index: number) => {
+    const beneath = Number.parseInt(under.slice(index * 2, index * 2 + 2), 16);
+    const composited = Math.round(alpha * rgb[index]! + (1 - alpha) * beneath);
+    return composited.toString(16).padStart(2, '0');
+  };
+  return `#${channel(0)}${channel(1)}${channel(2)}`;
+}
+
+describe.each(PALETTES)('the %s palette glass', (name, theme) => {
+  const backdrop = WORST_BACKDROP[name as keyof typeof WORST_BACKDROP];
+
+  it('keeps the drop zone readable over the worst the aurora can do', () => {
+    expect(
+      contrastRatio(theme.color.ink, flatten(theme.color.glass, backdrop)),
+    ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it('keeps it readable while a file is being dragged over it', () => {
+    expect(
+      contrastRatio(theme.color.ink, flatten(theme.color.glassDragging, backdrop)),
+    ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+});

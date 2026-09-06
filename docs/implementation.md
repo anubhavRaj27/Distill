@@ -154,7 +154,8 @@ Zamp assignment/
         │                     LineChart, ResultTable)                       (new)
         ├── ui/               theme (two palettes), GlobalStyle, appearance +
         │                     AppearanceProvider + AppearanceSwitch (D88), Button,
-        │                     Wordmark, ParticleText, Spiral, Toasts + toastStore (D73)
+        │                     Wordmark, ParticleText, Spiral, SilkAurora (D89),
+        │                     Toasts + toastStore (D73)
         ├── lib/              files, logger, workspace-token, formatters (new), sse (new)
         └── test/             setup, msw handlers (new)
 ```
