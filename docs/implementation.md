@@ -142,7 +142,7 @@ Zamp assignment/
         │                     add-documents, processing strip host)
         ├── api/              client.ts, schema.d.ts (generated), openapi.json
         ├── features/
-        │   ├── upload/       FirstRunScreen, UploadProgressScreen, DocumentLibrary (built)
+        │   ├── upload/       UploadScreen (both routes), DocumentLibrary     (built)
         │   ├── processing/   ProcessingStrip, useWorkspaceEvents           (new)
         │   ├── chat/         ChatScreen, MessageList, AssistantMessage, Citations,
         │   │                 Composer, Suggestions, useChat                (new)
@@ -152,7 +152,8 @@ Zamp assignment/
         ├── a2ui/             processor.ts, SurfaceHost.tsx, SurfaceBoundary.tsx,
         │                     Fallback.tsx, Inspect.tsx, catalog/ (Metric, BarChart,
         │                     LineChart, ResultTable)                       (new)
-        ├── ui/               theme, GlobalStyle, Button, Wordmark, (Dialog, Menu new)
+        ├── ui/               theme, GlobalStyle, Button, Wordmark, ParticleText,
+        │                     Spiral, Toasts + toastStore (D73)
         ├── lib/              files, logger, workspace-token, formatters (new), sse (new)
         └── test/             setup, msw handlers (new)
 ```
@@ -798,6 +799,7 @@ correction guarantee through the re-extract route.
 - [x] Gemini `gemini-embedding-001` output dimension confirmed with a real key (native 3072, requested at 768, normalised in the adapter); cosine tested against it. September 5, 2026, decision D63.
 - [x] `generate_content_stream` yields text deltas at a cadence that makes the 3 s first-token target realistic: 0.68 to 0.85 s to first token on `gemini-3.5-flash-lite`, against 8.8 to 9.8 s on `gemini-3.5-flash`, which is why the fast tier is Lite. September 5, 2026, decision D62.
 - [x] Embedding thresholds calibrated against a real model: synonym pairs 0.822 to 0.982, unrelated pairs 0.764 to 0.827, so auto-map moves to 0.88 and the novelty ceiling to 0.80. September 5, 2026, decision D66.
+- [x] Dashboard panels render their A2UI surfaces: a metric and a bar chart on the sample corpus, matching `samples/expected.json` (decision D75). They had been arriving and being discarded.
 - [x] Response schemas accepted by a real Gemini call, closing review finding 8.7. Two faults found and fixed in the same pass: `maxItems` is rejected outright (D64) and an optional nested model lost its shape in conversion (D65).
 - [ ] `sse-starlette` sends `id:` lines and honours `Last-Event-ID` on the per-message route the same way it does on `/events`; a Vite dev proxy passes `text/event-stream` through unbuffered.
 - [x] `DataQuery` evaluation on the sample corpus produces the "total by vendor" and "missing purchase order count" results the demo script needs. Verified September 6, 2026 against `samples/expected.json`: 16,752.90 USD across five vendors, and 3 invoices with no purchase order. The count needed a planner rule first, since it was counting contracts and bank statements too (decision D69).

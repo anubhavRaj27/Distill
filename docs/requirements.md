@@ -139,22 +139,35 @@ the same experience.
 
 ### 3.1 Screen 1: Upload
 
-Route `/`. Already built.
+Routes `/` and `/w/{id}/upload`. **One screen in two states**, from one component: the name,
+then the way to put documents in, then whatever there is to say about the documents already
+in. Which state is showing is decided by whether the route carries a workspace. See decision
+D72. Already built.
 
 1. A first-time visitor sees the product's name, one sentence, a drop zone, "Choose files",
    and "Try with sample documents", on one screenful with nothing below the fold.
-2. Clicking the sample button creates a workspace and goes straight to Chat: the server
-   loads those documents from its own disk, so nothing is uploading.
+2. Clicking the sample button creates a workspace and lands on the same upload screen: the
+   server loads those documents from its own disk, so nothing is uploading, but there is a
+   great deal to watch while they are read. See decision D76.
 3. Dropping or choosing files creates the workspace and goes to `/w/{id}/upload`, which
-   holds **Continue** until every file has arrived. "Ready" there means received, not
-   indexed; parsing, extraction and indexing continue on the server and are narrated by the
-   processing strip on Chat and Data. See decision D53.
-3a. `/w/{id}/upload` is also the workspace's **document library**, and that is what it is
-   for once the upload finishes: every file in the workspace with the format it was
-   actually parsed as, its stage or failure reason, its page count and size, and two
-   actions — open it in the source viewer, or delete it (FR-07). The list is live: stages
-   move as the server reports them. Before this the screen had nothing to say once bytes
-   had stopped moving, which left no way to see what a workspace held. See decision D71.
+   holds **Continue** until every file has arrived (decision D53). From there the screen
+   narrates the rest of the pipeline per document — reading the file, pulling out values,
+   making it searchable — for uploaded files and sample documents alike, and its summary
+   counts documents **ready**, not bytes arrived (decision D76).
+3b. **Continue opens as soon as the first document has been read**, not when the last one
+   has: Chat answers over whatever is indexed and narrates the rest. When every document has
+   been read the screen confirms it in a toast. It never navigates by itself. Both the hold
+   and the toast apply only to work this visit started, so opening the Upload tab on a
+   finished workspace neither announces anything nor holds anything. See decisions D76, D81
+   and D82.
+3a. Inside a workspace the page keeps its shape and changes its middle: where the drop zone
+   is on the first run, there are **Add more files** and **Continue**, and below them the
+   workspace's **document library** — every file with the format it was actually parsed as,
+   its stage or failure reason, its page count and size, and two actions: open it in the
+   source viewer, or delete it (FR-07). The list is live; stages move as the server reports
+   them. Bytes still in flight draw the spiral above the actions while they last. Before
+   this the screen had nothing to say once bytes had stopped moving, which left no way to
+   see what a workspace held, on a page that was mostly empty. See decisions D71 and D72.
 4. That wait is filled by a slowly turning spiral of the person's **own** documents — real
    thumbnails for images, drawn sheets for every other format, each carrying its filename,
    type and status — over a single line answering "how much longer": documents arrived, of
@@ -165,9 +178,10 @@ Route `/`. Already built.
 5. Unsupported types and files over 20 MB are refused inline before upload. When some of a
    selection is acceptable, the refusal travels to the upload screen with it, so it is
    readable rather than flashing on a screen being replaced.
-6. The first-run screen carries **no** application header. Chat and Data lead nowhere until a
-   workspace exists, so the chrome that switches between the three screens begins with the
-   workspace (decision D57, superseding this part of decision D51).
+6. In its first-run state the screen carries **no** application header. Chat and Data lead
+   nowhere until a workspace exists, so the chrome that switches between the three screens
+   begins with the workspace (decision D57, superseding this part of decision D51). The
+   header appears in the workspace state, where those tabs lead somewhere.
 7. Above the sentence, the name "Distill" drawn as particles that scatter away from the
    cursor and spring back into the letterforms. It is the argument of the product made
    before the person has done anything — a scattered pile resolving into something exact —
@@ -225,10 +239,16 @@ Route `/w/{id}/data`.
    be hidden; a column menu allows rename and "merge into" for the case where the system
    kept two fields apart that the user knows are one (decision D38). Clicking a cell opens
    the source viewer with the region highlighted and the model's short reasoning.
+1b. The table scrolls in a window of its own rather than growing the page: columns take their
+   natural width and the frame scrolls both ways, with the header row and the document column
+   pinned so a value thirty columns to the right still has a name and a heading. A schema of
+   thirty-plus columns is normal for a heterogeneous batch, not an edge case. See decision
+   D83.
 2. **The dashboard.** Below (or beside, on wide screens) the table, a set of panels the
    agent generated: metrics and charts it judged useful given the fields, their coverage,
-   and their value distributions. Each panel has a title and a one-line rationale ("Six of
-   eight documents carry a total and a vendor, so spend by vendor is answerable"). Panels are
+   and their value distributions. Each panel has a title, rendered once by the panel card and
+   not again inside the surface (decision D84), and a one-line rationale ("Six of eight
+   documents carry a total and a vendor, so spend by vendor is answerable"). Panels are
    A2UI surfaces bound to server-computed data (principle 3). A "Regenerate" control asks the
    agent again; a stale marker appears when documents were added since the last generation.
 3. The dashboard is generated automatically the first time all documents of the first batch
@@ -272,7 +292,7 @@ are new in v2; v1 identifiers are retired.
 
 | ID    | Requirement                                                                                                                                                                    | Priority |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| FR-01 | Create an anonymous workspace on first visit; the token is stored in the browser and carried in the fragment of a shareable link (decision D31).                               | M        |
+| FR-01 | Create an anonymous workspace on first visit; the token is stored in the browser and carried in the fragment of a shareable link (decision D31). The workspace names itself from its first batch of documents, and the name is editable in the header (decision D77).            | M        |
 | FR-02 | Drag-and-drop and file-picker upload of many files at once; supported types PDF, PNG, JPG, JPEG, DOCX, XLSX, CSV, TXT.                                                         | M        |
 | FR-03 | Reject unsupported types and files over 20 MB inline, before upload begins.                                                                                                    | M        |
 | FR-04 | Per-document processing status with stages and failure reasons, streamed live over Server-Sent Events (SSE), visible on the Chat and Data screens while anything is in flight. | M        |
@@ -421,8 +441,11 @@ bearer header.
 
 The submission is acceptable when a judge can, without help:
 
-1. Open the URL, click "Try with sample documents", land on the Chat screen, and watch the
-   processing strip complete within 60 seconds while suggested questions appear.
+1. Open the URL, click "Try with sample documents", and watch the ten documents being read
+   on the upload screen — a row per document moving through reading, extraction and
+   indexing — and press **Continue**, which opens as soon as the first of the ten is ready.
+   Pressing it lands on Chat, where the processing strip narrates whatever is still being
+   read (decisions D76, D81, D82).
 2. Ask "total amount by vendor" and watch the answer stream: source chips, then a bar chart
    sliding in, then prose token by token with citation buttons appearing as it goes; click a
    citation and see the source invoice open with the passage highlighted. Stop an answer
@@ -430,6 +453,8 @@ The submission is acceptable when a judge can, without help:
 3. Ask "how many invoices are missing a purchase order number" and get a metric; ask "what
    does the contract say about payment terms" and get a cited passage that lights up on the
    page; ask something not in the documents and get an explicit "not in these documents".
+   The suggested questions offered on arrival always include one that draws a chart, so the
+   visual half of the product is reachable without knowing to ask for it (decision D78).
 4. Open the Data screen and see the unified table with confidence tiers, plus a dashboard of
    panels the agent generated, each with a rationale. Click any cell and see its highlight.
 5. Toggle "Inspect surface" on a chart and see the A2UI JSON, including the `updateDataModel`

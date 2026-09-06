@@ -1802,7 +1802,11 @@ npm reason recorded in D33.
 
 ## D53. An upload screen that gates on arrival, not on indexing
 
-**Date:** September 5, 2026 · **Status:** Active. Amends requirements section 3.1.
+**Date:** September 5, 2026 · **Status:** Active. Amends requirements section 3.1. Amended
+September 6, 2026 by D74: the gate is unchanged, but arriving at it no longer requires
+pressing **Continue** — the batch dropped on the first run carries on to the conversation by
+itself. Alternative 1 below was rejected for navigating *before* the bytes arrived; this
+navigates after.
 
 **Decision.** Files chosen on screen 1 are no longer sent from screen 1. The workspace is
 minted, the selection is staged, and the person lands on `/w/{id}/upload`, which owns the
@@ -2736,3 +2740,533 @@ overview directly, and the refetch follows for everything derived from it.
 interesting after a correction, which happens on the Data screen, and putting it here would
 invite re-running the pipeline on a whim. Renaming a document. Sorting and filtering the
 list — at twenty-five files, the upload limit, scanning is faster than choosing a sort.
+
+---
+
+## D72. The first run and the workspace's upload screen are one component
+
+**Date:** September 6, 2026 · **Status:** Active, extends D71 and the layout half of D57
+
+**Decision.** `/` and `/w/{id}/upload` render one component, `features/upload/UploadScreen`,
+in two states decided by whether the route carries a workspace. The page is the same shape
+in both: the name, then the way to put documents in, then what is already in. What changes
+is the middle — the drop zone and "Try with sample documents" on the first run; "Add more
+files", "Continue" and the document library inside a workspace. The two former screens,
+`FirstRunScreen` and `UploadProgressScreen`, are deleted.
+
+**Alternatives considered.** Keeping two components and sharing a layout component between
+them. Keeping them separate and simply tightening the workspace screen's spacing. A fourth
+route for the library.
+
+**Reasoning.** Anubhav's observation was that the workspace upload screen was mostly empty,
+and that the fix was for it to be the first screen with a different middle. The emptiness
+had a cause worth naming: that screen's layout was built around a drop zone, and once a
+workspace exists there is no drop zone, so it was a page shaped around a hole. Arriving at
+it from the header's Upload tab did not read as the same place as the front door, which is
+odd for a product with three screens whose whole organising idea is that you can always see
+all of them.
+
+Sharing a layout component between two screens would have kept the divergence one file away
+and left two places to change when the shape changes. One component with a conditional is
+smaller, and it makes the relationship explicit: this is one screen that knows whether it
+has a workspace yet.
+
+**The hero is smaller in the workspace state.** The same argument does not need making twice
+at full volume, and a 210px canvas above a list of ten files is the empty space this merge
+was meant to remove. The particle sampling is denser there to match: the step through the
+rasterised word is in pixels, so the same density at half the size puts half as many
+particles across a stroke and the letterforms go ragged.
+
+**Two bugs this created, both found by driving the real screen.**
+
+- **The token vanished.** Nearly everything here is read once, on mount: the workspace
+  token, the files staged for it, whether the batch has started. Two routes sharing one
+  component means React keeps the instance mounted across the navigation between them, so
+  dropping files on the first run created the workspace, navigated, and then announced that
+  the token was missing — because it had been read on a screen with no workspace. The route
+  adapter keys the screen by workspace id, which restores mount-per-workspace, the thing the
+  two separate components had for free. Three lines, against auditing every piece of state
+  below for a lifecycle that had just changed underneath it.
+- **The library did not fill in after the first upload.** It was refreshed by counting
+  documents in the cached overview that had reached a terminal stage, and the overview for a
+  new workspace is empty, so there was nothing to count and the list stayed empty while the
+  document sat there indexed. It now counts from the live event stream, which knows about
+  documents the cache has never heard of.
+
+**And one that was already there, now understood.** `invalidateQueries` was not putting new
+data on this screen: after a delete (D71) and after an upload, a remount showed the right
+thing immediately while the mounted component kept the stale list. Both paths now ask the
+query for data directly — `refetch` for the upload, a direct cache edit for the delete —
+which works. Why invalidation does not is not yet explained, and that is recorded as an open
+question rather than dressed up: something in this client's query configuration or its
+provider tree is not doing what the library documents, and the next person to hit it should
+suspect that before writing another workaround.
+
+**Cut.** Dropping files anywhere on the workspace state of the screen. The drop zone is the
+first run's affordance and "Add more files" is the workspace's; a page-wide drop target that
+exists on one state and not the other is a rule nobody can see. Worth reconsidering, since a
+page about documents where dropping a document does nothing is a small papercut.
+
+---
+
+## D73. Transient confirmations are toasts held outside the component tree
+
+**Date:** September 6, 2026 · **Status:** Active
+
+**Decision.** A small store (`ui/toastStore.ts`) and one renderer (`ui/Toasts.tsx`), mounted
+above the routes in `App`. Messages are raised by whatever knows something happened, live at
+most three at a time, dismiss themselves, and can be dismissed by hand.
+
+**Alternatives considered.** An inline notice on the screen that raised it. A notification
+library. Passing a callback down from `App`.
+
+**Reasoning.** The thing worth confirming is often the last thing a screen does before it
+goes away: "your documents arrived" is raised as the upload screen navigates to the
+conversation (D74), so a notice rendered by that screen would unmount in the same tick it
+appeared. That is the same problem `pendingUploads` solves for a file selection, solved the
+same way and for the same reason.
+
+**What a toast is for here, and what it is not.** It confirms something that already happened
+and needs no response. Anything a person has to act on stays on the screen: a refused file
+gets `RejectionNotice` under the drop zone, a failed document keeps its row in the library.
+A toast carrying the only copy of something important is a message that disappears while you
+are reading it.
+
+**Details that are not decoration.** The region is a polite live region, so the confirmation
+is announced without stealing focus, and `aria-atomic` is off so a second toast does not
+re-read the first. It sits **top right**: a person lands on the chat screen straight from an
+upload, the composer is at the bottom centre, and the first two versions of this covered it
+and then clipped its corner. Hovering pauses nothing — a toast that will not leave while the
+pointer rests nearby reads as stuck.
+
+**Cut.** Actions inside a toast ("Undo"), which would make it the only route to something and
+put it back on the critical path. Stacking more than three. Pausing on hover.
+
+---
+
+## D74. A finished upload carries on to the conversation by itself
+
+**Date:** September 6, 2026 · **Status:** Superseded by D81, which keeps the toast and drops
+the navigation
+
+**Decision.** When the batch staged on the first run finishes arriving, the screen raises a
+toast and navigates to Chat after a short beat. Two cases deliberately do not navigate:
+
+- **Anything failed.** The person stays with the list of what could not be sent.
+- **Files added from inside the workspace.** Someone standing in their library who adds a
+  file is looking at the library.
+
+The transition between the two states of the upload screen is also smoothed: the intake
+recedes while the workspace is being created, the workspace state fades and rises in, and
+the hero settles down to its smaller size rather than being redrawn at it.
+
+**Alternatives considered.** Keeping **Continue** as the only way on. Navigating the instant
+the last byte lands, with no beat. Navigating for every batch, including later additions.
+
+**Reasoning.** Anubhav asked for this, and D53's own gate is the argument for it: once the
+bytes have arrived, the reason for holding someone here is gone, and Continue becomes a click
+whose answer was never in doubt. The conversation is where they were heading when they
+dropped the files.
+
+The beat before leaving is not politeness. The spiral has just settled every card onto its
+tick and the summary has just reached "N of N"; cutting away in the same frame reads as a
+glitch rather than as a step forward.
+
+**The exceptions matter more than the rule.** Sliding a failure off-screen a second after it
+appears is the interface deciding that bad news is not worth your time, and the toast for
+that case is a warning that stays up nearly twice as long. Moving someone who added a file
+from inside their own library would be answering a question they did not ask.
+
+**A bug this found.** Landing on Chat straight from an upload showed "0 documents" in the
+header, because that screen's overview was fetched while the workspace was still empty and
+nothing refetched it. It now refetches when the live stream reports another document settled,
+the same fix as on the upload screen and for the same reason (D72).
+
+**Cut.** A countdown or a "cancel" on the navigation, which would put a decision back in
+front of someone who has already made it. Auto-navigating from the samples path, which
+already goes straight to Chat because there is nothing to upload (D15).
+
+---
+
+## D75. The dashboard renders its panels, which it had been dropping
+
+**Date:** September 6, 2026 · **Status:** Active, completes D39 and D40
+
+**Decision.** `Dashboard.tsx` renders each panel's A2UI surface through the same `Surface`
+component that renders a chat visual.
+
+**Alternatives considered.** None worth the name. This is a defect, not a design question.
+
+**Reasoning.** The server has been sending complete A2UI message arrays per panel — chart
+type, columns, and an `updateDataModel` carrying server-computed rows — and the client was
+rendering the panel's title and rationale and discarding the body. The comment in its place
+said the slot stayed empty "until `GET /dashboard` and the A2UI catalog exist". Both existed:
+the route was built in the same pass as the panels, and the catalog is the renderer D60
+chose to hand-write, with `Metric`, `BarChart`, `LineChart` and `ResultTable` in it.
+
+So the product had a dashboard with no charts in it, and a comment explaining that this was
+expected. That is the failure mode worth naming: a placeholder with a plausible reason
+attached outlives the reason.
+
+**What it looks like now**, on the sample corpus: a `Metric` reading 16,752.90 USD and a
+`BarChart` of five vendors, both matching `samples/expected.json` to the cent, because the
+numbers were computed by the evaluator and bound by path (D37).
+
+**Cut.** Nothing. The panel frame, states and rationale are unchanged.
+
+---
+
+## D76. The upload screen waits for documents to be READ, not received
+
+**Date:** September 6, 2026 · **Status:** Active, amends D53 and D74
+
+**Decision.** Four changes, which are one change:
+
+1. **The samples path lands on the upload screen** rather than going straight to Chat.
+2. **The screen narrates the whole pipeline**, per document: reading the file, pulling out
+   values, making it searchable, ready — for uploaded files and sample documents alike.
+3. **A file's row carries on past "Sent"** into what the server is doing with it, and the
+   summary above them counts documents *ready*, not bytes *arrived*.
+4. **The hand-off to Chat fires when everything has been read**, not when the last byte
+   lands.
+
+**Alternatives considered.** Keeping the samples path on its shortcut to Chat, where the
+processing strip already narrates. Showing the pipeline only for uploaded files. Keeping the
+hand-off on arrival and letting the reading finish on the Chat screen.
+
+**Reasoning.** Anubhav asked for this, and the shape of the screen was arguing for it
+already. "Ready" meaning "the server has the bytes" is a strange place for a progress row to
+stop, because nothing useful has happened yet at that point: a document you cannot ask about
+is not done in any sense the person cares about. The upload screen was reporting the half of
+the work that is fast and invisible, and handing over just as the half that takes a minute
+began.
+
+The samples path made it starker. It skipped this screen entirely, so the one route a
+reviewer is most likely to take was the one that showed the least — a click, a pause, and a
+conversation about ten documents that appeared from nowhere.
+
+**This reverses D53's alternative 2, deliberately.** That entry rejected "hold until every
+document reaches done" because requirements section 8 asks a judge to watch the strip finish
+*while suggested questions appear*, and holding the door shut for a minute trades a
+capability for a progress bar. What makes the reversal defensible is that the door is not
+shut: **Continue** is enabled the moment the bytes are in, so anyone impatient leaves
+immediately and lands exactly where they used to. What changed is the default for someone
+who does nothing, and the screen they wait on now has something to say. Requirements section
+8 is updated to match.
+
+**A race this had to avoid.** "Everything is settled" is trivially true of an empty list, so
+a screen that has heard nothing yet would hand the person straight on. The trigger requires
+having *watched* at least one document in a non-terminal state first, which is also the
+right rule for someone who opens the screen later to look at a finished workspace: nothing
+was watched, so nothing moves them.
+
+**Cut, and reinstated a day later.** The spiral was cut for the samples path on the argument
+that it is the person's own files in flight (D58) and nothing is in flight there. That was
+wrong, and D79 puts it back: the argument was about where the bytes are, and the person is
+watching a wait either way.
+
+---
+
+## D77. The workspace names itself, and the name can be changed
+
+**Date:** September 6, 2026 · **Status:** Active, extends FR-01
+
+**Decision.** When the first batch finishes processing, a small model call names the
+workspace from the filenames and the fields that were extracted. The name is written once
+and never regenerated. `PATCH /workspaces/{id}` sets it by hand, and the header's title is
+the control that does so.
+
+**Alternatives considered.** Naming it from the first document's filename with no model
+call. Asking the person for a name up front. Regenerating the name whenever documents are
+added.
+
+**Reasoning.** "Untitled workspace" is what the header said for the entire life of every
+workspace, which is a wasted line in the chrome of every screen. The material for a good
+name is already there by the time the first batch settles — the filenames, and the field
+labels the schema inference just agreed on — and it costs one cheap call on the fast tier.
+
+Asking up front is worse than either: it puts a text field between a person and the thing
+they came to do, and they cannot answer it well anyway, because they have not seen what the
+product made of their documents yet.
+
+**Two rules that matter more than the name itself.**
+
+- **A name a person typed is never overwritten.** The guard is `label is null`, not "label
+  looks like a default", which is also why the column starts null rather than starting as
+  the string "Untitled workspace": null means nobody has said, and a string cannot be told
+  apart from a workspace somebody deliberately called that.
+- **A failed naming call is not a failed batch.** It is logged and the workspace keeps its
+  null label, because a nameless workspace is a cosmetic problem and a failed upload is not.
+
+**Cut.** Regenerating the name as a workspace grows: the name would change under someone
+who had learned it. Naming from the document text rather than the filenames and fields,
+which is a much larger prompt for a three-word answer.
+
+---
+
+## D78. One suggested question is guaranteed to draw a chart
+
+**Date:** September 6, 2026 · **Status:** Active, extends D40 and D47
+
+**Decision.** The prompt for suggested questions asks for a **breakdown** — the "X by Y"
+shape — as one of its three, and `chat/suggestions.py` guarantees it: if none of the
+returned questions splits a measure by a category, one is generated from the field
+statistics and put first. The chart figures in `Surface.tsx` are also formatted by the
+server's rule, so a bar and the prose citing it read the same.
+
+**Alternatives considered.** The prompt change alone. A hard-coded suggestion for the sample
+corpus. Leaving it, since a person can type "total by vendor" themselves.
+
+**Reasoning.** The charts worked and nobody could find them. Asked for three good questions,
+the model reliably offered a sum, a lookup and a superlative — "What is the total sum of all
+invoice totals?", "What are the payment terms for Globex Corporation?", "Which vendor has
+the highest invoice total?" — three answers in prose. Suggested questions are how most
+people meet this product's visual half; nobody types "total amount by vendor" into a blank
+box on their first visit. So the product looked like it had no charts in it, which is
+exactly how it was reported.
+
+A prompt is a request. This is the one place the guarantee can be made, so it is made here,
+and the generated question is built from the **statistics** rather than the schema: the
+measure has to be a currency field with numbers actually in it, and the category has to have
+between two and twelve distinct values and be present in at least a third of the documents.
+A suggestion naming a field nine documents left empty is worse than no suggestion, because
+the person trusted it.
+
+**Two things learned by watching it run.** The first version offered "the total due by bill
+to" — it preferred the customer over the vendor, and it named the category from the
+document's own label. Both are fixed: counterparty fields rank above other party fields, and
+the category is named from the field key, which is already a normalised noun, rather than
+from whatever the document happened to print at the top of a column.
+
+**Cut.** Curating suggestions for the sample corpus specifically, which would make the demo
+better and the product no better. More than one guaranteed shape: three suggestions is a
+small budget and the other two are earning their place.
+
+---
+
+## D79. The spiral turns for documents being read, not only for files being sent
+
+**Date:** September 6, 2026 · **Status:** Active, reverses a cut in D76
+
+**Decision.** `DocumentCard` takes a small descriptor — a filename, a phase, and a `File`
+only when the browser happens to hold one — instead of an `UploadTask`. The upload screen
+fills the spiral from whichever it has: the files being sent, or, when nothing is being
+sent, the documents the server is reading.
+
+**Alternatives considered.** Leaving the samples path without an animation, which is what
+D76 decided. A different, simpler spinner for that path. Synthesising fake upload tasks for
+sample documents so the existing card would take them.
+
+**Reasoning.** D76 cut the spiral from the samples path with a tidy-sounding argument: the
+cards are the person's own files in flight, and on that path nothing is in flight. The
+argument is about where the bytes are. The **wait** is the same wait — forty-odd seconds of
+a server reading ten documents — and it is the wait a reviewer is most likely to sit
+through, since the sample button is the obvious way in. What they got instead was a list and
+a progress bar, and the product's one piece of theatre went missing from the one route that
+shows it off. Anubhav noticed within a day.
+
+The cards were welded to `UploadTask` because that is what they were first written for. A
+descriptor is what they always needed: an image renders its own thumbnail when the bytes are
+here, and a document on the server's own disk gets the same drawn sheet every non-image file
+already gets.
+
+**A detail that came free.** Phases map onto the pipeline, so a card takes its tick when its
+document is *read*, not when it is received — ten sheets turning and settling one by one as
+the batch finishes, which is a better picture of what is happening than the same ten sheets
+all ticked at once a second after the click.
+
+**Cut.** Per-card stage words. The card carries a name, a shape and a mark; the rows
+underneath carry the words, and a spiral you have to read is not a spiral.
+
+---
+
+## D80. A type the model could not enumerate is a string
+
+**Date:** September 6, 2026 · **Status:** Active, guards D24 and product principle 6
+
+**Decision.** `inferred_type()` in `app/domain/fields.py` is the boundary where a model's
+answer becomes our schema. It has one rule: `enum` becomes `string`. Both places that build
+a `FieldSpec` from an extraction — the initial proposal and drift — go through it.
+
+**Alternatives considered.** Filling `enum_values` from the values that happened to turn up
+in the batch. Relaxing `FieldSpec` to permit an enum with no values. Dropping the field.
+
+**Reasoning.** Found on a live sample run, and total: the model typed a `currency` column as
+an enumeration, `FieldSpec` refused to be built — correctly, since an enum with no values
+permits nothing — and the exception took down schema inference. That runs **once, for the
+first batch**, so ten documents sat at "0 of 10 ready" forever with a `ValidationError` in
+the log and nothing on screen. It had not shown up before because whether the model reaches
+for `enum` at all is a matter of variance.
+
+Filling the values from the batch is the tempting fix and the wrong one. A schema inferred
+from ten documents that all say "USD", which then **rejects** an eleventh saying "EUR", is
+the one thing this product must never do: it would be losing real data to defend a guess.
+A string accepts everything and loses nothing, and the values observed so far are already
+written into the field's description where a person can see them.
+
+**Cut.** Enum inference altogether, for now. A real enumeration needs a person to confirm
+the closed set, and there is no screen that asks — the review loop was cut in D34. The type
+stays in `FieldType` for a schema someone edits by hand later.
+
+---
+
+## D81. The finished upload holds Continue instead of moving the person
+
+**Date:** September 6, 2026 · **Status:** Active, supersedes D74, keeps D73 and D76
+
+**Decision.** When the documents this visit set going have all been read, the upload screen
+raises its toast and no longer navigates to Chat on its own. The way forward is the
+**Continue button**, held while this visit's work has produced nothing askable yet. See D82
+for exactly when it opens.
+
+"This visit" is the whole of the change. One piece of state, set at mount when the pending
+store holds an entry for this workspace and set again when files are added from inside the
+workspace, gates both the toast and the button. Opening the Upload tab on a workspace that
+finished reading an hour ago announces nothing and holds nothing.
+
+**Alternatives considered.** Keeping the navigation and hardening the "came from the first
+run" test. Navigating only on the very first arrival per workspace and remembering that in
+storage. A countdown with a cancel.
+
+**Reasoning.** Anubhav reported it: clicking the Upload tab sent him to Chat, every time,
+and the toast came with it. Two faults met.
+
+The first was a leak. The pending store was cleared inside the "there are staged files"
+branch, so the samples path — which stages an **empty** selection precisely so it still
+reads as an arrival (D76) — never cleared it. The entry sat there for the life of the tab
+and every later visit to the Upload tab read as a fresh arrival.
+
+The second is why the fix is not just that clear. The screen's other guard, "work was seen
+in progress", is read off the workspace event stream, and that stream is durable and
+resumable from a persisted log (D7): reopening a finished workspace can replay documents
+moving through the pipeline. Any signal built on watching the pipeline will eventually fire
+on a visit where nothing new happened. A disabled button cannot make that mistake — the
+worst it can do is be shut for a moment on a screen the person chose to be on.
+
+D74 argued that Continue was a click whose answer was never in doubt. That was true of the
+first arrival and false of every visit after it, and the cost of being wrong is not
+symmetric: a click nobody needed costs a click, while taking the screen away from someone
+who deliberately opened it costs them the thing they came to do. The button also now says
+something the navigation could not — it holds until the documents are **readable**, not
+merely received, which is what D76 established as the moment that matters.
+
+**Cut.** The 1100 ms beat before leaving, which has nothing left to smooth. The copy on both
+the note and the summary that promised the reading would be narrated on the next screen; it
+is narrated here.
+
+---
+
+## D82. Continue opens on the first document read, not the last
+
+**Date:** September 6, 2026 · **Status:** Active, refines D81
+
+**Decision.** The Continue button is held only until the **first** document this visit set
+going becomes askable. One document at `done` opens it, while the rest of the batch carries
+on being read behind it. Three things release it, and nothing else holds it:
+
+- A document has been read.
+- Everything settled and none of it could be read — there is nothing more coming.
+- No file made it off this machine — likewise.
+
+Bytes still in flight no longer hold the button on their own. A batch where the first file
+has been read while the tenth is still uploading is a workspace with something to talk
+about.
+
+**Alternatives considered.** Holding for the whole batch, which is what D81 shipped.
+Holding for a fixed fraction. Holding while any upload is in flight, regardless of what has
+already been read.
+
+**Reasoning.** Anubhav asked for it, and the next screen was already built for it. Chat
+answers over whatever has been indexed and narrates the rest in its processing strip
+(D53, D76), so one read document is a working conversation. Holding the button for the whole
+batch let the slowest document in a pile of ten decide when anybody could start — which is
+the same mistake as gating the screen on the last byte, one stage further down the pipeline.
+
+The button is not a claim that the workspace is finished, and the screen does not pretend it
+is: the summary above it still counts "1 of 10 documents ready" and the toast still waits
+for the whole batch. What opens early is the door, not the verdict.
+
+**Cut.** Any minimum count above one. Ten documents where one is ready is a smaller
+conversation than ten where all are, not a broken one.
+
+---
+
+## D83. The Data screen's layout, repaired
+
+**Date:** September 6, 2026 · **Status:** Active, amends D71 and D72
+
+**Decision.** Six fixes to one screen, found by measuring it rather than reading it.
+
+**1. The grid tracks are fractions.** `Columns` was `grid-template-columns: 62% 38%` with a
+24px gap. Percentages resolve against the container's content box and know nothing about the
+gap, so the tracks summed to the full width plus 24px and the dashboard column hung exactly
+one gap over the right edge of the page — past the padding, flush against the window. It is
+now `minmax(0, 62fr) minmax(0, 38fr)`, which divides what is left after the gap. This is what
+Anubhav reported; everything below was found while looking at it.
+
+**2. The table scrolls in a window of its own.** The frame scrolled sideways and grew
+downwards without limit, which put both of the table's controls out of reach at once: the
+horizontal scrollbar sat at the bottom of a 1,258px-tall table, a page-scroll away from the
+columns it moves, and the header row was gone by the third row. It now caps at `70vh` and
+scrolls in both directions.
+
+**3. The header row and the document column are sticky.** Only possible because of 2 —
+sticky positions against the nearest scrolling ancestor, so a table with no scrollport of its
+own has nothing to stick to. With a thirty-two column schema, a row of values with no name on
+it, thirty columns to the right, is unreadable.
+
+**4. Columns take their natural width.** At `width: 100%` the browser must fit every column
+into the frame, and with thirty-two columns that means squeezing each to its minimum — which,
+next to `overflow-wrap: anywhere` in the cells, is one character. "Northwind Trading Company"
+was rendering as "North wind Tradin g Comp any" in a 130px column, in a table that was
+4,000px wide and scrolling sideways anyway. The table is now `max-content` with a `min-width`
+of 100%, cells are capped at a readable measure, and the cells' wrap rule is `break-word`,
+which does not count break opportunities when the browser computes a minimum width.
+
+**5. The application header can shrink.** Every child of the bar was `flex-shrink: 0`, so
+below about 820px wide the bar overflowed the window, took "Add documents" off the right edge,
+and gave the whole document a horizontal scrollbar. The workspace name is the one thing that
+can be shortened without losing a control, and it already ellipsises.
+
+**6. The two columns have matching headings.** The page's own heading said "Dashboard" over a
+screen that is 62% table, with a second thing also called Dashboard beside it. The page is
+now "Data" and the right-hand column has a heading of its own, which also starts the panels
+and the table at the same height — a 32px strip of buttons against a 38px heading was starting
+them 6px apart, which reads as a mistake rather than as a column.
+
+**Alternatives considered.** For 2 and 3: making the whole screen a fixed-height shell with
+two independently scrolling columns, which is what Chat does. Rejected for this screen — the
+left column's legend, edit hint and document summary come to 330px of fixed furniture, which
+would have left about three rows of table on a laptop.
+
+**Reasoning.** Each of these is a defect rather than a preference, and each was invisible in
+the code and obvious in the browser. The grid one in particular cannot be seen by reading the
+rule; it needs the gap and the percentage in the same thought.
+
+**Cut.** Clamping a long cell value to a fixed number of lines, which would make rows even at
+the price of hiding extracted values — the opposite of what this screen is for.
+
+---
+
+## D84. A dashboard panel does not print its title twice
+
+**Date:** September 6, 2026 · **Status:** Active, refines D39 and D75
+
+**Decision.** `build_surface` takes `include_title`, and the dashboard passes it as false.
+The panel card renders the title; the surface no longer renders a heading of its own. The
+title stays in the surface's data model either way.
+
+**Alternatives considered.** Dropping the card's title and letting each surface name itself.
+Detecting a heading in the client and hiding the card's title when one is present.
+
+**Reasoning.** A dashboard panel's title IS `visual.title` — literally the same string,
+assigned from the same field in `dashboard.py` — so every panel printed its name twice, one
+line under the other. A chat visual is the opposite case and keeps its heading: it arrives
+loose in a stream of prose with nothing else to name it.
+
+Detecting it in the client would mean the client inspecting a surface's component tree to
+decide what to draw around it, which is exactly the coupling the A2UI boundary exists to
+avoid.
+
+**Cut.** Nothing. The title is still in the data model for anything that reads the result.
+
