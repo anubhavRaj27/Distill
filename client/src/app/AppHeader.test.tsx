@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { ThemeProvider } from 'styled-components';
 import { describe, expect, it, vi } from 'vitest';
 
+import { AppearanceProvider } from '../ui/AppearanceProvider';
 import { theme } from '../ui/theme';
 import { AppHeader } from './AppHeader';
 
@@ -16,17 +17,24 @@ import { AppHeader } from './AppHeader';
  * nothing must stay distinguishable.
  */
 
+/**
+ * The header carries the appearance switch, and `useAppearance` refuses to run without a
+ * provider on purpose, so the wrapper is here rather than a default context that would let
+ * a missing provider pass for a dead button.
+ */
 function renderHeader(onRename?: (label: string) => void) {
   render(
-    <ThemeProvider theme={theme}>
-      <MemoryRouter>
-        <AppHeader
-          active="chat"
-          workspace={{ id: 'w1', label: 'Acme invoices, Q1', documentCount: 4 }}
-          onRename={onRename}
-        />
-      </MemoryRouter>
-    </ThemeProvider>,
+    <AppearanceProvider>
+      <ThemeProvider theme={theme}>
+        <MemoryRouter>
+          <AppHeader
+            active="chat"
+            workspace={{ id: 'w1', label: 'Acme invoices, Q1', documentCount: 4 }}
+            onRename={onRename}
+          />
+        </MemoryRouter>
+      </ThemeProvider>
+    </AppearanceProvider>,
   );
 }
 
@@ -90,11 +98,13 @@ describe('AppHeader wordmark', () => {
 
   it('points at the front door when there is no workspace yet', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <MemoryRouter>
-          <AppHeader />
-        </MemoryRouter>
-      </ThemeProvider>,
+      <AppearanceProvider>
+        <ThemeProvider theme={theme}>
+          <MemoryRouter>
+            <AppHeader />
+          </MemoryRouter>
+        </ThemeProvider>
+      </AppearanceProvider>,
     );
 
     expect(screen.getByRole('link', { name: /distill/i })).toHaveAttribute('href', '/');

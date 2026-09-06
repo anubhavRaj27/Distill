@@ -7,8 +7,12 @@ import { createGlobalStyle } from 'styled-components';
  * site, because the virtualised table has to vary its appearance per cell without
  * generating a styled-components class per distinct value. Static styled components plus
  * `data-` attributes plus these variables is the pattern that keeps 5,000 rows smooth
- * (implementation.md section 2.3). Screen 1 does not need that yet; the variables are
- * defined here so there is only ever one place a token becomes CSS.
+ * (implementation.md section 2.3).
+ *
+ * The whole block is a function of `theme`, so switching palettes is one re-render of one
+ * component: the variables change value in place and every rule that reads them follows,
+ * including the ones inside components that never re-rendered. That is why dark mode did
+ * not need a second stylesheet. See decision D88.
  */
 export const GlobalStyle = createGlobalStyle`
   :root {
@@ -19,6 +23,13 @@ export const GlobalStyle = createGlobalStyle`
     --ink-muted: ${({ theme }) => theme.color.inkMuted};
     --line: ${({ theme }) => theme.color.line};
     --line-strong: ${({ theme }) => theme.color.lineStrong};
+
+    --ink-surface: ${({ theme }) => theme.color.inkSurface};
+    --ink-surface-hover: ${({ theme }) => theme.color.inkSurfaceHover};
+    --on-ink: ${({ theme }) => theme.color.onInk};
+    --on-ink-wash: ${({ theme }) => theme.color.onInkWash};
+    --ring: ${({ theme }) => theme.color.ring};
+    --highlight: ${({ theme }) => theme.color.highlight};
 
     --stock-lightest: ${({ theme }) => theme.color.stock.lightest};
     --stock-light: ${({ theme }) => theme.color.stock.light};
@@ -35,7 +46,12 @@ export const GlobalStyle = createGlobalStyle`
     --font-body: ${({ theme }) => theme.font.body};
     --font-mono: ${({ theme }) => theme.font.mono};
 
-    color-scheme: light;
+    /*
+     * Tells the browser which way round this page is, which is the only way to get its own
+     * furniture to follow: scrollbars, the default form control chrome, and the ground it
+     * paints behind an over-scroll.
+     */
+    color-scheme: ${({ theme }) => theme.mode};
   }
 
   *, *::before, *::after {
@@ -44,6 +60,15 @@ export const GlobalStyle = createGlobalStyle`
 
   html, body, #root {
     height: 100%;
+  }
+
+  /*
+   * The ground is set on the root element as well as on the body. The pre-mount script in
+   * index.html paints it there to avoid a flash of the wrong palette, and this is what
+   * takes that inline style over once the application is running.
+   */
+  html {
+    background: var(--paper);
   }
 
   body {
@@ -55,6 +80,16 @@ export const GlobalStyle = createGlobalStyle`
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+
+    /*
+     * A short cross-fade on the two properties the whole page shares, so flipping the
+     * switch reads as the light changing rather than as a new page arriving. Only these
+     * two: transitioning every colour in the app would mean animating several thousand
+     * table cells at once. The reduced-motion block below cancels it.
+     */
+    transition:
+      background-color ${({ theme }) => theme.motion.quick},
+      color ${({ theme }) => theme.motion.quick};
   }
 
   h1, h2, h3, p, figure {

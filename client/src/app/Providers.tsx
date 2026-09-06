@@ -2,8 +2,10 @@ import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { ThemeProvider } from 'styled-components';
 
+import { useAppearance } from '../ui/appearance';
+import { AppearanceProvider } from '../ui/AppearanceProvider';
 import { GlobalStyle } from '../ui/GlobalStyle';
-import { theme } from '../ui/theme';
+import { themes } from '../ui/theme';
 import { makeQueryClient } from './queryClient';
 
 /**
@@ -21,10 +23,27 @@ export function Providers({
 
   return (
     <QueryClientProvider client={queryClient ?? fallback}>
-      <ThemeProvider theme={theme}>
-        <GlobalStyle />
-        {children}
-      </ThemeProvider>
+      <AppearanceProvider>
+        <Themed>{children}</Themed>
+      </AppearanceProvider>
     </QueryClientProvider>
+  );
+}
+
+/**
+ * The one component between the appearance preference and the palette.
+ *
+ * It is separate from `Providers` only because a hook cannot read a context its own
+ * component provides. Everything below it re-renders on a mode change, which is the
+ * intended cost and is paid once per click.
+ */
+function Themed({ children }: { children: ReactNode }) {
+  const { mode } = useAppearance();
+
+  return (
+    <ThemeProvider theme={themes[mode]}>
+      <GlobalStyle />
+      {children}
+    </ThemeProvider>
   );
 }

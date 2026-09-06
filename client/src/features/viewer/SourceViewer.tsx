@@ -82,10 +82,14 @@ const PageImage = styled.img`
  * Multiply rather than a solid fill, so the words underneath stay readable — a highlighter
  * over text, which is what a person checking a figure needs, rather than a block covering
  * it. `mix-blend-mode` is the only way to get that without compositing the image itself.
+ *
+ * The one colour in the app that does not invert with the palette, and for a reason worth
+ * stating: what it sits on is not the page ground but a raster of the document, which is a
+ * photograph of white paper whichever mode the reader is in. Decision D88.
  */
 const Highlight = styled.div`
   position: absolute;
-  background: rgba(214, 178, 74, 0.42);
+  background: ${({ theme }) => theme.color.highlight};
   mix-blend-mode: multiply;
   border-radius: 1px;
   pointer-events: none;

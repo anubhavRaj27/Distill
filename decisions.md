@@ -3402,3 +3402,79 @@ schema fails later, further from the cause, and looks like a bug in the product.
 **Cut.** A staging environment. Any use of Railway's public database URL, which costs egress
 for no benefit once the retry exists.
 
+
+---
+
+## D88. Two palettes, one set of tokens, and a switch that offers "system"
+
+**Date:** September 7, 2026 · **Status:** Active
+
+**Decision.** Distill ships a dark palette alongside the warm-paper one from D32. Five parts:
+
+1. **`ui/theme.ts` holds two palettes and one structure.** Type, spacing rhythm, radii,
+   measures and motion are defined once; only colours, tier colours and shadows vary. Both
+   are built by the same factory, so `Theme` is one type and neither palette can quietly
+   gain or lose a token.
+2. **`GlobalStyle` is a function of the theme.** It already emitted every token as a CSS
+   custom property on `:root`; switching the `ThemeProvider` theme now re-emits them in
+   place, which is why nothing downstream needed touching.
+3. **The preference is three-valued: light, dark, or system.** `ui/appearance.ts` holds the
+   vocabulary and two pure functions; `AppearanceProvider` holds the state, watches
+   `prefers-color-scheme`, and persists to `localStorage` under `distill.appearance`.
+4. **A segmented switch in the header**, and at the foot of the first-run screen, which is
+   the one screen with no header.
+5. **A short inline script in `index.html`** paints the ground before the bundle parses.
+
+**Alternatives considered.** A second stylesheet under a `[data-theme="dark"]` selector,
+which is the framework-free default. A two-state toggle. Deriving the dark palette
+programmatically by inverting lightness. Doing nothing, on the grounds that the pre-mount
+script alone could follow the operating system and no control would be needed.
+
+**Reasoning.**
+
+**The token discipline from D32 is what made this a data change.** The rule that nothing
+outside `theme.ts` hard-codes a colour was written for the virtualised table and for A2UI
+inheriting the app's look. It paid here instead: a grep for hex and `rgba` literals across
+the client found four, and three of them were real bugs waiting for a second palette — a
+white hover wash on a surface that is pale in dark mode, a navy focus ring, and the
+document highlighter. The fourth, `ParticleText` reading its ink from the computed style,
+was rasterising the wordmark once and keeping the old colour after a switch; it now takes
+the ink as a prop so the palette is a dependency of the effect that draws it.
+
+**The one colour that does not invert is the highlighter**, and the reason is worth stating
+because it looks like an oversight: it is painted in `multiply` over a raster of the
+document, which is a photograph of white paper whichever mode the reader is in.
+
+**Dark is the same idea turned over, not a second design.** The ground is the light theme's
+ink hue grown into a page, and the inversion is carried through — `inkSurface` becomes the
+pale surface and `onInk` the dark text on it — so a primary button, a current tab and a
+toast stay the loudest things on screen without any component knowing which mode it is in.
+
+**The third state is the point of the switch.** A two-state toggle has to store a resolved
+palette, and the moment it does, "follow my system" stops being reachable: a visitor who
+taps it once at noon is pinned to light for good. Storing the *preference* and resolving it
+at render keeps the automatic setting a place you can go back to, and lets the page turn
+over at sunset for someone who never touched the control.
+
+**Contrast is asserted for both palettes, against the same table.** A second theme is the
+easiest way in the world to ship an inaccessible one: the first was measured, the second
+gets eyeballed at night on a good monitor. `theme.test.ts` now runs every pair through both,
+adds the raised surface to the tier checks, and adds the warning toast — the one place text
+sits on a tier colour rather than beside one. A further test asserts the two palettes define
+the same token paths, which catches the boring failure that would actually happen: a token
+added to one palette, wired into a component, and rendering as `undefined` — transparent,
+and silent — in the other.
+
+**One thing was written wrong first and is worth recording.** `useAppearance` originally
+returned an inert default when no provider was above it, so that a header could be mounted
+in a test without one. A control under that default renders perfectly, highlights nothing
+when clicked, and reports no error — indistinguishable from a styling bug, and exactly the
+symptom a missing provider produces. It now throws. The cost is one wrapper in one test
+file.
+
+**Cut.** A dark treatment of the document page images themselves: they are photographs of
+paper and inverting them would misrepresent the source, which is the one thing this product
+must not do. Per-workspace appearance, which is a setting about a reader, not about a
+collection. Any transition beyond a short cross-fade on the body's own background and text:
+transitioning every colour would mean animating several thousand table cells at once.
+A high-contrast third palette.

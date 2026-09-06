@@ -9,6 +9,39 @@
       content="Distill turns invoices, receipts, and statements into one table you can query, with every value traceable to its source document."
     />
     <title>Distill · every document, one table you can trust</title>
+
+    <!--
+      Paints the ground before the bundle has parsed.
+
+      Everything else about theming lives in src/ui/appearance.tsx, and this is the one part
+      that cannot: the palette is decided inside React, and React has not run yet. Without
+      these few lines a person on dark mode gets a full white page for as long as the
+      JavaScript takes to load, which on a cold start is long enough to hurt. It is
+      deliberately the smallest thing that removes the flash — the ground and the browser's
+      own furniture, nothing else — and it is inline because an external file would be one
+      more round trip in exactly the window it exists to cover.
+
+      The storage key is APPEARANCE_STORAGE_KEY in src/ui/appearance.tsx. These two are the
+      only places it is written. The provider re-applies data-theme once it mounts, so a
+      disagreement here can only ever last a frame, but there is no reason to have one.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = window.localStorage.getItem('distill.appearance');
+          var dark =
+            stored === 'dark' ||
+            ((stored === null || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          root.dataset.theme = dark ? 'dark' : 'light';
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          root.style.background = dark ? '#12151F' : '#FAF8F5';
+        } catch (error) {
+          /* Storage blocked, or no matchMedia. The light default is already correct. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

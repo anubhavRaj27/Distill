@@ -107,7 +107,7 @@ const Editor = styled.input`
   border: 1px solid ${({ theme }) => theme.color.ink};
   border-radius: ${({ theme }) => theme.radius.sm};
   outline: none;
-  box-shadow: 0 0 0 2px rgba(26, 34, 56, 0.2);
+  box-shadow: 0 0 0 2px ${({ theme }) => theme.color.ring};
 `;
 
 export interface ValueCellProps {

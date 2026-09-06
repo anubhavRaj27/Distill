@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import styled from 'styled-components';
 
+import { AppearanceSwitch } from '../ui/AppearanceSwitch';
 import { Wordmark } from '../ui/Wordmark';
 
 /**
@@ -368,6 +369,14 @@ export function AppHeader({
           </>
         )}
       </Tabs>
+
+      {/*
+        After the screens, before the one action. The switch is a setting rather than a
+        place to go, so it sits on the settings side of the segmented control, and putting
+        it left of Add documents keeps the primary action hard against the right edge where
+        it has been since the first screen.
+      */}
+      <AppearanceSwitch />
 
       {inWorkspace && onAddDocuments && (
         <AddButton type="button" onClick={onAddDocuments}>

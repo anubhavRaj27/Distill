@@ -106,7 +106,12 @@ const Close = styled.button`
 
   &:hover {
     opacity: 1;
-    background: rgba(255, 255, 255, 0.12);
+    /*
+     * Expressed in the ink that sits on this surface, not in white. A toast is inverted in
+     * both palettes, so in dark mode this surface is the pale one and a white wash on it
+     * would be nothing at all.
+     */
+    background: ${({ theme }) => theme.color.onInkWash};
   }
 `;
 

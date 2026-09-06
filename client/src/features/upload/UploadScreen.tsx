@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import styled from 'styled-components';
+import styled, { useTheme } from 'styled-components';
 
 import { api, authHeader, toFailure } from '../../api/client';
 import { AppHeader } from '../../app/AppHeader';
@@ -16,9 +16,9 @@ import {
 import { logger } from '../../lib/logger';
 import { makeTasks, runBatch, type UploadTask } from '../../lib/upload';
 import { consumeTokenFromFragment, recallToken } from '../../lib/workspace-token';
+import { AppearanceSwitch } from '../../ui/AppearanceSwitch';
 import { ParticleText } from '../../ui/ParticleText';
 import { Spiral } from '../../ui/Spiral';
-import { theme } from '../../ui/theme';
 import { useToasts } from '../../ui/toastStore';
 import { isSettled } from '../processing/stageWords';
 import { useDocumentProgress } from '../processing/useDocumentProgress';
@@ -246,6 +246,21 @@ const Formats = styled.p`
   text-transform: uppercase;
   color: ${({ theme }) => theme.color.inkMuted};
   opacity: 0.75;
+`;
+
+/**
+ * Where the appearance switch lives on the first-run screen.
+ *
+ * Everywhere else in the product it is in the header, and the first-run screen is the one
+ * screen with no header — deliberately, since there is nothing yet to navigate between.
+ * Leaving it out here would make the palette the one setting you can only change after
+ * uploading something, so it goes at the foot of the page with the other quiet facts about
+ * the page rather than about the documents. Decision D88.
+ */
+const Appearance = styled.div`
+  display: flex;
+  justify-content: center;
+  margin-top: ${({ theme }) => theme.space.lg};
 `;
 
 const Library = styled.section`
@@ -492,6 +507,8 @@ function UploadScreenFor() {
   const { workspaceId = '' } = useParams();
   const inWorkspace = workspaceId !== '';
   const navigate = useNavigate();
+  /* Read rather than imported, so the hero word follows the palette. Decision D88. */
+  const theme = useTheme();
   const addInput = useRef<HTMLInputElement>(null);
 
   const [token] = useState(
@@ -966,6 +983,14 @@ function UploadScreenFor() {
               text="Distill"
               fontFamily={theme.font.display}
               /*
+               * The ink is passed rather than inherited, because this word is rasterised
+               * onto a canvas once and the pixels do not care what the cascade does
+               * afterwards. Naming the colour is what makes it a dependency of the effect
+               * that builds them, so switching the palette rebuilds the word instead of
+               * leaving it in the old ink. Decision D88.
+               */
+              color={theme.color.ink}
+              /*
                * Smaller inside a workspace. The same argument does not need making twice at
                * full volume, and the space belongs to the documents once there are some.
                *
@@ -1151,6 +1176,10 @@ function UploadScreenFor() {
               </Intake>
 
               <Formats>PDF · DOCX · XLSX · CSV · Images · Text</Formats>
+
+              <Appearance>
+                <AppearanceSwitch />
+              </Appearance>
             </>
           )}
 

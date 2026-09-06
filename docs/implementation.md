@@ -71,7 +71,7 @@ Three things carry the design:
 | Framework         | React                                                                        | 19.2.8                 | Required by `@a2ui/react` peer range.                                                                                                                                           |
 | Language          | TypeScript, `strict`, `noUncheckedIndexedAccess`                             | 6.0.3                  | As scaffolded.                                                                                                                                                                  |
 | Lint              | oxlint                                                                       | 1.79                   | As scaffolded. Decision D33.                                                                                                                                                    |
-| Styling           | styled-components                                                            | 6.5                    | Decision D11. Warm-paper tokens in `src/ui/theme.ts`, decision D32. Radix Primitives added only where a primitive is needed (dialog for the viewer, dropdown for column menus). |
+| Styling           | styled-components                                                            | 6.5                    | Decision D11. Warm-paper tokens in `src/ui/theme.ts`, decision D32, in two palettes since decision D88. Radix Primitives added only where a primitive is needed (dialog for the viewer, dropdown for column menus). |
 | Routing           | `react-router`, declarative                                                  | 7.18                   | Decision D30. Routes: `/`, `/w/:id` (redirects to chat), `/w/:id/chat`, `/w/:id/data`.                                                                                          |
 | Server state      | TanStack Query                                                               | 5                      | SSE events write into the cache with `setQueryData`.                                                                                                                            |
 | UI state          | Zustand                                                                      | 5                      | Viewer open state, selected citation, inspect toggle.                                                                                                                           |
@@ -152,8 +152,9 @@ Zamp assignment/
         ├── a2ui/             processor.ts, SurfaceHost.tsx, SurfaceBoundary.tsx,
         │                     Fallback.tsx, Inspect.tsx, catalog/ (Metric, BarChart,
         │                     LineChart, ResultTable)                       (new)
-        ├── ui/               theme, GlobalStyle, Button, Wordmark, ParticleText,
-        │                     Spiral, Toasts + toastStore (D73)
+        ├── ui/               theme (two palettes), GlobalStyle, appearance +
+        │                     AppearanceProvider + AppearanceSwitch (D88), Button,
+        │                     Wordmark, ParticleText, Spiral, Toasts + toastStore (D73)
         ├── lib/              files, logger, workspace-token, formatters (new), sse (new)
         └── test/             setup, msw handlers (new)
 ```
@@ -735,7 +736,8 @@ opens the SSE connection once per layout and applies events to the TanStack Quer
 
 **Frontend (Vitest + Testing Library + MSW)**
 
-- Existing: theme contrast, file intake, first-run screen.
+- Existing: theme contrast in both palettes and the two palettes defining the same tokens
+  (D88), file intake, first-run screen, appearance preference resolution and persistence.
 - New: highlight scaling math; cell renderers show a tier mark and label; `SurfaceHost`
   renders each catalog component from a fixture array; an unknown component triggers the
   fallback and logs; the answer stream reducer applies a recorded event sequence and yields
