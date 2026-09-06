@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
 from app.config import Settings
-from app.domain.fields import FieldSpec, FieldType, validate_field_key
+from app.domain.fields import FieldSpec, FieldType, inferred_type, validate_field_key
 from app.llm.base import LLMClient
 from app.llm.contracts import ExtractedField
 from app.llm.heuristics import slugify_key
@@ -276,7 +276,7 @@ async def assess(
             spec = FieldSpec(
                 key=key,
                 label=extra.label or key,
-                type=extra.value_type,
+                type=inferred_type(extra.value_type),
                 description=(
                     f"First seen in a document as {extra.label!r}."
                     if extra.label

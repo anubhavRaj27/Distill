@@ -33,7 +33,7 @@ from app.db.models import ChatMessage
 from app.deps import Config, CurrentWorkspace, Session
 from app.domain.chat import AnswerStage, ChatStatus
 from app.errors import NotFound
-from app.insights.stats import field_statistics, render_stats
+from app.insights.stats import field_statistics
 from app.llm.registry import get_client
 from app.logging import get_logger
 from app.routers.events import STREAM_HEADERS, parse_last_event_id
@@ -273,7 +273,7 @@ async def suggestions(
         workspace.id,
         fields=fields,
         document_count=document_count,
-        stats_text=render_stats(stats),
+        stats=stats,
         client=get_client(),
         settings=settings,
     )

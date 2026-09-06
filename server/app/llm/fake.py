@@ -62,6 +62,7 @@ class FakeClient:
             CallKind.CHAT_PLAN: _synthesise_chat_plan,
             CallKind.SUGGEST_QUESTIONS: _synthesise_suggestions,
             CallKind.PLAN_DASHBOARD: _synthesise_dashboard,
+            CallKind.NAME_WORKSPACE: _synthesise_workspace_name,
         }
 
     @property
@@ -755,3 +756,34 @@ def fixture_key_for_document(
     """
     suffix = f"-v{schema_version}" if schema_version is not None else ""
     return f"{content_hash[:16]}-{kind.value}{suffix}"
+
+
+def _synthesise_workspace_name(request: LLMRequest) -> BaseModel:
+    """A workspace name with no model call. Decision D77.
+
+    Built from the common prefix of the filenames, which is how these collections are
+    usually named in practice ("acme-invoice-2041", "acme-invoice-2098" is the Acme
+    collection). When the filenames share nothing, it counts them and says what they are,
+    which is exactly what the prompt asks a real model to do in the same situation.
+    """
+    from app.llm.contracts import WorkspaceName
+
+    summary = str(request.context.get("summary") or "")
+    names = [
+        line[2:].strip()
+        for line in summary.splitlines()
+        if line.startswith("- ") and line[2:].strip()
+    ]
+    if not names:
+        return WorkspaceName(name="New collection")
+
+    stems = [Path(name).stem.replace("_", "-") for name in names]
+    words = [stem.split("-")[0] for stem in stems if stem]
+    shared = words[0] if words and all(word == words[0] for word in words) else ""
+    if shared:
+        return WorkspaceName(name=f"{shared.title()} documents")
+
+    kinds = {Path(name).suffix.lstrip(".").upper() for name in names if Path(name).suffix}
+    if len(kinds) == 1:
+        return WorkspaceName(name=f"{len(names)} {kinds.pop()} documents")
+    return WorkspaceName(name=f"{len(names)} mixed business documents")

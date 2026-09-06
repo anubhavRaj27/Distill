@@ -226,6 +226,30 @@ def test_the_surface_is_create_then_data_then_components() -> None:
     assert messages[0]["createSurface"]["catalogId"] == CATALOG_ID
 
 
+def test_a_dashboard_panel_surface_leaves_the_heading_to_its_card() -> None:
+    """The panel card renders panel.visual.title above the surface, so a heading inside it
+    is the same string printed twice. The chat keeps its heading, being loose in a stream
+    of prose with nothing else to name it."""
+    with_title, _ = build_surface(visual(VisualKind.BAR), result(TWO_ROWS))
+    without, _ = build_surface(visual(VisualKind.BAR), result(TWO_ROWS), include_title=False)
+
+    ids = lambda messages: [  # noqa: E731 - one expression, read once
+        component["id"] for component in messages[2]["updateComponents"]["components"]
+    ]
+    assert "title" in ids(with_title)
+    assert "title" not in ids(without)
+
+    root = next(
+        component
+        for component in without[2]["updateComponents"]["components"]
+        if component["id"] == "root"
+    )
+    assert root["children"] == ["visual"]
+    # Still in the data model, so nothing that reads the result loses the name.
+    assert without[1]["updateDataModel"]["value"]["title"]
+    validate_surface(without)
+
+
 def test_the_numbers_live_in_the_data_model_and_the_component_only_binds() -> None:
     """Decision D37, as a structural assertion.
 

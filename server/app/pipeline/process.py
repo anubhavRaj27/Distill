@@ -37,7 +37,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.db.models import Document, DocumentExtraction, Page, Record
+from app.db.models import Document, DocumentExtraction, Page, Record, Workspace
 from app.db.session import session_scope
 from app.domain.document import DocumentStatus, ParsedDocument
 from app.domain.events import DocumentStatusEvent
@@ -45,8 +45,9 @@ from app.domain.fields import FieldSpec, SchemaChangeAuthor
 from app.errors import DistillError, LLMUnavailable, ParseFailed
 from app.events.bus import bus
 from app.insights import dashboard as dashboard_module
-from app.llm.base import LLMClient
-from app.llm.contracts import ExtractedField, OpenExtraction
+from app.llm import prompts
+from app.llm.base import CallKind, LLMClient, LLMRequest
+from app.llm.contracts import ExtractedField, OpenExtraction, WorkspaceName
 from app.logging import get_logger, logging_context
 from app.pipeline import extract as extract_module
 from app.pipeline import persist as persist_module
@@ -418,6 +419,7 @@ async def process_document(
         logger.info("process.completed", filename=filename)
 
     await maybe_infer_initial_schema(workspace_id, client=client, settings=settings)
+    await maybe_name_workspace(workspace_id, client=client, settings=settings)
     await maybe_generate_dashboard(workspace_id, client=client, settings=settings)
 
 
@@ -629,3 +631,113 @@ async def maybe_generate_dashboard(
             await dashboard_module.generate(
                 session, workspace_id, fields=fields, client=client, settings=settings
             )
+
+
+# ---------------------------------------------------------------------------
+# The workspace's name, once there is something to name it after. Decision D77.
+# ---------------------------------------------------------------------------
+
+_naming_locks: dict[UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+MAX_NAMED_DOCUMENTS = 12
+"""Documents described to the model. A name comes from the shape of the collection, and
+the thirteenth filename does not change that shape."""
+
+
+async def maybe_name_workspace(
+    workspace_id: UUID, *, client: LLMClient, settings: Settings
+) -> None:
+    """Name the workspace from its first batch, if it has no name yet.
+
+    Guarded exactly like the dashboard, and for the same reason: this is a model call, and
+    ten documents finishing together must not buy ten answers to one question.
+
+    **A name the person typed is never overwritten.** The guard is `label is None`, not
+    "label is the default", so renaming a workspace and then adding documents keeps the
+    name. That is the whole reason the column starts null rather than starting as the string
+    "Untitled workspace": null means nobody has said, and a string would mean nobody can
+    tell the difference between an unnamed workspace and one somebody deliberately called
+    that.
+    """
+    async with _naming_locks[workspace_id]:
+        async with session_scope() as session:
+            workspace = await session.get(Workspace, workspace_id)
+            if workspace is None or workspace.label:
+                return
+
+            busy = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Document)
+                    .where(
+                        Document.workspace_id == workspace_id,
+                        Document.status.in_(
+                            (*_BUSY_STATUSES, DocumentStatus.AWAITING_SCHEMA)
+                        ),
+                    )
+                )
+            ).scalar_one()
+            if busy:
+                return
+
+            documents = list(
+                (
+                    await session.execute(
+                        select(Document)
+                        .where(
+                            Document.workspace_id == workspace_id,
+                            Document.status == DocumentStatus.DONE,
+                        )
+                        .order_by(Document.created_at)
+                        .limit(MAX_NAMED_DOCUMENTS)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not documents:
+                return
+
+            fields = await versioning.current_fields(session, workspace_id)
+            summary = _describe_collection(documents, fields)
+
+            try:
+                response = await client.structured(
+                    LLMRequest(
+                        kind=CallKind.NAME_WORKSPACE,
+                        prompt=prompts.render("name_workspace", summary=summary),
+                        response_model=WorkspaceName,
+                        fixture_key=f"name-{workspace_id}",
+                        context={"summary": summary},
+                        temperature=0.4,
+                    )
+                )
+            except DistillError as exc:
+                # A workspace with no name is a cosmetic problem; failing the batch over one
+                # would not be. It stays null and the interface says "Untitled workspace".
+                logger.info("workspace.naming_failed", reason=exc.message)
+                return
+
+            name = " ".join(str(getattr(response.value, "name", "")).split())[:80]
+            if not name:
+                return
+
+            workspace.label = name
+            await session.flush()
+            logger.info("workspace.named", workspace_id=str(workspace_id), label=name)
+
+
+def _describe_collection(documents: list[Document], fields: list[FieldSpec]) -> str:
+    """What the model is told about the collection: filenames, and the schema's own words.
+
+    Deliberately not the document text. A name needs the shape of the collection, and the
+    filenames plus the field labels that were actually extracted carry that in a few dozen
+    tokens rather than a few thousand.
+    """
+    lines = [f"{len(documents)} documents:"]
+    lines += [f"- {document.filename}" for document in documents]
+    if fields:
+        labels = ", ".join(field.label or field.key for field in fields[:12])
+        lines.append("")
+        lines.append(f"Fields found across them: {labels}")
+    return "\n".join(lines)

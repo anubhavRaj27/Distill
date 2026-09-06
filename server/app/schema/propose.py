@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
 from app.config import Settings
-from app.domain.fields import FieldSpec, FieldType, validate_field_key
+from app.domain.fields import FieldSpec, FieldType, inferred_type, validate_field_key
 from app.llm.base import LLMClient
 from app.llm.contracts import ExtractedField
 from app.llm.heuristics import slugify_key
@@ -225,7 +225,7 @@ async def propose_initial(
     coverage: dict[str, int] = {}
 
     for observation in observations:
-        incoming_type = observation.dominant_type
+        incoming_type = inferred_type(observation.dominant_type)
         verdict = classify(
             incoming_key=observation.key,
             incoming_label=observation.label,

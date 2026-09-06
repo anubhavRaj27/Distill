@@ -507,3 +507,35 @@ async def test_schema_labels_are_embedded_once_not_once_per_document(
             settings=settings,
         )
     assert len(calls) == 1, f"embedded on every pass instead of caching: {calls}"
+
+
+# ---------------------------------------------------------------------------
+# The enum that stopped a batch. Decision D80.
+# ---------------------------------------------------------------------------
+
+
+async def test_a_field_the_model_called_an_enum_does_not_stop_the_batch(
+    client: FakeClient, settings: Settings
+) -> None:
+    """Observed live on the sample corpus, and total: schema inference runs once for the
+    first batch, so one field typed this way left ten documents stuck at "0 of 10 ready"
+    forever, with a `ValidationError` in the log and nothing on screen.
+
+    A model reading ten documents that all say "USD" reasonably calls the column an
+    enumeration, and the extraction contract gives it no way to say what the permitted
+    values are. `FieldSpec` refuses to hold an enum with no values, correctly."""
+    proposal = await propose_initial(
+        {
+            "doc-1": [field("currency", "Currency", "USD", FieldType.ENUM)],
+            "doc-2": [field("currency", "Currency", "USD", FieldType.ENUM)],
+        },
+        client=client,
+        settings=settings,
+    )
+
+    currency = next(spec for spec in proposal.fields if spec.key == "currency")
+    # A string, which accepts the eleventh document saying "EUR". An enum built from what
+    # happened to turn up would reject it, and rejecting real data is the one thing this
+    # product must not do.
+    assert currency.type is FieldType.STRING
+    assert currency.enum_values is None

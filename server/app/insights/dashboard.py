@@ -318,8 +318,12 @@ async def generate(
             dropped.append((panel.visual.title, reason))
             continue
 
+        # No heading inside the surface: the panel card renders this same title above it.
         surface, kind = build_surface(
-            panel.visual, result, surface_id=new_surface_id("panel")
+            panel.visual,
+            result,
+            surface_id=new_surface_id("panel"),
+            include_title=False,
         )
         built.append(
             BuiltPanel(

@@ -138,3 +138,13 @@ class GuidedExtraction(BaseModel):
         "system noticing that a document has something to say that the schema cannot "
         "record, which is the alternative to silently dropping it.",
     )
+
+
+class WorkspaceName(BaseModel):
+    """A short title for a collection of documents. Decision D77."""
+
+    name: str = Field(
+        default="",
+        max_length=80,
+        description="Three to five words naming what is in this collection.",
+    )

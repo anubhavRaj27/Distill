@@ -70,6 +70,11 @@ class CallKind(StrEnum):
 
     SUGGEST_QUESTIONS = "suggest_questions"
 
+    NAME_WORKSPACE = "name_workspace"
+    """Structured, and tiny. Names the workspace from what turned up in the first batch,
+    so it stops being called "Untitled workspace" (decision D77). The person can rename it
+    afterwards, and their name is never overwritten."""
+
     @property
     def needs_strong_model(self) -> bool:
         """Whether this call gets the Pro tier rather than Flash. See decision D13.

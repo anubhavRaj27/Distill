@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import hash_token, mint_token
 from app.db.models import DashboardRow, Document, Record, SchemaVersion, Workspace
@@ -101,12 +102,52 @@ async def create_workspace(
     )
 
 
+class RenameWorkspaceRequest(BaseModel):
+    label: str = Field(
+        min_length=1,
+        max_length=80,
+        description="What to call this collection. Trimmed; must not be empty, because an "
+        "empty name is indistinguishable from never having named it, and this route is "
+        "the only way a person can say what it is called.",
+    )
+
+
+@router.patch(
+    "/{workspace_id}",
+    response_model=WorkspaceOverview,
+    summary="Rename a workspace",
+)
+async def rename_workspace(
+    payload: RenameWorkspaceRequest, workspace: CurrentWorkspace, session: Session
+) -> WorkspaceOverview:
+    """Set the workspace's name. Requirement FR-01, decision D77.
+
+    The name is generated once, from the first batch of documents, and is never regenerated
+    afterwards — so this write is final in the sense that matters: nothing else will
+    overwrite it.
+    """
+    label = " ".join(payload.label.split())[:80]
+    workspace.label = label
+    await session.flush()
+    logger.info("workspace.renamed", workspace_id=str(workspace.id), label=label)
+    return await _overview(session, workspace)
+
+
 @router.get(
     "/{workspace_id}",
     response_model=WorkspaceOverview,
     summary="Schema, documents, and counts for a cold start",
 )
 async def get_workspace(workspace: CurrentWorkspace, session: Session) -> WorkspaceOverview:
+    return await _overview(session, workspace)
+
+
+async def _overview(session: AsyncSession, workspace: Workspace) -> WorkspaceOverview:
+    """Everything the interface needs for a cold start, in one place.
+
+    Shared by the read and the rename, so a renamed workspace comes back in exactly the
+    shape the interface already knows how to hold, and the two can never disagree about it.
+    """
     current = (
         await session.execute(
             select(SchemaVersion)

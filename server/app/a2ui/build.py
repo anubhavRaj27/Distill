@@ -97,9 +97,20 @@ def _caveat(result: QueryResult) -> str:
 
 
 def build_surface(
-    visual: Visual, result: QueryResult, *, surface_id: str | None = None
+    visual: Visual,
+    result: QueryResult,
+    *,
+    surface_id: str | None = None,
+    include_title: bool = True,
 ) -> tuple[list[dict[str, Any]], VisualKind]:
-    """Build the message array for one visual. Returns the messages and the kind used."""
+    """Build the message array for one visual. Returns the messages and the kind used.
+
+    ``include_title`` exists for the dashboard. A chat visual arrives in a stream of prose
+    and has to name itself, so it carries its own heading. A dashboard panel is already a
+    titled card, and the panel's title IS ``visual.title`` — the same string — so drawing it
+    inside the surface as well printed every panel's name twice, one line under the other.
+    The title stays in the data model either way; only the component that renders it goes.
+    """
     surface = surface_id or new_surface_id()
     kind = resolve_kind(visual.kind, result)
     if kind is not visual.kind:
@@ -130,20 +141,25 @@ def build_surface(
         },
     ]
 
+    children = ["title", "visual"] if include_title else ["visual"]
     components: list[dict[str, Any]] = [
-        {"id": "root", "component": "Column", "children": ["title", "visual"]},
-        {
-            "id": "title",
-            "component": "Text",
-            "text": {"path": f"{RESULT_PATH}/title"},
-            "variant": "h3",
-        },
+        {"id": "root", "component": "Column", "children": list(children)},
         _visual_component(kind, result, unit),
     ]
+    if include_title:
+        components.insert(
+            1,
+            {
+                "id": "title",
+                "component": "Text",
+                "text": {"path": f"{RESULT_PATH}/title"},
+                "variant": "h3",
+            },
+        )
 
     caveat = _caveat(result)
     if caveat:
-        components[0]["children"] = ["title", "visual", "caveat"]
+        components[0]["children"] = [*children, "caveat"]
         components.append(
             {
                 "id": "caveat",

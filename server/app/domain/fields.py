@@ -101,6 +101,25 @@ class FieldType(StrEnum):
     STRING_LIST = "string_list"
 
 
+def inferred_type(declared: FieldType) -> FieldType:
+    """The type a schema may safely take from a model's answer. Decision D80.
+
+    One rule, and it is about `enum`. A model reading ten documents that all say "USD"
+    reasonably calls the currency column an enumeration, and it has no way to tell us what
+    the permitted values are — the extraction contract has no field for them. `FieldSpec`
+    then refuses to be built, because an enum with no values permits nothing, and the
+    refusal killed the whole batch: schema inference runs once for the first batch, so a
+    single field typed this way left ten documents stuck at "0 of 10 ready" forever.
+
+    The fix is not to invent the values from what happened to turn up. A schema inferred
+    from ten documents that then REJECTS an eleventh saying "EUR" would be the one thing
+    this product must never do (product principle 6). So an enum the model could not
+    enumerate is a string, which accepts everything and loses nothing. The observed values
+    are already recorded in the field's description, which is where a person can see them.
+    """
+    return FieldType.STRING if declared is FieldType.ENUM else declared
+
+
 class Tier(StrEnum):
     """How much a value should be trusted. Always DERIVED, never asked of the model.
 
